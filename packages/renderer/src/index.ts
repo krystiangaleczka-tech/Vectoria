@@ -116,6 +116,9 @@ export function renderScene(
   doc: DocumentModel,
   canvasWidth: number,
   canvasHeight: number,
+  options?: {
+    previewTransforms?: Record<string, import('@vectoria/core').Transform2D>;
+  }
 ): void {
   const dpr = window.devicePixelRatio || 1;
 
@@ -127,18 +130,30 @@ export function renderScene(
   ctx.translate(camera.pan.x, camera.pan.y);
   ctx.scale(camera.zoom, camera.zoom);
 
+  // Clip to active artboard
+  const artboard = doc.artboards[doc.activeArtboardId];
+  if (artboard) {
+    ctx.beginPath();
+    ctx.rect(artboard.x, artboard.y, artboard.width, artboard.height);
+    ctx.clip();
+  }
+
   // Render objects in z-order
   for (const layerId of doc.layerIds) {
     const layer = doc.layers[layerId];
     if (!layer?.visible) continue;
 
     for (const objectId of layer.objectIds) {
-      const obj = doc.objects[objectId];
+      let obj = doc.objects[objectId];
       if (!obj?.visible) continue;
+
+      if (options?.previewTransforms?.[objectId]) {
+        obj = { ...obj, transform: options.previewTransforms[objectId]! };
+      }
 
       switch (obj.type) {
         case 'rectangle':
-          renderRectangle(ctx, obj);
+          renderRectangle(ctx, obj as RectangleObject);
           break;
       }
     }

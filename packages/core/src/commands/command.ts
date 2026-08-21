@@ -1,4 +1,5 @@
 import type { DocumentModel } from '../model/types.js';
+import { validateInvariants } from '../model/invariants.js';
 
 /**
  * Command interface for document mutations.
@@ -51,6 +52,15 @@ export class CommandHistory {
    */
   execute(command: Command, doc: DocumentModel): DocumentModel {
     const newDoc = command.execute(doc);
+    
+    if (import.meta.env.DEV) {
+      const violations = validateInvariants(newDoc);
+      if (violations.length > 0) {
+        console.error('[Vectoria] Invariant violation after command execution:', violations);
+        // Note: We don't block the command to allow recovery/debugging, but we log it aggressively.
+      }
+    }
+
     this.undoStack.push(command);
     this.redoStack = [];
     this._onChange?.();

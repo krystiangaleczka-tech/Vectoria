@@ -12,6 +12,13 @@ export interface InvariantViolation {
 export function validateInvariants(doc: DocumentModel): InvariantViolation[] {
   const violations: InvariantViolation[] = [];
 
+  if (new Set(doc.layerIds).size !== doc.layerIds.length) {
+    violations.push({ code: 'DUPLICATE_LAYER_ID', message: 'layerIds contains duplicates.' });
+  }
+  if (new Set(doc.artboardIds).size !== doc.artboardIds.length) {
+    violations.push({ code: 'DUPLICATE_ARTBOARD_ID', message: 'artboardIds contains duplicates.' });
+  }
+
   // ── layerIds consistency ──────────────────────────────────────────────────
   for (const layerId of doc.layerIds) {
     if (!(layerId in doc.layers)) {
@@ -91,6 +98,23 @@ export function validateInvariants(doc: DocumentModel): InvariantViolation[] {
             code: 'INVALID_HEIGHT',
             message: `Object '${objectId}' has non-positive height: ${(obj as { height: number }).height}.`,
           });
+        }
+        
+        if ('cornerRadius' in obj) {
+          const r = obj.cornerRadius;
+          if (r < 0) {
+            violations.push({ code: 'INVALID_CORNER_RADIUS', message: `Object '${objectId}' has negative corner radius.` });
+          } else if ('width' in obj && 'height' in obj) {
+            const height = 'height' in obj ? obj.height : 0;
+            const maxR = Math.min(obj.width, height) / 2;
+            if (r > maxR) {
+              violations.push({ code: 'INVALID_CORNER_RADIUS', message: `Object '${objectId}' corner radius exceeds min(width, height)/2.` });
+            }
+          }
+        }
+
+        if (obj.style.opacity < 0 || obj.style.opacity > 1) {
+          violations.push({ code: 'INVALID_OPACITY', message: `Object '${objectId}' has opacity out of bounds [0, 1].` });
         }
 
         // All numbers must be finite

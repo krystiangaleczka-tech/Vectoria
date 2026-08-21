@@ -68,4 +68,54 @@ describe('IO - DTO Validation and SVG Export', () => {
   it('escapes XML entities in SVG output', () => {
     expect(escapeXml('<foo & "bar">')).toBe('&lt;foo &amp; &quot;bar&quot;&gt;');
   });
+
+  it("exports objects relative to a displaced artboard", () => {
+    const doc = createDefaultDocument({
+      width: 800,
+      height: 600,
+    });
+    const artboard = doc.artboards[doc.activeArtboardId]!;
+    const shiftedDoc = {
+      ...doc,
+      artboards: {
+        ...doc.artboards,
+        [artboard.id]: {
+          ...artboard,
+          x: 500,
+          y: 300,
+        },
+      },
+    };
+    const rect: RectangleObject = {
+      type: "rectangle",
+      id: "rect-in-shifted-artboard",
+      name: "Rect",
+      layerId: shiftedDoc.activeLayerId,
+      visible: true,
+      locked: false,
+      transform: createTransform({ x: 550, y: 350 }),
+      style: {
+        fill: { type: 'solid', color: '#5caeff' },
+        stroke: null,
+        opacity: 1,
+      },
+      width: 100,
+      height: 50,
+      cornerRadius: 0,
+    };
+    const docWithRect = {
+      ...shiftedDoc,
+      objects: { [rect.id]: rect },
+      layers: {
+        ...shiftedDoc.layers,
+        [shiftedDoc.activeLayerId]: {
+          ...shiftedDoc.layers[shiftedDoc.activeLayerId]!,
+          objectIds: [rect.id],
+        },
+      },
+    };
+    const svg = exportArtboardToSvg(docWithRect);
+    expect(svg).toContain('transform="translate(-500 -300)"');
+    expect(svg).toContain('viewBox="0 0 800 600"');
+  });
 });

@@ -52,7 +52,7 @@ export function exportArtboardToSvg(doc: DocumentModel, artboardId?: string): st
       <rect x="0" y="0" width="${width}" height="${height}" />
     </clipPath>
   </defs>
-  <g clip-path="url(#${clipId})">
+  <g clip-path="url(#${clipId})" transform="translate(${-artboard.x} ${-artboard.y})">
 ${elements.map((el) => `    ${el}`).join('\n')}
   </g>
 </svg>`;

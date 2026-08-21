@@ -61,7 +61,8 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
 
   const renderLoopRef = useRef<RenderLoop | null>(null);
   const dragStateRef = useRef<DragState | null>(null);
-  const isSpacePressedRef = useRef(false);
+  const [isSpacePressed, setIsSpacePressed] = React.useState(false);
+  const [dragPreview, setDragPreview] = React.useState<Record<string, import('@vectoria/core').Transform2D>>({});
 
   // Selected IDs as Set for renderer
   const selectedIds = React.useMemo(
@@ -86,7 +87,9 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       renderBackground(bgCtx, camera, activeArtboard, bgCanvas.width, bgCanvas.height);
     }
 
-    renderScene(sceneCtx, camera, doc, sceneCanvas.width, sceneCanvas.height);
+    renderScene(sceneCtx, camera, doc, sceneCanvas.width, sceneCanvas.height, {
+      previewTransforms: dragPreview,
+    });
     renderOverlay(overlayCtx, camera, doc, selectedIds, overlayCanvas.width, overlayCanvas.height);
 
     // Draw active creation drag preview on overlay if creating rect
@@ -112,7 +115,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
 
       overlayCtx.restore();
     }
-  }, [doc, camera, selectedIds]);
+  }, [doc, camera, selectedIds, dragPreview]);
 
   // Initialize render loop
   useEffect(() => {
@@ -120,21 +123,28 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     renderLoopRef.current = loop;
     loop.start();
 
-    camera.onChanged = () => {
+    // Attach callback to camera
+    const handleCameraChange = () => {
       loop.invalidate();
       onZoomChange(camera.zoomPercent);
     };
+    // eslint-disable-next-line react-hooks/immutability
+    camera.onChanged = handleCameraChange;
 
     return () => {
       loop.stop();
-      camera.onChanged = null;
+      if (camera.onChanged === handleCameraChange) {
+        // eslint-disable-next-line react-hooks/immutability
+        camera.onChanged = null;
+      }
     };
-  }, [renderAll, camera, onZoomChange]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [renderAll, onZoomChange]);
 
   // Invalidate on doc or selection changes
   useEffect(() => {
     renderLoopRef.current?.invalidate();
-  }, [doc, selectedIds]);
+  }, [doc, selectedIds, dragPreview]);
 
   // Canvas resize handler
   const handleResize = useCallback(() => {
@@ -194,7 +204,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     const worldPos = camera.screenToWorld(screenPos);
 
     // Pan via middle button or Space key
-    if (e.button === 1 || isSpacePressedRef.current || activeTool === 'hand') {
+    if (e.button === 1 || isSpacePressed || activeTool === 'hand') {
       (e.target as HTMLElement).setPointerCapture(e.pointerId);
       dragStateRef.current = {
         type: 'pan',
@@ -270,7 +280,6 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       renderLoopRef.current?.invalidate();
     } else if (drag.type === 'move-object') {
       drag.currentWorld = worldPos;
-      // Transient move preview by directly mutating active object during drag (no React state trigger)
       if (selectedObjectId && drag.initialObjectTransform) {
         const deltaWorld = {
           x: worldPos.x - drag.startWorld.x,
@@ -278,11 +287,15 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         };
         const obj = doc.objects[selectedObjectId];
         if (obj) {
-          (obj as { transform: { position: Vec2 } }).transform.position = {
-            x: drag.initialObjectTransform.position.x + deltaWorld.x,
-            y: drag.initialObjectTransform.position.y + deltaWorld.y,
-          };
-          renderLoopRef.current?.invalidate();
+          setDragPreview({
+            [selectedObjectId]: {
+              ...obj.transform,
+              position: {
+                x: drag.initialObjectTransform.position.x + deltaWorld.x,
+                y: drag.initialObjectTransform.position.y + deltaWorld.y,
+              },
+            },
+          });
         }
       }
     }
@@ -328,31 +341,22 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     } else if (drag.type === 'move-object') {
       if (selectedObjectId && drag.initialObjectTransform) {
         const obj = doc.objects[selectedObjectId];
-        if (obj) {
-          const finalPos = { ...obj.transform.position };
-          // Restore to initial pos before command execution to let command manage history
-          (obj as { transform: { position: Vec2 } }).transform.position = {
-            ...drag.initialObjectTransform.position,
-          };
-
-          const deltaX = Math.abs(finalPos.x - drag.initialObjectTransform.position.x);
-          const deltaY = Math.abs(finalPos.y - drag.initialObjectTransform.position.y);
+        const preview = dragPreview[selectedObjectId];
+        
+        if (obj && preview) {
+          const deltaX = Math.abs(preview.position.x - drag.initialObjectTransform.position.x);
+          const deltaY = Math.abs(preview.position.y - drag.initialObjectTransform.position.y);
 
           if (deltaX > 0.5 || deltaY > 0.5) {
             const newTransforms = new Map([
-              [
-                selectedObjectId,
-                {
-                  ...obj.transform,
-                  position: finalPos,
-                },
-              ],
+              [selectedObjectId, preview],
             ]);
             const cmd = new TransformObjectsCommand([selectedObjectId], newTransforms);
             onExecuteCommand(cmd);
           }
         }
       }
+      setDragPreview({});
     }
 
     dragStateRef.current = null;
@@ -363,13 +367,8 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     const drag = dragStateRef.current;
     if (!drag) return;
 
-    if (drag.type === 'move-object' && selectedObjectId && drag.initialObjectTransform) {
-      const obj = doc.objects[selectedObjectId];
-      if (obj) {
-        (obj as { transform: { position: Vec2 } }).transform.position = {
-          ...drag.initialObjectTransform.position,
-        };
-      }
+    if (drag.type === 'move-object' && selectedObjectId) {
+      setDragPreview({});
     }
 
     dragStateRef.current = null;
@@ -388,7 +387,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       }
 
       if (e.code === 'Space') {
-        isSpacePressedRef.current = true;
+        setIsSpacePressed(true);
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
         if (selectedObjectId) {
           e.preventDefault();
@@ -404,7 +403,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
 
     const handleKeyUp = (e: KeyboardEvent) => {
       if (e.code === 'Space') {
-        isSpacePressedRef.current = false;
+        setIsSpacePressed(false);
       }
     };
 
@@ -415,6 +414,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedObjectId, onExecuteCommand, onSelectObject]);
 
   return (
@@ -427,13 +427,14 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       onPointerCancel={cancelInteraction}
       onLostPointerCapture={cancelInteraction}
       onContextMenu={(e) => e.preventDefault()}
+      data-tool={activeTool}
       style={{
         position: 'relative',
         flex: 1,
         height: '100%',
         overflow: 'hidden',
         cursor:
-          isSpacePressedRef.current || activeTool === 'hand'
+          isSpacePressed || activeTool === 'hand'
             ? 'grab'
             : activeTool === 'rectangle'
             ? 'crosshair'

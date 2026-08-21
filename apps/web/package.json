@@ -13,19 +13,21 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
-    "@vectoria/shared": "workspace:*",
     "@vectoria/core": "workspace:*",
     "@vectoria/editor-engine": "workspace:*",
-    "@vectoria/renderer": "workspace:*",
     "@vectoria/io": "workspace:*",
+    "@vectoria/renderer": "workspace:*",
+    "@vectoria/shared": "workspace:*",
     "@vectoria/ui": "workspace:*",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@types/react": "^19.0.10",
     "@types/react-dom": "^19.0.4",
     "@vitejs/plugin-react": "^4.3.4",
+    "playwright": "^1.62.1",
     "typescript": "^5.7.3",
     "vite": "^6.2.0"
   }

@@ -26,6 +26,21 @@ import { CanvasViewport } from '../features/canvas/CanvasViewport.js';
 import { PropertiesPanel } from '../features/panels/PropertiesPanel.js';
 import { StatusBar } from '../features/statusbar/StatusBar.js';
 
+const RecoveryBanner: React.FC<{ message: string; details?: string }> = ({ message, details }) => (
+  <div style={{
+    backgroundColor: 'var(--color-danger, #541616)',
+    color: '#ffc4c4',
+    padding: '8px 16px',
+    display: 'flex',
+    justifyContent: 'space-between',
+    fontSize: '13px',
+    borderBottom: '1px solid #732222',
+  }}>
+    <span>{message}</span>
+    {details && <span style={{ opacity: 0.7 }}>{details}</span>}
+  </div>
+);
+
 export const EditorApp: React.FC = () => {
   const [bootstrapState, setBootstrapState] = useState<BootstrapState>({ status: 'loading' });
   const [doc, setDoc] = useState<DocumentModel | null>(null);
@@ -39,6 +54,29 @@ export const EditorApp: React.FC = () => {
   const camera = useMemo(() => new Camera(), []);
   const autosaveTimeoutRef = useRef<number | null>(null);
   const isBootstrappedRef = useRef(false);
+  const latestDocRef = useRef<DocumentModel | null>(null);
+
+  useEffect(() => {
+    latestDocRef.current = doc;
+  }, [doc]);
+
+  useEffect(() => {
+    const flush = () => {
+      if (autosaveTimeoutRef.current !== null) {
+        window.clearTimeout(autosaveTimeoutRef.current);
+        autosaveTimeoutRef.current = null;
+      }
+      const latest = latestDocRef.current;
+      if (latest) {
+        void saveDocument(latest);
+      }
+    };
+    window.addEventListener('pagehide', flush);
+    return () => {
+      window.removeEventListener('pagehide', flush);
+      flush();
+    };
+  }, []);
 
   // Initialize and load document from IndexedDB
   useEffect(() => {
@@ -296,6 +334,13 @@ export const EditorApp: React.FC = () => {
         onZoom100={handleZoom100}
         onExportSvg={handleExportSvg}
       />
+
+      {bootstrapState.status === 'recovery-error' && (
+        <RecoveryBanner 
+          message="Nie udało się odczytać poprzedniego dokumentu. Uruchomiono nowy dokument lokalny." 
+          details={bootstrapState.error?.toString()} 
+        />
+      )}
 
       {/* Main Workspace Area */}
       <div style={{ display: 'flex', flex: 1, height: 'calc(100vh - 66px)', overflow: 'hidden' }}>
