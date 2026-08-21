@@ -1,0 +1,138 @@
+import React, { useState, useEffect, useRef } from 'react';
+
+export interface NumberInputProps {
+  label: string;
+  value: number;
+  unit?: string;
+  min?: number;
+  max?: number;
+  step?: number;
+  decimals?: number;
+  disabled?: boolean;
+  onChange: (val: number) => void;
+}
+
+export const NumberInput: React.FC<NumberInputProps> = ({
+  label,
+  value,
+  unit = 'px',
+  min,
+  max,
+  step = 1,
+  decimals = 0,
+  disabled = false,
+  onChange,
+}) => {
+  const [text, setText] = useState(() => value.toFixed(decimals));
+  const [isFocused, setIsFocused] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Synchronize when external value changes while not editing
+  useEffect(() => {
+    if (!isFocused) {
+      setText(value.toFixed(decimals));
+    }
+  }, [value, decimals, isFocused]);
+
+  const commit = (newText: string) => {
+    const parsed = parseFloat(newText);
+    if (!Number.isNaN(parsed) && Number.isFinite(parsed)) {
+      let clamped = parsed;
+      if (min !== undefined) clamped = Math.max(min, clamped);
+      if (max !== undefined) clamped = Math.min(max, clamped);
+      const rounded = parseFloat(clamped.toFixed(decimals));
+      onChange(rounded);
+      setText(rounded.toFixed(decimals));
+    } else {
+      // Revert to current value
+      setText(value.toFixed(decimals));
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (disabled) return;
+
+    if (e.key === 'Enter') {
+      commit(text);
+      inputRef.current?.blur();
+    } else if (e.key === 'Escape') {
+      setText(value.toFixed(decimals));
+      inputRef.current?.blur();
+    } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      const mult = e.shiftKey ? 10 : 1;
+      const delta = (e.key === 'ArrowUp' ? step : -step) * mult;
+      const current = parseFloat(text) || value;
+      let next = current + delta;
+      if (min !== undefined) next = Math.max(min, next);
+      if (max !== undefined) next = Math.min(max, next);
+      const rounded = parseFloat(next.toFixed(decimals));
+      onChange(rounded);
+      setText(rounded.toFixed(decimals));
+    }
+  };
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        height: '28px',
+        backgroundColor: isFocused ? 'var(--color-input-hover)' : 'var(--color-input)',
+        border: `1px solid ${isFocused ? 'var(--color-border-focus)' : 'var(--color-border-subtle)'}`,
+        borderRadius: 'var(--radius-sm)',
+        padding: '0 6px',
+        opacity: disabled ? 0.4 : 1,
+        transition: 'border-color var(--duration-fast)',
+      }}
+    >
+      <span
+        style={{
+          fontSize: '11px',
+          color: 'var(--color-text-muted)',
+          marginRight: '6px',
+          fontWeight: 500,
+          textTransform: 'uppercase',
+        }}
+      >
+        {label}
+      </span>
+      <input
+        ref={inputRef}
+        type="text"
+        value={text}
+        disabled={disabled}
+        onChange={(e) => setText(e.target.value)}
+        onFocus={() => setIsFocused(true)}
+        onBlur={() => {
+          setIsFocused(false);
+          commit(text);
+        }}
+        onKeyDown={handleKeyDown}
+        style={{
+          flex: 1,
+          width: '100%',
+          background: 'transparent',
+          border: 'none',
+          outline: 'none',
+          color: 'var(--color-text-primary)',
+          fontSize: '12px',
+          textAlign: 'right',
+          fontVariantNumeric: 'tabular-nums',
+          fontFamily: 'var(--font-mono)',
+        }}
+      />
+      {unit && (
+        <span
+          style={{
+            fontSize: '10px',
+            color: 'var(--color-text-muted)',
+            marginLeft: '4px',
+          }}
+        >
+          {unit}
+        </span>
+      )}
+    </div>
+  );
+};

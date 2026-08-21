@@ -7,3 +7,17 @@ Thumbs.db
 .vscode/
 *.swp
 *.log
+
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build artifacts
+dist/
+build/
+.vite/
+.turbo/
+coverage/
+
+# Misc
+dump/

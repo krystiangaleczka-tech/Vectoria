@@ -1,0 +1,22 @@
+{
+  "name": "vectoria",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Professional browser-based vector editor",
+  "scripts": {
+    "dev": "pnpm --filter @vectoria/web dev",
+    "build": "pnpm --filter @vectoria/web build",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "test": "vitest run --passWithNoTests",
+    "test:e2e": "pnpm --filter @vectoria/web test:e2e"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@10.12.1",
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.11"
+  }
+}

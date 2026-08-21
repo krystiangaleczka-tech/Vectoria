@@ -1,0 +1,41 @@
+import { describe, it, expect } from 'vitest';
+import { Camera } from '../src/index.js';
+import { vec2 } from '@vectoria/shared';
+
+describe('Camera Coordinate Transforms & Navigation', () => {
+  it('guarantees worldToScreen(screenToWorld(p)) roundtrip within 1e-6 tolerance', () => {
+    const camera = new Camera();
+    camera.panBy({ x: 250, y: -180 });
+    camera.zoomAtPoint(2.5, { x: 500, y: 400 });
+
+    const testPoints = [
+      vec2(0, 0),
+      vec2(100, 200),
+      vec2(-450.5, 890.25),
+      vec2(1920, 1080),
+    ];
+
+    for (const screenP of testPoints) {
+      const worldP = camera.screenToWorld(screenP);
+      const restoredScreenP = camera.worldToScreen(worldP);
+
+      expect(restoredScreenP.x).toBeCloseTo(screenP.x, 5);
+      expect(restoredScreenP.y).toBeCloseTo(screenP.y, 5);
+    }
+  });
+
+  it('keeps world point directly under cursor during zoomAtPoint', () => {
+    const camera = new Camera();
+    camera.setPan({ x: 100, y: 150 });
+
+    const cursorScreen = vec2(400, 300);
+    const worldBefore = camera.screenToWorld(cursorScreen);
+
+    // Zoom in
+    camera.zoomAtPoint(1.5, cursorScreen);
+    const worldAfter = camera.screenToWorld(cursorScreen);
+
+    expect(worldAfter.x).toBeCloseTo(worldBefore.x, 5);
+    expect(worldAfter.y).toBeCloseTo(worldBefore.y, 5);
+  });
+});

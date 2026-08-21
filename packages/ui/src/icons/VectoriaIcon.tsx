@@ -1,0 +1,218 @@
+import React from 'react';
+
+export type VectoriaIconName =
+  | 'select'
+  | 'rectangle'
+  | 'ellipse'
+  | 'line'
+  | 'pen'
+  | 'hand'
+  | 'zoom'
+  | 'undo'
+  | 'redo'
+  | 'fileExport'
+  | 'save'
+  | 'visible'
+  | 'hidden'
+  | 'lock'
+  | 'unlock'
+  | 'close'
+  | 'check'
+  | 'chevronDown'
+  | 'plus'
+  | 'trash';
+
+export interface VectoriaIconProps {
+  name: VectoriaIconName;
+  size?: number;
+  className?: string;
+  label?: string;
+  decorative?: boolean;
+}
+
+export const VectoriaIcon: React.FC<VectoriaIconProps> = ({
+  name,
+  size = 20,
+  className = '',
+  label,
+  decorative = true,
+}) => {
+  const iconProps = {
+    width: size,
+    height: size,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 1.75,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+    className,
+    'aria-hidden': decorative ? true : undefined,
+    'aria-label': label,
+  };
+
+  switch (name) {
+    case 'select':
+      return (
+        <svg {...iconProps}>
+          <path d="M4 4l7.07 17 2.51-7.39L21 11.07 4 4z" />
+          <path d="M13.5 13.5L19 19" />
+        </svg>
+      );
+
+    case 'rectangle':
+      return (
+        <svg {...iconProps}>
+          <rect x="3" y="5" width="18" height="14" rx="2" />
+        </svg>
+      );
+
+    case 'ellipse':
+      return (
+        <svg {...iconProps}>
+          <circle cx="12" cy="12" r="9" />
+        </svg>
+      );
+
+    case 'line':
+      return (
+        <svg {...iconProps}>
+          <line x1="4" y1="20" x2="20" y2="4" />
+        </svg>
+      );
+
+    case 'pen':
+      return (
+        <svg {...iconProps}>
+          <path d="M12 19l7-7 3 3-7 7-3-3z" />
+          <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" />
+          <circle cx="11" cy="11" r="2" />
+        </svg>
+      );
+
+    case 'hand':
+      return (
+        <svg {...iconProps}>
+          <path d="M18 11V6a2 2 0 0 0-4 0v4" />
+          <path d="M14 10V4a2 2 0 0 0-4 0v6" />
+          <path d="M10 10.5V6a2 2 0 0 0-4 0v8" />
+          <path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15" />
+        </svg>
+      );
+
+    case 'zoom':
+      return (
+        <svg {...iconProps}>
+          <circle cx="11" cy="11" r="8" />
+          <line x1="21" y1="21" x2="16.65" y2="16.65" />
+        </svg>
+      );
+
+    case 'undo':
+      return (
+        <svg {...iconProps}>
+          <path d="M3 7v6h6" />
+          <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13" />
+        </svg>
+      );
+
+    case 'redo':
+      return (
+        <svg {...iconProps}>
+          <path d="M21 7v6h-6" />
+          <path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3L21 13" />
+        </svg>
+      );
+
+    case 'fileExport':
+      return (
+        <svg {...iconProps}>
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+          <polyline points="7 10 12 15 17 10" />
+          <line x1="12" y1="15" x2="12" y2="3" />
+        </svg>
+      );
+
+    case 'save':
+      return (
+        <svg {...iconProps}>
+          <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+          <polyline points="17 21 17 13 7 13 7 21" />
+          <polyline points="7 3 7 8 15 8" />
+        </svg>
+      );
+
+    case 'visible':
+      return (
+        <svg {...iconProps}>
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+          <circle cx="12" cy="12" r="3" />
+        </svg>
+      );
+
+    case 'hidden':
+      return (
+        <svg {...iconProps}>
+          <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+          <line x1="1" y1="1" x2="23" y2="23" />
+        </svg>
+      );
+
+    case 'lock':
+      return (
+        <svg {...iconProps}>
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+          <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+        </svg>
+      );
+
+    case 'unlock':
+      return (
+        <svg {...iconProps}>
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+          <path d="M7 11V7a5 5 0 0 1 9.9-1" />
+        </svg>
+      );
+
+    case 'close':
+      return (
+        <svg {...iconProps}>
+          <line x1="18" y1="6" x2="6" y2="18" />
+          <line x1="6" y1="6" x2="18" y2="18" />
+        </svg>
+      );
+
+    case 'check':
+      return (
+        <svg {...iconProps}>
+          <polyline points="20 6 9 17 4 12" />
+        </svg>
+      );
+
+    case 'chevronDown':
+      return (
+        <svg {...iconProps}>
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      );
+
+    case 'plus':
+      return (
+        <svg {...iconProps}>
+          <line x1="12" y1="5" x2="12" y2="19" />
+          <line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+      );
+
+    case 'trash':
+      return (
+        <svg {...iconProps}>
+          <polyline points="3 6 5 6 21 6" />
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+        </svg>
+      );
+
+    default:
+      return null;
+  }
+};

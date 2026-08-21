@@ -1,0 +1,10 @@
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import '@vectoria/ui/tokens/index.css';
+import { EditorApp } from './app/EditorApp.js';
+
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <EditorApp />
+  </React.StrictMode>
+);

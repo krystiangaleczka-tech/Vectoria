@@ -1,0 +1,23 @@
+@import './themes.css';
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-ui);
+  background-color: var(--color-app);
+  color: var(--color-text-primary);
+  user-select: none;
+  -webkit-user-select: none;
+  overflow: hidden;
+  height: 100vh;
+  width: 100vw;
+}
+
+input, button, select, textarea {
+  font-family: inherit;
+  color: inherit;
+}
