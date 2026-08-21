@@ -1,5 +1,5 @@
 import type { Camera } from '@vectoria/editor-engine';
-import type { DocumentModel, Artboard, RectangleObject } from '@vectoria/core';
+import type { DocumentModel, Artboard, RectangleObject, EllipseObject, LineObject, PathObject, ObjectId, Transform2D } from '@vectoria/core';
 import { getTransformMatrix } from '@vectoria/core';
 
 // ─── Render Loop ──────────────────────────────────────────────────────────────
@@ -155,6 +155,15 @@ export function renderScene(
         case 'rectangle':
           renderRectangle(ctx, obj as RectangleObject);
           break;
+        case 'ellipse':
+          renderEllipse(ctx, obj as EllipseObject);
+          break;
+        case 'line':
+          renderLine(ctx, obj as LineObject);
+          break;
+        case 'path':
+          renderPath(ctx, obj as PathObject);
+          break;
       }
     }
   }
@@ -206,6 +215,117 @@ function renderRectangle(
   ctx.restore();
 }
 
+function renderEllipse(
+  ctx: CanvasRenderingContext2D,
+  obj: EllipseObject,
+): void {
+  const matrix = getTransformMatrix(obj.transform);
+
+  ctx.save();
+  ctx.transform(matrix[0], matrix[1], matrix[3], matrix[4], matrix[6], matrix[7]);
+  ctx.globalAlpha = obj.style.opacity;
+
+  const rx = obj.width / 2;
+  const ry = obj.height / 2;
+
+  // Fill
+  if (obj.style.fill.type === 'solid') {
+    ctx.fillStyle = obj.style.fill.color;
+    ctx.beginPath();
+    ctx.ellipse(rx, ry, rx, ry, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Stroke
+  if (obj.style.stroke) {
+    ctx.strokeStyle = obj.style.stroke.color;
+    ctx.lineWidth = obj.style.stroke.width;
+    ctx.lineCap = obj.style.stroke.lineCap;
+    ctx.lineJoin = obj.style.stroke.lineJoin;
+    ctx.miterLimit = obj.style.stroke.miterLimit;
+    if (obj.style.stroke.dashArray.length > 0) {
+      ctx.setLineDash([...obj.style.stroke.dashArray]);
+    }
+    ctx.globalAlpha = obj.style.opacity * obj.style.stroke.opacity;
+    ctx.beginPath();
+    ctx.ellipse(rx, ry, rx, ry, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+function renderLine(
+  ctx: CanvasRenderingContext2D,
+  obj: LineObject,
+): void {
+  const matrix = getTransformMatrix(obj.transform);
+
+  ctx.save();
+  ctx.transform(matrix[0], matrix[1], matrix[3], matrix[4], matrix[6], matrix[7]);
+
+  if (obj.style.stroke) {
+    ctx.strokeStyle = obj.style.stroke.color;
+    ctx.lineWidth = obj.style.stroke.width;
+    ctx.lineCap = obj.style.stroke.lineCap;
+    ctx.lineJoin = obj.style.stroke.lineJoin;
+    ctx.miterLimit = obj.style.stroke.miterLimit;
+    if (obj.style.stroke.dashArray.length > 0) {
+      ctx.setLineDash([...obj.style.stroke.dashArray]);
+    }
+    ctx.globalAlpha = obj.style.opacity * obj.style.stroke.opacity;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(obj.endPoint.x, obj.endPoint.y);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+function renderPath(
+  ctx: CanvasRenderingContext2D,
+  obj: PathObject,
+): void {
+  const matrix = getTransformMatrix(obj.transform);
+
+  ctx.save();
+  ctx.transform(matrix[0], matrix[1], matrix[3], matrix[4], matrix[6], matrix[7]);
+  ctx.globalAlpha = obj.style.opacity;
+
+  ctx.beginPath();
+  obj.nodes.forEach((node, i) => {
+    if (i === 0) {
+      ctx.moveTo(node.point.x, node.point.y);
+      return;
+    }
+    const prev = obj.nodes[i - 1]!;
+    const cp1 = prev.outHandle ?? prev.point;
+    const cp2 = node.inHandle ?? node.point;
+    ctx.bezierCurveTo(cp1.x, cp1.y, cp2.x, cp2.y, node.point.x, node.point.y);
+  });
+  if (obj.closed) ctx.closePath();
+
+  if (obj.style.fill.type === 'solid' && obj.closed) {
+    ctx.fillStyle = obj.style.fill.color;
+    ctx.fill();
+  }
+  if (obj.style.stroke) {
+    ctx.strokeStyle = obj.style.stroke.color;
+    ctx.lineWidth = obj.style.stroke.width;
+    ctx.lineCap = obj.style.stroke.lineCap;
+    ctx.lineJoin = obj.style.stroke.lineJoin;
+    ctx.miterLimit = obj.style.stroke.miterLimit;
+    if (obj.style.stroke.dashArray.length > 0) {
+      ctx.setLineDash([...obj.style.stroke.dashArray]);
+    }
+    ctx.globalAlpha = obj.style.opacity * obj.style.stroke.opacity;
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
 function roundRect(
   ctx: CanvasRenderingContext2D,
   x: number, y: number,
@@ -235,6 +355,9 @@ export function renderOverlay(
   selectedIds: ReadonlySet<string>,
   canvasWidth: number,
   canvasHeight: number,
+  options?: {
+    previewTransforms?: ReadonlyMap<ObjectId, Transform2D>;
+  },
 ): void {
   const dpr = window.devicePixelRatio || 1;
 
@@ -249,11 +372,28 @@ export function renderOverlay(
 
   // Render selection outline for each selected object
   for (const objectId of selectedIds) {
-    const obj = doc.objects[objectId];
+    let obj = doc.objects[objectId];
     if (!obj?.visible) continue;
 
-    if (obj.type === 'rectangle') {
-      renderRectangleSelectionOutline(ctx, camera, obj);
+    // Apply preview transform if available
+    if (options?.previewTransforms?.has(objectId)) {
+      const previewTransform = options.previewTransforms.get(objectId)!;
+      obj = { ...obj, transform: previewTransform };
+    }
+
+    switch (obj.type) {
+      case 'rectangle':
+        renderRectangleSelectionOutline(ctx, camera, obj as RectangleObject);
+        break;
+      case 'ellipse':
+        renderEllipseSelectionOutline(ctx, camera, obj as EllipseObject);
+        break;
+      case 'line':
+        renderLineSelectionOutline(ctx, camera, obj as LineObject);
+        break;
+      case 'path':
+        renderPathSelectionOutline(ctx, camera, obj as PathObject);
+        break;
     }
   }
 
@@ -286,6 +426,95 @@ function renderRectangleSelectionOutline(
   ctx.fillStyle = getComputedStyle(document.documentElement)
     .getPropertyValue('--color-selection-fill').trim() || 'rgba(92, 174, 255, 0.13)';
   ctx.fillRect(0, 0, obj.width, obj.height);
+
+  ctx.restore();
+}
+
+function renderEllipseSelectionOutline(
+  ctx: CanvasRenderingContext2D,
+  camera: Camera,
+  obj: EllipseObject,
+): void {
+  const matrix = getTransformMatrix(obj.transform);
+
+  ctx.save();
+
+  ctx.translate(camera.pan.x, camera.pan.y);
+  ctx.scale(camera.zoom, camera.zoom);
+  ctx.transform(matrix[0], matrix[1], matrix[3], matrix[4], matrix[6], matrix[7]);
+
+  const rx = obj.width / 2;
+  const ry = obj.height / 2;
+
+  ctx.strokeStyle = getComputedStyle(document.documentElement)
+    .getPropertyValue('--color-selection').trim() || '#5caeff';
+  ctx.lineWidth = 1.5 / camera.zoom;
+  ctx.setLineDash([]);
+
+  ctx.beginPath();
+  ctx.ellipse(rx, ry, rx, ry, 0, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+function renderLineSelectionOutline(
+  ctx: CanvasRenderingContext2D,
+  camera: Camera,
+  obj: LineObject,
+): void {
+  const matrix = getTransformMatrix(obj.transform);
+
+  ctx.save();
+
+  ctx.translate(camera.pan.x, camera.pan.y);
+  ctx.scale(camera.zoom, camera.zoom);
+  ctx.transform(matrix[0], matrix[1], matrix[3], matrix[4], matrix[6], matrix[7]);
+
+  ctx.strokeStyle = getComputedStyle(document.documentElement)
+    .getPropertyValue('--color-selection').trim() || '#5caeff';
+  ctx.lineWidth = 1.5 / camera.zoom;
+  ctx.setLineDash([]);
+
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(obj.endPoint.x, obj.endPoint.y);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+function renderPathSelectionOutline(
+  ctx: CanvasRenderingContext2D,
+  camera: Camera,
+  obj: PathObject,
+): void {
+  const matrix = getTransformMatrix(obj.transform);
+
+  ctx.save();
+
+  ctx.translate(camera.pan.x, camera.pan.y);
+  ctx.scale(camera.zoom, camera.zoom);
+  ctx.transform(matrix[0], matrix[1], matrix[3], matrix[4], matrix[6], matrix[7]);
+
+  ctx.strokeStyle = getComputedStyle(document.documentElement)
+    .getPropertyValue('--color-selection').trim() || '#5caeff';
+  ctx.lineWidth = 1.5 / camera.zoom;
+  ctx.setLineDash([]);
+
+  ctx.beginPath();
+  obj.nodes.forEach((node, i) => {
+    if (i === 0) {
+      ctx.moveTo(node.point.x, node.point.y);
+      return;
+    }
+    const prev = obj.nodes[i - 1]!;
+    const cp1 = prev.outHandle ?? prev.point;
+    const cp2 = node.inHandle ?? node.point;
+    ctx.bezierCurveTo(cp1.x, cp1.y, cp2.x, cp2.y, node.point.x, node.point.y);
+  });
+  if (obj.closed) ctx.closePath();
+  ctx.stroke();
 
   ctx.restore();
 }

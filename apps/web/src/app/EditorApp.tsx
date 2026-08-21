@@ -8,7 +8,7 @@ import type {
 import {
   CommandHistory,
   TransformObjectsCommand,
-  SetObjectGeometryCommand,
+  SetRectangleGeometryCommand,
   SetObjectStyleCommand,
 } from '@vectoria/core';
 import { Camera } from '@vectoria/editor-engine';
@@ -25,6 +25,13 @@ import { ToolRail, type ActiveTool } from '../features/toolbar/ToolRail.js';
 import { CanvasViewport } from '../features/canvas/CanvasViewport.js';
 import { PropertiesPanel } from '../features/panels/PropertiesPanel.js';
 import { StatusBar } from '../features/statusbar/StatusBar.js';
+
+function isMacPlatform(): boolean {
+  const platform = (navigator as { userAgentData?: { platform?: string } }).userAgentData?.platform
+    ?? navigator.platform
+    ?? '';
+  return /mac/i.test(platform);
+}
 
 const RecoveryBanner: React.FC<{ message: string; details?: string }> = ({ message, details }) => (
   <div style={{
@@ -71,9 +78,19 @@ export const EditorApp: React.FC = () => {
         void saveDocument(latest);
       }
     };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') flush();
+    };
+
+    // pagehide is the primary mechanism — better bfcache support than beforeunload.
+    // visibilitychange covers tab switching / app backgrounding on mobile.
     window.addEventListener('pagehide', flush);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     return () => {
       window.removeEventListener('pagehide', flush);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       flush();
     };
   }, []);
@@ -204,7 +221,7 @@ export const EditorApp: React.FC = () => {
 
   const handleUpdateDimensions = useCallback(
     (id: ObjectId, width: number, height: number) => {
-      handleExecuteCommand(new SetObjectGeometryCommand(id, { width, height }));
+      handleExecuteCommand(new SetRectangleGeometryCommand(id, { width, height }));
     },
     [handleExecuteCommand]
   );
@@ -227,7 +244,7 @@ export const EditorApp: React.FC = () => {
         return;
       }
 
-      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+      const isMac = isMacPlatform();
       const cmdKey = isMac ? e.metaKey : e.ctrlKey;
 
       if (cmdKey && e.key.toLowerCase() === 'z') {

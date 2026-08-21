@@ -90,7 +90,11 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     renderScene(sceneCtx, camera, doc, sceneCanvas.width, sceneCanvas.height, {
       previewTransforms: dragPreview,
     });
-    renderOverlay(overlayCtx, camera, doc, selectedIds, overlayCanvas.width, overlayCanvas.height);
+    renderOverlay(overlayCtx, camera, doc, selectedIds, overlayCanvas.width, overlayCanvas.height, {
+      previewTransforms: dragPreview
+        ? new Map(Object.entries(dragPreview) as [string, import('@vectoria/core').Transform2D][])
+        : undefined,
+    });
 
     // Draw active creation drag preview on overlay if creating rect
     const drag = dragStateRef.current;
@@ -128,17 +132,14 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       loop.invalidate();
       onZoomChange(camera.zoomPercent);
     };
-    // eslint-disable-next-line react-hooks/immutability
     camera.onChanged = handleCameraChange;
 
     return () => {
       loop.stop();
       if (camera.onChanged === handleCameraChange) {
-        // eslint-disable-next-line react-hooks/immutability
         camera.onChanged = null;
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [renderAll, onZoomChange]);
 
   // Invalidate on doc or selection changes
@@ -414,7 +415,6 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedObjectId, onExecuteCommand, onSelectObject]);
 
   return (

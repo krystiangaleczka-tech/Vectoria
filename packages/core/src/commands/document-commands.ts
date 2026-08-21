@@ -1,3 +1,4 @@
+import type { Vec2 } from '@vectoria/shared';
 import type { Command } from './command.js';
 import type {
   DocumentModel,
@@ -6,6 +7,7 @@ import type {
   LayerId,
   ObjectStyle,
   Transform2D,
+  PathNode,
 } from '../model/types.js';
 
 // ─── CreateObjectsCommand ─────────────────────────────────────────────────────
@@ -230,7 +232,15 @@ export class SetObjectStyleCommand implements Command {
     private readonly objectIds: readonly ObjectId[],
     private readonly stylePatch: Partial<ObjectStyle>,
   ) {
-    this.description = 'Change style';
+    if (stylePatch.fill !== undefined) {
+      this.description = 'Change fill';
+    } else if (stylePatch.stroke !== undefined) {
+      this.description = 'Change stroke';
+    } else if (stylePatch.opacity !== undefined) {
+      this.description = 'Change opacity';
+    } else {
+      this.description = 'Change style';
+    }
   }
 
   execute(doc: DocumentModel): DocumentModel {
@@ -276,8 +286,14 @@ export class SetObjectStyleCommand implements Command {
   }
 }
 
-// ─── SetObjectGeometryCommand ─────────────────────────────────────────────────
+// ─── SetObjectGeometryCommand (deprecated — use type-specific commands) ──────
 
+/**
+ * @deprecated Use SetRectangleGeometryCommand, SetEllipseGeometryCommand,
+ * SetLineGeometryCommand, or SetPathGeometryCommand instead.
+ * This command uses unsafe `Record<string, unknown>` typing and will be
+ * removed after all call sites are migrated.
+ */
 export class SetObjectGeometryCommand implements Command {
   readonly type = 'SetObjectGeometry';
   readonly description = 'Resize';
@@ -321,6 +337,241 @@ export class SetObjectGeometryCommand implements Command {
       objects: {
         ...doc.objects,
         [this.objectId]: { ...obj, ...prev },
+      },
+      updatedAt: new Date().toISOString(),
+    };
+  }
+}
+
+// ─── SetRectangleGeometryCommand ─────────────────────────────────────────────
+
+export class SetRectangleGeometryCommand implements Command {
+  readonly type = 'SetRectangleGeometry';
+  readonly description: string;
+  private previous: { width: number; height: number; cornerRadius: number } | null = null;
+
+  constructor(
+    private readonly objectId: ObjectId,
+    private readonly patch: Readonly<{
+      width?: number;
+      height?: number;
+      cornerRadius?: number;
+    }>,
+  ) {
+    this.description =
+      patch.cornerRadius !== undefined && patch.width === undefined && patch.height === undefined
+        ? 'Change corner radius'
+        : 'Resize';
+  }
+
+  execute(doc: DocumentModel): DocumentModel {
+    const obj = doc.objects[this.objectId];
+    if (!obj || obj.type !== 'rectangle') return doc;
+
+    const width = this.patch.width ?? obj.width;
+    const height = this.patch.height ?? obj.height;
+    const cornerRadius = Math.min(
+      Math.max(0, this.patch.cornerRadius ?? obj.cornerRadius),
+      width / 2,
+      height / 2,
+    );
+
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+      return doc;
+    }
+
+    this.previous = { width: obj.width, height: obj.height, cornerRadius: obj.cornerRadius };
+
+    return {
+      ...doc,
+      objects: {
+        ...doc.objects,
+        [this.objectId]: { ...obj, width, height, cornerRadius },
+      },
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  undo(doc: DocumentModel): DocumentModel {
+    if (!this.previous) return doc;
+    const obj = doc.objects[this.objectId];
+    if (!obj || obj.type !== 'rectangle') return doc;
+
+    return {
+      ...doc,
+      objects: {
+        ...doc.objects,
+        [this.objectId]: { ...obj, ...this.previous },
+      },
+      updatedAt: new Date().toISOString(),
+    };
+  }
+}
+
+// ─── SetEllipseGeometryCommand ───────────────────────────────────────────────
+
+export class SetEllipseGeometryCommand implements Command {
+  readonly type = 'SetEllipseGeometry';
+  readonly description = 'Resize';
+  private previous: { width: number; height: number } | null = null;
+
+  constructor(
+    private readonly objectId: ObjectId,
+    private readonly patch: Readonly<{
+      width?: number;
+      height?: number;
+    }>,
+  ) {}
+
+  execute(doc: DocumentModel): DocumentModel {
+    const obj = doc.objects[this.objectId];
+    if (!obj || obj.type !== 'ellipse') return doc;
+
+    const width = this.patch.width ?? obj.width;
+    const height = this.patch.height ?? obj.height;
+
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+      return doc;
+    }
+
+    this.previous = { width: obj.width, height: obj.height };
+
+    return {
+      ...doc,
+      objects: {
+        ...doc.objects,
+        [this.objectId]: { ...obj, width, height },
+      },
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  undo(doc: DocumentModel): DocumentModel {
+    if (!this.previous) return doc;
+    const obj = doc.objects[this.objectId];
+    if (!obj || obj.type !== 'ellipse') return doc;
+
+    return {
+      ...doc,
+      objects: {
+        ...doc.objects,
+        [this.objectId]: { ...obj, ...this.previous },
+      },
+      updatedAt: new Date().toISOString(),
+    };
+  }
+}
+
+// ─── SetLineGeometryCommand ──────────────────────────────────────────────────
+
+export class SetLineGeometryCommand implements Command {
+  readonly type = 'SetLineGeometry';
+  readonly description = 'Change line endpoint';
+  private previous: { endPoint: Vec2 } | null = null;
+
+  constructor(
+    private readonly objectId: ObjectId,
+    private readonly patch: Readonly<{
+      endPoint?: Vec2;
+    }>,
+  ) {}
+
+  execute(doc: DocumentModel): DocumentModel {
+    const obj = doc.objects[this.objectId];
+    if (!obj || obj.type !== 'line') return doc;
+
+    const endPoint = this.patch.endPoint ?? obj.endPoint;
+
+    if (!Number.isFinite(endPoint.x) || !Number.isFinite(endPoint.y)) {
+      return doc;
+    }
+
+    this.previous = { endPoint: obj.endPoint };
+
+    return {
+      ...doc,
+      objects: {
+        ...doc.objects,
+        [this.objectId]: { ...obj, endPoint },
+      },
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  undo(doc: DocumentModel): DocumentModel {
+    if (!this.previous) return doc;
+    const obj = doc.objects[this.objectId];
+    if (!obj || obj.type !== 'line') return doc;
+
+    return {
+      ...doc,
+      objects: {
+        ...doc.objects,
+        [this.objectId]: { ...obj, ...this.previous },
+      },
+      updatedAt: new Date().toISOString(),
+    };
+  }
+}
+
+// ─── SetPathGeometryCommand ──────────────────────────────────────────────────
+
+export class SetPathGeometryCommand implements Command {
+  readonly type = 'SetPathGeometry';
+  readonly description = 'Edit path';
+  private previous: { nodes: readonly PathNode[]; closed: boolean } | null = null;
+
+  constructor(
+    private readonly objectId: ObjectId,
+    private readonly patch: Readonly<{
+      nodes?: readonly PathNode[];
+      closed?: boolean;
+    }>,
+  ) {}
+
+  execute(doc: DocumentModel): DocumentModel {
+    const obj = doc.objects[this.objectId];
+    if (!obj || obj.type !== 'path') return doc;
+
+    const nodes = this.patch.nodes ?? obj.nodes;
+    const closed = this.patch.closed ?? obj.closed;
+
+    // Validate path nodes: open path needs >= 2, closed needs >= 3
+    const minNodes = closed ? 3 : 2;
+    if (nodes.length < minNodes) {
+      return doc;
+    }
+
+    // Check all node coordinates are finite
+    for (const node of nodes) {
+      const points = [node.point, node.inHandle, node.outHandle].filter(Boolean) as Vec2[];
+      if (points.some((p) => !Number.isFinite(p.x) || !Number.isFinite(p.y))) {
+        return doc;
+      }
+    }
+
+    this.previous = { nodes: obj.nodes, closed: obj.closed };
+
+    return {
+      ...doc,
+      objects: {
+        ...doc.objects,
+        [this.objectId]: { ...obj, nodes, closed },
+      },
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  undo(doc: DocumentModel): DocumentModel {
+    if (!this.previous) return doc;
+    const obj = doc.objects[this.objectId];
+    if (!obj || obj.type !== 'path') return doc;
+
+    return {
+      ...doc,
+      objects: {
+        ...doc.objects,
+        [this.objectId]: { ...obj, ...this.previous },
       },
       updatedAt: new Date().toISOString(),
     };

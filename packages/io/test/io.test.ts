@@ -9,6 +9,9 @@ import {
   createDefaultDocument,
   createTransform,
   type RectangleObject,
+  type EllipseObject,
+  type LineObject,
+  type PathObject,
 } from '@vectoria/core';
 
 describe('IO - DTO Validation and SVG Export', () => {
@@ -117,5 +120,125 @@ describe('IO - DTO Validation and SVG Export', () => {
     const svg = exportArtboardToSvg(docWithRect);
     expect(svg).toContain('transform="translate(-500 -300)"');
     expect(svg).toContain('viewBox="0 0 800 600"');
+  });
+
+  it('exports ellipse to SVG', () => {
+    const doc = createDefaultDocument({ width: 1000, height: 800 });
+    const ellipse: EllipseObject = {
+      type: 'ellipse',
+      id: 'ell-1',
+      name: 'Ellipse 1',
+      layerId: doc.activeLayerId,
+      visible: true,
+      locked: false,
+      transform: createTransform({ x: 200, y: 150 }),
+      style: {
+        fill: { type: 'solid', color: '#5caeff' },
+        stroke: null,
+        opacity: 1,
+      },
+      width: 200,
+      height: 160,
+    };
+
+    const docWithEllipse = {
+      ...doc,
+      objects: { [ellipse.id]: ellipse },
+      layers: {
+        ...doc.layers,
+        [doc.activeLayerId]: {
+          ...doc.layers[doc.activeLayerId]!,
+          objectIds: [ellipse.id],
+        },
+      },
+    };
+
+    const svg = exportArtboardToSvg(docWithEllipse);
+    expect(svg).toContain('<ellipse');
+    expect(svg).toContain('cx="100"');
+    expect(svg).toContain('cy="80"');
+    expect(svg).toContain('rx="100"');
+    expect(svg).toContain('ry="80"');
+    expect(svg).toContain('fill="#5caeff"');
+  });
+
+  it('exports line to SVG', () => {
+    const doc = createDefaultDocument({ width: 1000, height: 800 });
+    const line: LineObject = {
+      type: 'line',
+      id: 'line-1',
+      name: 'Line 1',
+      layerId: doc.activeLayerId,
+      visible: true,
+      locked: false,
+      transform: createTransform({ x: 100, y: 100 }),
+      style: {
+        fill: { type: 'none' },
+        stroke: { color: '#ff0000', width: 2, lineCap: 'butt', lineJoin: 'miter', miterLimit: 10, dashArray: [], opacity: 1 },
+        opacity: 1,
+      },
+      endPoint: { x: 300, y: 200 },
+    };
+
+    const docWithLine = {
+      ...doc,
+      objects: { [line.id]: line },
+      layers: {
+        ...doc.layers,
+        [doc.activeLayerId]: {
+          ...doc.layers[doc.activeLayerId]!,
+          objectIds: [line.id],
+        },
+      },
+    };
+
+    const svg = exportArtboardToSvg(docWithLine);
+    expect(svg).toContain('<line');
+    expect(svg).toContain('x1="0"');
+    expect(svg).toContain('y1="0"');
+    expect(svg).toContain('x2="300"');
+    expect(svg).toContain('y2="200"');
+    expect(svg).toContain('stroke="#ff0000"');
+  });
+
+  it('exports path with cubic Bézier to SVG', () => {
+    const doc = createDefaultDocument({ width: 1000, height: 800 });
+    const path: PathObject = {
+      type: 'path',
+      id: 'path-1',
+      name: 'Path 1',
+      layerId: doc.activeLayerId,
+      visible: true,
+      locked: false,
+      transform: createTransform({ x: 100, y: 100 }),
+      style: {
+        fill: { type: 'solid', color: '#00ff00' },
+        stroke: { color: '#000000', width: 1, lineCap: 'butt', lineJoin: 'miter', miterLimit: 10, dashArray: [], opacity: 1 },
+        opacity: 1,
+      },
+      nodes: [
+        { point: { x: 0, y: 0 }, inHandle: null, outHandle: { x: 50, y: 0 }, kind: 'smooth' },
+        { point: { x: 100, y: 100 }, inHandle: { x: 50, y: 100 }, outHandle: null, kind: 'smooth' },
+        { point: { x: 200, y: 0 }, inHandle: { x: 150, y: 0 }, outHandle: null, kind: 'smooth' },
+      ],
+      closed: true,
+    };
+
+    const docWithPath = {
+      ...doc,
+      objects: { [path.id]: path },
+      layers: {
+        ...doc.layers,
+        [doc.activeLayerId]: {
+          ...doc.layers[doc.activeLayerId]!,
+          objectIds: [path.id],
+        },
+      },
+    };
+
+    const svg = exportArtboardToSvg(docWithPath);
+    expect(svg).toContain('<path');
+    expect(svg).toContain('d="M 0 0 C 50 0, 50 100, 100 100 C 100 100, 150 0, 200 0 Z"');
+    expect(svg).toContain('fill="#00ff00"');
   });
 });

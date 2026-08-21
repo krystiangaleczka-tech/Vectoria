@@ -6,4 +6,8 @@ export {
   TransformObjectsCommand,
   SetObjectStyleCommand,
   SetObjectGeometryCommand,
+  SetRectangleGeometryCommand,
+  SetEllipseGeometryCommand,
+  SetLineGeometryCommand,
+  SetPathGeometryCommand,
 } from './document-commands.js';

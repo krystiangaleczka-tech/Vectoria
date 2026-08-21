@@ -2,6 +2,7 @@
   "name": "vectoria",
   "private": true,
   "version": "0.1.0",
+  "type": "module",
   "description": "Professional browser-based vector editor",
   "scripts": {
     "dev": "pnpm --filter @vectoria/web dev",

@@ -117,6 +117,69 @@ export function validateInvariants(doc: DocumentModel): InvariantViolation[] {
           violations.push({ code: 'INVALID_OPACITY', message: `Object '${objectId}' has opacity out of bounds [0, 1].` });
         }
 
+        // ── Stroke validation ──────────────────────────────────────────────
+        if (obj.style.stroke) {
+          const s = obj.style.stroke;
+          if (s.width < 0) {
+            violations.push({ code: 'INVALID_STROKE_WIDTH', message: `Object '${objectId}' has negative stroke width.` });
+          }
+          if (s.opacity < 0 || s.opacity > 1) {
+            violations.push({ code: 'INVALID_STROKE_OPACITY', message: `Object '${objectId}' stroke opacity out of range.` });
+          }
+          if (s.miterLimit < 1) {
+            violations.push({ code: 'INVALID_MITER_LIMIT', message: `Object '${objectId}' miterLimit must be >= 1.` });
+          }
+        }
+
+        // ── Gradient validation ─────────────────────────────────────────────
+        if (obj.style.fill.type === 'linear-gradient') {
+          const { stops, start, end } = obj.style.fill;
+          if (stops.length < 2) {
+            violations.push({ code: 'INVALID_GRADIENT_STOPS', message: `Object '${objectId}' gradient needs >= 2 stops.` });
+          }
+          for (const stop of stops) {
+            if (stop.offset < 0 || stop.offset > 1) {
+              violations.push({ code: 'INVALID_GRADIENT_OFFSET', message: `Object '${objectId}' gradient offset out of range.` });
+            }
+          }
+          if (!Number.isFinite(start.x) || !Number.isFinite(start.y) || !Number.isFinite(end.x) || !Number.isFinite(end.y)) {
+            violations.push({ code: 'NON_FINITE_GRADIENT_POINT', message: `Object '${objectId}' gradient has non-finite points.` });
+          }
+        }
+
+        // ── Type-specific geometry validation ──────────────────────────────
+        if (obj.type === 'ellipse' && (obj.width <= 0 || obj.height <= 0)) {
+          violations.push({ code: 'INVALID_ELLIPSE_SIZE', message: `Object '${objectId}' has non-positive ellipse dimensions.` });
+        }
+
+        if (obj.type === 'line') {
+          if (!Number.isFinite(obj.endPoint.x) || !Number.isFinite(obj.endPoint.y)) {
+            violations.push({ code: 'NON_FINITE_ENDPOINT', message: `Object '${objectId}' has non-finite endPoint.` });
+          }
+        }
+
+        if (obj.type === 'path') {
+          // Open path needs >= 2 nodes, closed needs >= 3
+          const minNodes = obj.closed ? 3 : 2;
+          if (obj.nodes.length < minNodes) {
+            violations.push({ code: 'INVALID_PATH_NODE_COUNT', message: `Object '${objectId}' path has too few nodes (${obj.nodes.length}, need >= ${minNodes}).` });
+          }
+          for (const node of obj.nodes) {
+            if (!Number.isFinite(node.point.x) || !Number.isFinite(node.point.y)) {
+              violations.push({ code: 'NON_FINITE_PATH_NODE', message: `Object '${objectId}' has non-finite path node coordinates.` });
+              break;
+            }
+            if (node.inHandle && (!Number.isFinite(node.inHandle.x) || !Number.isFinite(node.inHandle.y))) {
+              violations.push({ code: 'NON_FINITE_PATH_NODE', message: `Object '${objectId}' has non-finite path node inHandle.` });
+              break;
+            }
+            if (node.outHandle && (!Number.isFinite(node.outHandle.x) || !Number.isFinite(node.outHandle.y))) {
+              violations.push({ code: 'NON_FINITE_PATH_NODE', message: `Object '${objectId}' has non-finite path node outHandle.` });
+              break;
+            }
+          }
+        }
+
         // All numbers must be finite
         const { transform } = obj;
         const numbers = [

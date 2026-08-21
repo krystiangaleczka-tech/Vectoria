@@ -1,4 +1,4 @@
-import type { DocumentModel, SceneObject, RectangleObject } from '@vectoria/core';
+import type { DocumentModel, SceneObject, RectangleObject, EllipseObject, LineObject, PathObject, StrokeStyle } from '@vectoria/core';
 import { getTransformMatrix } from '@vectoria/core';
 
 export function escapeXml(unsafe: string): string {
@@ -64,6 +64,12 @@ function renderSceneObjectToSvg(obj: SceneObject): string | null {
   switch (obj.type) {
     case 'rectangle':
       return renderRectangleToSvg(obj);
+    case 'ellipse':
+      return renderEllipseToSvg(obj);
+    case 'line':
+      return renderLineToSvg(obj);
+    case 'path':
+      return renderPathToSvg(obj);
     default:
       return null;
   }
@@ -73,26 +79,75 @@ function renderRectangleToSvg(obj: RectangleObject): string {
   const matrix = getTransformMatrix(obj.transform);
   const transformAttr = `matrix(${matrix[0]} ${matrix[1]} ${matrix[3]} ${matrix[4]} ${matrix[6]} ${matrix[7]})`;
 
-  let fillAttr = 'fill="none"';
-  if (obj.style.fill.type === 'solid') {
-    fillAttr = `fill="${escapeXml(obj.style.fill.color)}"`;
-  }
+  const fillAttr = obj.style.fill.type === 'solid'
+    ? `fill="${escapeXml(obj.style.fill.color)}"`
+    : 'fill="none"';
 
-  let strokeAttr = '';
-  if (obj.style.stroke) {
-    strokeAttr = ` stroke="${escapeXml(obj.style.stroke.color)}" stroke-width="${obj.style.stroke.width}" stroke-linecap="${obj.style.stroke.lineCap}" stroke-linejoin="${obj.style.stroke.lineJoin}" stroke-miterlimit="${obj.style.stroke.miterLimit}"`;
-    if (obj.style.stroke.dashArray.length > 0) {
-      strokeAttr += ` stroke-dasharray="${obj.style.stroke.dashArray.join(' ')}"`;
-    }
-    if (obj.style.stroke.opacity < 1) {
-      strokeAttr += ` stroke-opacity="${obj.style.stroke.opacity}"`;
-    }
-  }
-
+  const strokeAttr = obj.style.stroke ? buildStrokeAttr(obj.style.stroke) : '';
   const opacityAttr = obj.style.opacity < 1 ? ` opacity="${obj.style.opacity}"` : '';
   const radiusAttr = obj.cornerRadius > 0 ? ` rx="${obj.cornerRadius}" ry="${obj.cornerRadius}"` : '';
 
   return `<rect x="0" y="0" width="${obj.width}" height="${obj.height}" transform="${transformAttr}" ${fillAttr}${strokeAttr}${opacityAttr}${radiusAttr} />`;
+}
+
+function renderEllipseToSvg(obj: EllipseObject): string {
+  const matrix = getTransformMatrix(obj.transform);
+  const transformAttr = `matrix(${matrix[0]} ${matrix[1]} ${matrix[3]} ${matrix[4]} ${matrix[6]} ${matrix[7]})`;
+  const rx = obj.width / 2;
+  const ry = obj.height / 2;
+
+  const fillAttr = obj.style.fill.type === 'solid'
+    ? `fill="${escapeXml(obj.style.fill.color)}"`
+    : 'fill="none"';
+
+  const strokeAttr = obj.style.stroke ? buildStrokeAttr(obj.style.stroke) : '';
+  const opacityAttr = obj.style.opacity < 1 ? ` opacity="${obj.style.opacity}"` : '';
+
+  return `<ellipse cx="${rx}" cy="${ry}" rx="${rx}" ry="${ry}" transform="${transformAttr}" ${fillAttr}${strokeAttr}${opacityAttr} />`;
+}
+
+function renderLineToSvg(obj: LineObject): string {
+  const matrix = getTransformMatrix(obj.transform);
+  const transformAttr = `matrix(${matrix[0]} ${matrix[1]} ${matrix[3]} ${matrix[4]} ${matrix[6]} ${matrix[7]})`;
+
+  const fillAttr = 'fill="none"';
+  const strokeAttr = obj.style.stroke ? buildStrokeAttr(obj.style.stroke) : '';
+  const opacityAttr = obj.style.opacity < 1 ? ` opacity="${obj.style.opacity}"` : '';
+
+  return `<line x1="0" y1="0" x2="${obj.endPoint.x}" y2="${obj.endPoint.y}" transform="${transformAttr}" ${fillAttr}${strokeAttr}${opacityAttr} />`;
+}
+
+function renderPathToSvg(obj: PathObject): string {
+  const matrix = getTransformMatrix(obj.transform);
+  const transformAttr = `matrix(${matrix[0]} ${matrix[1]} ${matrix[3]} ${matrix[4]} ${matrix[6]} ${matrix[7]})`;
+
+  const d = obj.nodes.map((node, i) => {
+    if (i === 0) return `M ${node.point.x} ${node.point.y}`;
+    const prev = obj.nodes[i - 1]!;
+    const cp1 = prev.outHandle ?? prev.point;
+    const cp2 = node.inHandle ?? node.point;
+    return `C ${cp1.x} ${cp1.y}, ${cp2.x} ${cp2.y}, ${node.point.x} ${node.point.y}`;
+  }).join(' ') + (obj.closed ? ' Z' : '');
+
+  const fillAttr = obj.closed && obj.style.fill.type === 'solid'
+    ? `fill="${escapeXml(obj.style.fill.color)}"`
+    : 'fill="none"';
+
+  const strokeAttr = obj.style.stroke ? buildStrokeAttr(obj.style.stroke) : '';
+  const opacityAttr = obj.style.opacity < 1 ? ` opacity="${obj.style.opacity}"` : '';
+
+  return `<path d="${d}" transform="${transformAttr}" ${fillAttr}${strokeAttr}${opacityAttr} />`;
+}
+
+function buildStrokeAttr(stroke: StrokeStyle): string {
+  let attr = ` stroke="${escapeXml(stroke.color)}" stroke-width="${stroke.width}" stroke-linecap="${stroke.lineCap}" stroke-linejoin="${stroke.lineJoin}" stroke-miterlimit="${stroke.miterLimit}"`;
+  if (stroke.dashArray.length > 0) {
+    attr += ` stroke-dasharray="${stroke.dashArray.join(',')}"`;
+  }
+  if (stroke.opacity < 1) {
+    attr += ` stroke-opacity="${stroke.opacity}"`;
+  }
+  return attr;
 }
 
 /**

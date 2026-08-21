@@ -52,8 +52,11 @@ export class CommandHistory {
    */
   execute(command: Command, doc: DocumentModel): DocumentModel {
     const newDoc = command.execute(doc);
-    
-    if (import.meta.env.DEV) {
+
+    // Dev-mode invariant validation — uses safe type cast since
+    // import.meta.env is a Vite feature not available in plain tsc.
+    const dev = (import.meta as { env?: { DEV?: boolean } }).env?.DEV;
+    if (dev) {
       const violations = validateInvariants(newDoc);
       if (violations.length > 0) {
         console.error('[Vectoria] Invariant violation after command execution:', violations);

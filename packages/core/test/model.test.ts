@@ -5,6 +5,7 @@ import {
   getTransformMatrix,
   getInverseTransformMatrix,
   createTransform,
+  defaultObjectStyle,
 } from '../src/index.js';
 import { mat3TransformPoint } from '@vectoria/shared';
 
@@ -67,5 +68,294 @@ describe('Transform2D Matrix computation', () => {
     const transform = createTransform({ x: 100, y: 200 });
     const inv = getInverseTransformMatrix(transform);
     expect(inv).not.toBeNull();
+  });
+});
+
+describe('Extended Invariant Validation', () => {
+  it('detects negative stroke width', () => {
+    const doc = createDefaultDocument();
+    const brokenDoc = {
+      ...doc,
+      objects: {
+        'obj-1': {
+          type: 'rectangle' as const,
+          id: 'obj-1',
+          name: 'R',
+          layerId: doc.activeLayerId,
+          visible: true,
+          locked: false,
+          transform: createTransform({ x: 0, y: 0 }),
+          style: {
+            fill: { type: 'solid' as const, color: '#fff' },
+            stroke: {
+              color: '#000',
+              width: -1,
+              lineCap: 'butt' as const,
+              lineJoin: 'miter' as const,
+              miterLimit: 10,
+              dashArray: [],
+              opacity: 1,
+            },
+            opacity: 1,
+          },
+          width: 100,
+          height: 100,
+          cornerRadius: 0,
+        },
+      },
+      layers: {
+        ...doc.layers,
+        [doc.activeLayerId]: {
+          ...doc.layers[doc.activeLayerId]!,
+          objectIds: ['obj-1'],
+        },
+      },
+    };
+    const violations = validateInvariants(brokenDoc);
+    expect(violations.some((v) => v.code === 'INVALID_STROKE_WIDTH')).toBe(true);
+  });
+
+  it('detects stroke opacity out of range', () => {
+    const doc = createDefaultDocument();
+    const brokenDoc = {
+      ...doc,
+      objects: {
+        'obj-2': {
+          type: 'rectangle' as const,
+          id: 'obj-2',
+          name: 'R',
+          layerId: doc.activeLayerId,
+          visible: true,
+          locked: false,
+          transform: createTransform({ x: 0, y: 0 }),
+          style: {
+            fill: { type: 'none' as const },
+            stroke: {
+              color: '#000',
+              width: 1,
+              lineCap: 'butt' as const,
+              lineJoin: 'miter' as const,
+              miterLimit: 10,
+              dashArray: [],
+              opacity: 2,
+            },
+            opacity: 1,
+          },
+          width: 100,
+          height: 100,
+          cornerRadius: 0,
+        },
+      },
+      layers: {
+        ...doc.layers,
+        [doc.activeLayerId]: {
+          ...doc.layers[doc.activeLayerId]!,
+          objectIds: ['obj-2'],
+        },
+      },
+    };
+    const violations = validateInvariants(brokenDoc);
+    expect(violations.some((v) => v.code === 'INVALID_STROKE_OPACITY')).toBe(true);
+  });
+
+  it('detects miterLimit < 1', () => {
+    const doc = createDefaultDocument();
+    const brokenDoc = {
+      ...doc,
+      objects: {
+        'obj-3': {
+          type: 'rectangle' as const,
+          id: 'obj-3',
+          name: 'R',
+          layerId: doc.activeLayerId,
+          visible: true,
+          locked: false,
+          transform: createTransform({ x: 0, y: 0 }),
+          style: {
+            fill: { type: 'none' as const },
+            stroke: {
+              color: '#000',
+              width: 1,
+              lineCap: 'butt' as const,
+              lineJoin: 'miter' as const,
+              miterLimit: 0.5,
+              dashArray: [],
+              opacity: 1,
+            },
+            opacity: 1,
+          },
+          width: 100,
+          height: 100,
+          cornerRadius: 0,
+        },
+      },
+      layers: {
+        ...doc.layers,
+        [doc.activeLayerId]: {
+          ...doc.layers[doc.activeLayerId]!,
+          objectIds: ['obj-3'],
+        },
+      },
+    };
+    const violations = validateInvariants(brokenDoc);
+    expect(violations.some((v) => v.code === 'INVALID_MITER_LIMIT')).toBe(true);
+  });
+
+  it('detects gradient with fewer than 2 stops', () => {
+    const doc = createDefaultDocument();
+    const brokenDoc = {
+      ...doc,
+      objects: {
+        'obj-4': {
+          type: 'rectangle' as const,
+          id: 'obj-4',
+          name: 'R',
+          layerId: doc.activeLayerId,
+          visible: true,
+          locked: false,
+          transform: createTransform({ x: 0, y: 0 }),
+          style: {
+            fill: {
+              type: 'linear-gradient' as const,
+              start: { x: 0, y: 0 },
+              end: { x: 100, y: 100 },
+              stops: [{ offset: 0, color: '#fff', opacity: 1 }],
+            },
+            stroke: null,
+            opacity: 1,
+          },
+          width: 100,
+          height: 100,
+          cornerRadius: 0,
+        },
+      },
+      layers: {
+        ...doc.layers,
+        [doc.activeLayerId]: {
+          ...doc.layers[doc.activeLayerId]!,
+          objectIds: ['obj-4'],
+        },
+      },
+    };
+    const violations = validateInvariants(brokenDoc);
+    expect(violations.some((v) => v.code === 'INVALID_GRADIENT_STOPS')).toBe(true);
+  });
+
+  it('detects non-finite line endPoint', () => {
+    const doc = createDefaultDocument();
+    const brokenDoc = {
+      ...doc,
+      objects: {
+        'obj-5': {
+          type: 'line' as const,
+          id: 'obj-5',
+          name: 'L',
+          layerId: doc.activeLayerId,
+          visible: true,
+          locked: false,
+          transform: createTransform({ x: 0, y: 0 }),
+          style: {
+            fill: { type: 'none' as const },
+            stroke: {
+              color: '#000',
+              width: 2,
+              lineCap: 'butt' as const,
+              lineJoin: 'miter' as const,
+              miterLimit: 10,
+              dashArray: [],
+              opacity: 1,
+            },
+            opacity: 1,
+          },
+          endPoint: { x: NaN, y: 100 },
+        },
+      },
+      layers: {
+        ...doc.layers,
+        [doc.activeLayerId]: {
+          ...doc.layers[doc.activeLayerId]!,
+          objectIds: ['obj-5'],
+        },
+      },
+    };
+    const violations = validateInvariants(brokenDoc);
+    expect(violations.some((v) => v.code === 'NON_FINITE_ENDPOINT')).toBe(true);
+  });
+
+  it('detects non-finite path node coordinates', () => {
+    const doc = createDefaultDocument();
+    const brokenDoc = {
+      ...doc,
+      objects: {
+        'obj-6': {
+          type: 'path' as const,
+          id: 'obj-6',
+          name: 'P',
+          layerId: doc.activeLayerId,
+          visible: true,
+          locked: false,
+          transform: createTransform({ x: 0, y: 0 }),
+          style: {
+            fill: { type: 'none' as const },
+            stroke: {
+              color: '#000',
+              width: 2,
+              lineCap: 'butt' as const,
+              lineJoin: 'miter' as const,
+              miterLimit: 10,
+              dashArray: [],
+              opacity: 1,
+            },
+            opacity: 1,
+          },
+          nodes: [
+            { point: { x: 0, y: 0 }, inHandle: null, outHandle: null, kind: 'corner' as const },
+            { point: { x: Infinity, y: 100 }, inHandle: null, outHandle: null, kind: 'corner' as const },
+          ],
+          closed: false,
+        },
+      },
+      layers: {
+        ...doc.layers,
+        [doc.activeLayerId]: {
+          ...doc.layers[doc.activeLayerId]!,
+          objectIds: ['obj-6'],
+        },
+      },
+    };
+    const violations = validateInvariants(brokenDoc);
+    expect(violations.some((v) => v.code === 'NON_FINITE_PATH_NODE')).toBe(true);
+  });
+
+  it('detects path with too few nodes', () => {
+    const doc = createDefaultDocument();
+    const brokenDoc = {
+      ...doc,
+      objects: {
+        'obj-7': {
+          type: 'path' as const,
+          id: 'obj-7',
+          name: 'P',
+          layerId: doc.activeLayerId,
+          visible: true,
+          locked: false,
+          transform: createTransform({ x: 0, y: 0 }),
+          style: defaultObjectStyle,
+          nodes: [
+            { point: { x: 0, y: 0 }, inHandle: null, outHandle: null, kind: 'corner' as const },
+          ],
+          closed: false,
+        },
+      },
+      layers: {
+        ...doc.layers,
+        [doc.activeLayerId]: {
+          ...doc.layers[doc.activeLayerId]!,
+          objectIds: ['obj-7'],
+        },
+      },
+    };
+    const violations = validateInvariants(brokenDoc);
+    expect(violations.some((v) => v.code === 'INVALID_PATH_NODE_COUNT')).toBe(true);
   });
 });
