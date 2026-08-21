@@ -44,7 +44,7 @@ To ma być baza, do której systematycznie dokładamy kolejne narzędzia, bez pr
 - [ ] **MVP-022** Dodać podstawową siatkę z przełącznikiem widoczności
 - [ ] **MVP-023** Dodać snap do siatki jako jedyny snap na start
 
-### 4. Interfejs edytora
+### 4. Interfejs edytora i obszar roboczy
 - [ ] **MVP-024** Zbudować lewy toolbar
 - [ ] **MVP-025** Zbudować górny pasek z nazwą dokumentu, zoomem i akcjami Undo/Redo
 - [ ] **MVP-026** Zbudować prawy panel Properties
@@ -52,52 +52,59 @@ To ma być baza, do której systematycznie dokładamy kolejne narzędzia, bez pr
 - [ ] **MVP-028** Dodać statusbar: pozycja kursora, zoom, jednostka
 - [ ] **MVP-029** Dodać podstawowy jasny i ciemny motyw
 - [ ] **MVP-030** Dodać tooltipy z nazwami narzędzi i skrótami
+- [ ] **MVP-031** Zdefiniować `WorkspaceLayout` i `WorkspacePresetId`
+- [ ] **MVP-032** Zbudować domyślny układ `Vectoria Default`
+- [ ] **MVP-033** Dodać możliwość show/hide panelu z menu Okno
+- [ ] **MVP-034** Dodać resize prawego docka
+- [ ] **MVP-035** Dodać zapis layoutu do IndexedDB / local preferences
+- [ ] **MVP-036** Dodać Reset workspace
+- [ ] **MVP-037** Zostawić miejsce na `keyboardProfile`
 
 ### 5. Zaznaczanie i warstwy
-- [ ] **MVP-031** Zaimplementować Select Tool
-- [ ] **MVP-032** Zaznaczać pojedynczy obiekt kliknięciem
-- [ ] **MVP-033** Pokazywać bounding box i uchwyty zaznaczonego obiektu
-- [ ] **MVP-034** Przesuwać zaznaczony obiekt drag-and-drop
-- [ ] **MVP-035** Skalować zaznaczony obiekt przez narożne uchwyty
-- [ ] **MVP-036** Usuwać zaznaczony obiekt klawiszem Delete
-- [ ] **MVP-037** Dodać Ctrl/Cmd + C, Ctrl/Cmd + V i Ctrl/Cmd + D
-- [ ] **MVP-038** Wyświetlać obiekty na jednej warstwie w panelu Layers
-- [ ] **MVP-039** Dodać widoczność i blokadę warstwy
-- [ ] **MVP-040** Dodać zmianę nazwy warstwy
+- [ ] **MVP-038** Zaimplementować Select Tool
+- [ ] **MVP-039** Zaznaczać pojedynczy obiekt kliknięciem
+- [ ] **MVP-040** Pokazywać bounding box i uchwyty zaznaczonego obiektu
+- [ ] **MVP-041** Przesuwać zaznaczony obiekt drag-and-drop
+- [ ] **MVP-042** Skalować zaznaczony obiekt przez narożne uchwyty
+- [ ] **MVP-043** Usuwać zaznaczony obiekt klawiszem Delete
+- [ ] **MVP-044** Dodać Ctrl/Cmd + C, Ctrl/Cmd + V i Ctrl/Cmd + D
+- [ ] **MVP-045** Wyświetlać obiekty na jednej warstwie w panelu Layers
+- [ ] **MVP-046** Dodać widoczność i blokadę warstwy
+- [ ] **MVP-047** Dodać zmianę nazwy warstwy
 
 ### 6. Pierwsze rysowanie
-- [ ] **MVP-041** Zaimplementować Rectangle Tool
-- [ ] **MVP-042** Rysować prostokąt przez drag
-- [ ] **MVP-043** Obsłużyć Shift dla proporcji 1:1, czyli kwadratu
-- [ ] **MVP-044** Zaimplementować Ellipse Tool
-- [ ] **MVP-045** Rysować elipsę i koło z Shift
-- [ ] **MVP-046** Zaimplementować Line Tool
-- [ ] **MVP-047** Dodać jeden parametr radius dla narożników prostokąta
-- [ ] **MVP-048** Dodać minimum Pen Tool: klik = linia, drag = segment cubic Béziera
-- [ ] **MVP-049** Umożliwić zamykanie ścieżki kliknięciem pierwszego punktu
-- [ ] **MVP-050** Umożliwić zakończenie ścieżki przez Enter lub Escape
+- [ ] **MVP-048** Zaimplementować Rectangle Tool
+- [ ] **MVP-049** Rysować prostokąt przez drag
+- [ ] **MVP-050** Obsłużyć Shift dla proporcji 1:1, czyli kwadratu
+- [ ] **MVP-051** Zaimplementować Ellipse Tool
+- [ ] **MVP-052** Rysować elipsę i koło z Shift
+- [ ] **MVP-053** Zaimplementować Line Tool
+- [ ] **MVP-054** Dodać jeden parametr radius dla narożników prostokąta
+- [ ] **MVP-055** Dodać minimum Pen Tool: klik = linia, drag = segment cubic Béziera
+- [ ] **MVP-056** Umożliwić zamykanie ścieżki kliknięciem pierwszego punktu
+- [ ] **MVP-057** Umożliwić zakończenie ścieżki przez Enter lub Escape
 
 > *Pen Tool w Skeleton MVP ma służyć jako dowód, że rdzeń Vectorii obsługuje krzywe; rozbudowane typy węzłów, rozłączone uchwyty, scissors i pełna state machine wejdą w kolejnym etapie.*
 
 ### 7. Style i właściwości
-- [ ] **MVP-051** Dodać fill w formie jednego koloru
-- [ ] **MVP-052** Dodać wybór koloru przez HEX i prosty picker
-- [ ] **MVP-053** Dodać no fill
-- [ ] **MVP-054** Dodać stroke: kolor i szerokość
-- [ ] **MVP-055** Dodać opacity obiektu
-- [ ] **MVP-056** Pokazywać i edytować X, Y, Width, Height zaznaczonego obiektu
-- [ ] **MVP-057** Dodać blokadę proporcji w panelu Properties
-- [ ] **MVP-058** Dodać podstawowy gradient liniowy jako pierwszy zaawansowany fill
+- [ ] **MVP-058** Dodać fill w formie jednego koloru
+- [ ] **MVP-059** Dodać wybór koloru przez HEX i prosty picker
+- [ ] **MVP-060** Dodać no fill
+- [ ] **MVP-061** Dodać stroke: kolor i szerokość
+- [ ] **MVP-062** Dodać opacity obiektu
+- [ ] **MVP-063** Pokazywać i edytować X, Y, Width, Height zaznaczonego obiektu
+- [ ] **MVP-064** Dodać blokadę proporcji w panelu Properties
+- [ ] **MVP-065** Dodać podstawowy gradient liniowy jako pierwszy zaawansowany fill
 
 ### 8. Historia, zapis i pliki
-- [ ] **MVP-059** Dodać Undo dla utworzenia, przesunięcia, usunięcia i zmiany stylu
-- [ ] **MVP-060** Dodać Redo
-- [ ] **MVP-061** Zapisywać aktualny dokument lokalnie w IndexedDB
-- [ ] **MVP-062** Przywracać ostatni dokument po odświeżeniu strony
-- [ ] **MVP-063** Dodać eksport aktualnej sceny do SVG
-- [ ] **MVP-064** Dodać import prostego SVG
-- [ ] **MVP-065** Dodać eksport PNG aktualnego artboardu
-- [ ] **MVP-066** Dodać eksport zaznaczenia do SVG lub PNG
+- [ ] **MVP-066** Dodać Undo dla utworzenia, przesunięcia, usunięcia i zmiany stylu
+- [ ] **MVP-067** Dodać Redo
+- [ ] **MVP-068** Zapisywać aktualny dokument lokalnie w IndexedDB
+- [ ] **MVP-069** Przywracać ostatni dokument po odświeżeniu strony
+- [ ] **MVP-070** Dodać eksport aktualnej sceny do SVG
+- [ ] **MVP-071** Dodać import prostego SVG
+- [ ] **MVP-072** Dodać eksport PNG aktualnego artboardu
+- [ ] **MVP-073** Dodać eksport zaznaczenia do SVG lub PNG
 
 > *SVG oraz PNG powinny wejść na samym początku, ponieważ dzięki nim użytkownik natychmiast może wykorzystać wynik pracy poza aplikacją; PDF, AI i CDR zostawiamy na później.*
 
@@ -114,6 +121,7 @@ Skeleton MVP jest gotowy dopiero, gdy użytkownik może bez tutoriala:
 6. Zmienić rozmiar artboardu bez zamrożenia UI.
 7. Odświeżyć stronę i odzyskać dokument.
 8. Wyeksportować projekt do SVG oraz PNG.
+9. Dostosowywać panele i zachować stan przestrzeni roboczej (`WorkspaceLayout`).
 
 ---
 
@@ -136,9 +144,9 @@ Nie buduj teraz:
 | Faza | Taski | Efekt |
 | :--- | :--- | :--- |
 | **A: Silnik** | `MVP-001–016` | Płynne puste płótno z kamerą i bezpiecznym resize |
-| **B: Dokument + UI** | `MVP-017–030` | Edytor zaczyna wyglądać jak aplikacja |
-| **C: Obiekty** | `MVP-031–050` | Można rysować, wybierać i przesuwać wektory |
-| **D: Style** | `MVP-051–058` | Można faktycznie tworzyć prostą grafikę |
-| **E: Pliki** | `MVP-059–066` | Można zachować, otworzyć i wyeksportować pracę |
+| **B: Dokument + UI** | `MVP-017–037` | Edytor zaczyna wyglądać jak aplikacja (w tym elastyczny layout i doki) |
+| **C: Obiekty** | `MVP-038–057` | Można rysować, wybierać i przesuwać wektory |
+| **D: Style** | `MVP-058–065` | Można faktycznie tworzyć prostą grafikę |
+| **E: Pliki** | `MVP-066–073` | Można zachować, otworzyć i wyeksportować pracę |
 
 Najpierw dowieź fazę A i B, potem C; nie przeskakuj do tekstu, Booleanów ani AI przed SVG import/export, bo dopiero wtedy będziesz mieć kompletny, mały cykl pracy użytkownika.
