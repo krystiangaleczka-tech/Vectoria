@@ -1,5 +1,5 @@
 import React from 'react';
-import type { DocumentModel, ObjectId, ObjectStyle, SceneObject, CornerRadii } from '@vectoria/core';
+import type { DocumentModel, ObjectId, ObjectStyle, SceneObject, CornerRadii, PathNode, SelectionState } from '@vectoria/core';
 import { normalizeCornerRadii } from '@vectoria/core';
 import type { Vec2 } from '@vectoria/shared';
 import { defaultStroke } from '@vectoria/core';
@@ -23,6 +23,10 @@ export interface PropertiesPanelProps {
   onUpdateUnit?: (unit: DocumentUnit) => void;
   gridSettings?: GridSettings;
   onUpdateGridSettings?: (settings: GridSettings) => void;
+  selection?: SelectionState;
+  onUpdatePathNode?: (id: ObjectId, index: number, patch: Partial<Omit<PathNode, 'id'>>) => void;
+  onUpdatePathNodeKind?: (id: ObjectId, index: number, kind: PathNode['kind']) => void;
+  onUpdatePathClosed?: (id: ObjectId, closed: boolean) => void;
 }
 
 const dimensions = (object: SceneObject): { width: number; height: number } | null =>
@@ -43,12 +47,20 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   onUpdateUnit,
   gridSettings,
   onUpdateGridSettings,
+  selection = { objectIds: [], nodeIds: [], mode: 'object' },
+  onUpdatePathNode,
+  onUpdatePathNodeKind,
+  onUpdatePathClosed,
 }) => {
   const selected = selectedObjectId ? doc.objects[selectedObjectId] : null;
   const artboard = doc.artboards[doc.activeArtboardId];
   const size = selected ? dimensions(selected) : null;
   const radii = selected?.type === 'rectangle' ? normalizeCornerRadii(selected.cornerRadius, selected.width, selected.height) : null;
   const patchStyle = (patch: Partial<ObjectStyle>) => selected && onUpdateObjectStyle?.(selected.id, patch);
+  const selectedPathNodeIndex = selected?.type === 'path'
+    ? Math.max(0, selected.nodes.findIndex((_, index) => selection.nodeIds.includes(`${selected.id}:${index}`)))
+    : -1;
+  const selectedPathNode = selected?.type === 'path' ? selected.nodes[selectedPathNodeIndex] : null;
 
   return (
     <aside className="properties-panel" data-testid="properties-panel">
@@ -65,10 +77,14 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                  <NumberInput data-testid="prop-w" label="W" disabled={selected.locked} min={0.000001} value={convertUnit(size.width, 'px', doc.unit)} unit={doc.unit} decimals={2} onChange={(value) => onUpdateDimensions(selected.id, convertUnit(value, doc.unit, 'px'), size.height)} />
                  <NumberInput data-testid="prop-h" label="H" disabled={selected.locked} min={0.000001} value={convertUnit(size.height, 'px', doc.unit)} unit={doc.unit} decimals={2} onChange={(value) => onUpdateDimensions(selected.id, size.width, convertUnit(value, doc.unit, 'px'))} />
                </>}
-               {selected.type === 'line' && <>
+                {selected.type === 'line' && <>
                  <NumberInput data-testid="prop-end-x" label="End X" disabled={selected.locked} value={convertUnit(selected.endPoint.x, 'px', doc.unit)} unit={doc.unit} decimals={2} onChange={(value) => onUpdateLineEndpoint?.(selected.id, { x: convertUnit(value, doc.unit, 'px'), y: selected.endPoint.y })} />
                  <NumberInput data-testid="prop-end-y" label="End Y" disabled={selected.locked} value={convertUnit(selected.endPoint.y, 'px', doc.unit)} unit={doc.unit} decimals={2} onChange={(value) => onUpdateLineEndpoint?.(selected.id, { x: selected.endPoint.x, y: convertUnit(value, doc.unit, 'px') })} />
-               </>}
+                </>}
+                {selected.type === 'path' && selectedPathNode && <>
+                  <NumberInput data-testid="prop-node-x" label="Node X" disabled={selected.locked} value={selectedPathNode.point.x} decimals={2} onChange={(value) => onUpdatePathNode?.(selected.id, selectedPathNodeIndex, { point: { ...selectedPathNode.point, x: value } })} />
+                  <NumberInput data-testid="prop-node-y" label="Node Y" disabled={selected.locked} value={selectedPathNode.point.y} decimals={2} onChange={(value) => onUpdatePathNode?.(selected.id, selectedPathNodeIndex, { point: { ...selectedPathNode.point, y: value } })} />
+                </>}
                {selected.type === 'rectangle' && radii && <>
                  <NumberInput data-testid="prop-radius-tl" label="TL" disabled={selected.locked} min={0} value={convertUnit(radii.topLeft, 'px', doc.unit)} unit={doc.unit} decimals={2} onChange={(value) => onUpdateCornerRadius?.(selected.id, { ...radii, topLeft: convertUnit(value, doc.unit, 'px') })} />
                  <NumberInput data-testid="prop-radius-tr" label="TR" disabled={selected.locked} min={0} value={convertUnit(radii.topRight, 'px', doc.unit)} unit={doc.unit} decimals={2} onChange={(value) => onUpdateCornerRadius?.(selected.id, { ...radii, topRight: convertUnit(value, doc.unit, 'px') })} />
@@ -77,7 +93,16 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                </>}
               <NumberInput data-testid="prop-rotation" label="Rot" disabled={selected.locked} value={selected.transform.rotation * 180 / Math.PI} decimals={1} unit="°" onChange={(value) => onUpdateRotation?.(selected.id, value)} />
             </div>
-          </section>
+           </section>
+           {selected.type === 'path' && selectedPathNode && <section className="property-section" aria-label="Path node properties">
+             <div className="panel-section-heading"><span>Node</span><span className="panel-count">{selectedPathNodeIndex + 1}/{selected.nodes.length}</span></div>
+             <label className="dialog-label">Type<select value={selectedPathNode.kind} disabled={selected.locked} onChange={(event) => onUpdatePathNodeKind?.(selected.id, selectedPathNodeIndex, event.target.value as PathNode['kind'])}><option value="corner">Corner</option><option value="cusp">Cusp</option><option value="smooth">Smooth</option><option value="symmetric">Symmetric</option><option value="auto">Auto smooth</option></select></label>
+             <div className="property-grid">
+               <NumberInput data-testid="prop-handle-out-x" label="Out X" disabled={selected.locked || !selectedPathNode.outHandle} value={selectedPathNode.outHandle?.x ?? 0} decimals={2} onChange={(value) => selectedPathNode.outHandle && onUpdatePathNode?.(selected.id, selectedPathNodeIndex, { outHandle: { ...selectedPathNode.outHandle, x: value } })} />
+               <NumberInput data-testid="prop-handle-out-y" label="Out Y" disabled={selected.locked || !selectedPathNode.outHandle} value={selectedPathNode.outHandle?.y ?? 0} decimals={2} onChange={(value) => selectedPathNode.outHandle && onUpdatePathNode?.(selected.id, selectedPathNodeIndex, { outHandle: { ...selectedPathNode.outHandle, y: value } })} />
+             </div>
+             <label className="dialog-label">Path<select value={selected.closed ? 'closed' : 'open'} disabled={selected.locked} onChange={(event) => onUpdatePathClosed?.(selected.id, event.target.value === 'closed')}><option value="open">Open</option><option value="closed">Closed</option></select></label>
+           </section>}
           <section className="property-section">
             <div className="panel-section-heading"><span>Wygląd</span></div>
              <ColorControl label="Fill" disabled={selected.locked} color={selected.style.fill.type === 'solid' ? selected.style.fill.color : null} onChange={(value) => onUpdateFill(selected.id, value)} />

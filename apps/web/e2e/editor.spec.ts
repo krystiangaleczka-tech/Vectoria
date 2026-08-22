@@ -271,4 +271,33 @@ test.describe('Vectoria MVP Skeleton', () => {
     expect(parseFloat(xValue)).toBeGreaterThan(0);
     expect(parseFloat(yValue)).toBeGreaterThan(0);
   });
+
+  test('Pen Tool creates open cubic path and commits one history entry', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    const canvas = page.getByTestId('canvas-viewport');
+    const box = await canvas.boundingBox();
+    if (!box) throw new Error('Canvas not found');
+    await page.getByRole('button', { name: 'Pen Tool' }).click();
+
+    const points = [
+      { x: box.x + box.width / 2 - 90, y: box.y + box.height / 2 - 40 },
+      { x: box.x + box.width / 2, y: box.y + box.height / 2 - 90 },
+      { x: box.x + box.width / 2 + 90, y: box.y + box.height / 2 - 20 },
+    ];
+    await page.mouse.click(points[0]!.x, points[0]!.y);
+    await page.mouse.move(points[1]!.x, points[1]!.y);
+    await page.mouse.down();
+    await page.mouse.move(points[1]!.x + 35, points[1]!.y + 20, { steps: 4 });
+    await page.mouse.up();
+    await page.mouse.click(points[2]!.x, points[2]!.y);
+    await page.keyboard.press('Enter');
+
+    await expect(page.getByTestId('statusbar')).toContainText('1 object');
+    await page.getByRole('tab', { name: 'Warstwy' }).click();
+    await expect(page.getByTestId('layers-panel')).toContainText('Path 1');
+    await page.getByRole('tab', { name: 'Historia' }).click();
+    await expect(page.getByTestId('history-panel')).toContainText('Create path');
+  });
 });

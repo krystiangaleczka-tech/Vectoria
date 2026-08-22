@@ -465,6 +465,7 @@ export function renderOverlay(
   canvasHeight: number,
   options?: {
     previewTransforms?: ReadonlyMap<ObjectId, Transform2D>;
+    pathPreviews?: ReadonlyMap<ObjectId, PathObject['nodes']>;
     nodeSelectionIds?: readonly string[];
     marquee?: { start: Vec2; end: Vec2 };
   },
@@ -538,7 +539,7 @@ export function renderOverlay(
         renderLineSelectionOutline(ctx, camera, obj as LineObject);
         break;
       case 'path':
-        renderPathSelectionOutline(ctx, camera, obj as PathObject);
+        renderPathSelectionOutline(ctx, camera, options?.pathPreviews?.get(objectId) ? { ...obj, nodes: options.pathPreviews.get(objectId)! } : obj as PathObject);
         break;
     }
   }
@@ -666,6 +667,19 @@ function renderPathSelectionOutline(
   if (obj.closed) ctx.closePath();
   ctx.stroke();
 
+  for (const node of obj.nodes) {
+    const point = camera.worldToScreen(mat3TransformPoint(matrix, node.point));
+    const size = 7;
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-node').trim() || '#ffffff';
+    ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-selection').trim() || '#5caeff';
+    ctx.lineWidth = 1;
+    ctx.fillRect(point.x - size / 2, point.y - size / 2, size, size);
+    ctx.strokeRect(point.x - size / 2, point.y - size / 2, size, size);
+    ctx.restore();
+  }
+
   ctx.restore();
 }
 
@@ -723,14 +737,17 @@ function renderNodeSelection(ctx: CanvasRenderingContext2D, camera: Camera, doc:
       ctx.lineWidth = 1;
       ctx.fillRect(point.x - 3.5, point.y - 3.5, 7, 7);
       ctx.strokeRect(point.x - 3.5, point.y - 3.5, 7, 7);
-      if (selectedNode && node.outHandle) {
-        const endpoint = camera.worldToScreen(mat3TransformPoint(matrix, node.outHandle));
-        ctx.globalAlpha = 0.7;
-        ctx.beginPath(); ctx.moveTo(point.x, point.y); ctx.lineTo(endpoint.x, endpoint.y); ctx.stroke();
-        ctx.globalAlpha = 1;
-        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-node').trim() || '#ffffff';
-        ctx.beginPath(); ctx.arc(endpoint.x, endpoint.y, 3, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-      }
+       if (selectedNode) {
+         const handles = [node.inHandle, node.outHandle].filter((handle): handle is Vec2 => Boolean(handle));
+         for (const handle of handles) {
+           const endpoint = camera.worldToScreen(mat3TransformPoint(matrix, handle));
+           ctx.globalAlpha = 0.7;
+           ctx.beginPath(); ctx.moveTo(point.x, point.y); ctx.lineTo(endpoint.x, endpoint.y); ctx.stroke();
+           ctx.globalAlpha = 1;
+           ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-node').trim() || '#ffffff';
+           ctx.beginPath(); ctx.arc(endpoint.x, endpoint.y, 3, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+         }
+       }
     }
   }
 }

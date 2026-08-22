@@ -27,6 +27,9 @@ import {
   DeleteArtboardCommand,
   SelectArtboardCommand,
   UpdateObjectCommand,
+  UpdatePathNodeCommand,
+  SetPathNodeKindCommand,
+  SetPathGeometryCommand,
   createDefaultDocument,
   getObjectBounds,
 } from '@vectoria/core';
@@ -427,6 +430,19 @@ export const EditorApp: React.FC = () => {
     handleExecuteCommand(new SetSnapSettingsCommand({ enabled }));
   }, [handleExecuteCommand]);
 
+  const handleUpdatePathNode = useCallback((id: ObjectId, index: number, patch: Partial<Omit<import('@vectoria/core').PathNode, 'id'>>) => {
+    handleExecuteCommand(new UpdatePathNodeCommand(id, index, patch));
+  }, [handleExecuteCommand]);
+
+  const handleUpdatePathNodeKind = useCallback((id: ObjectId, index: number, kind: import('@vectoria/core').PathNode['kind']) => {
+    if (!doc) return;
+    handleExecuteCommand(new SetPathNodeKindCommand(id, index, kind, doc));
+  }, [doc, handleExecuteCommand]);
+
+  const handleUpdatePathClosed = useCallback((id: ObjectId, closed: boolean) => {
+    handleExecuteCommand(new SetPathGeometryCommand(id, { closed }));
+  }, [handleExecuteCommand]);
+
   const handleSelectArtboard = useCallback((id: string) => {
     handleExecuteCommand(new SelectArtboardCommand(id));
     setSelection(emptySelection());
@@ -699,7 +715,11 @@ export const EditorApp: React.FC = () => {
             onCreateArtboard={handleCreateArtboard}
             onDuplicateArtboard={handleDuplicateArtboard}
             onDeleteArtboard={handleDeleteArtboard}
-            open={rightDockOpen}
+             selection={selection}
+             onUpdatePathNode={handleUpdatePathNode}
+             onUpdatePathNodeKind={handleUpdatePathNodeKind}
+             onUpdatePathClosed={handleUpdatePathClosed}
+             open={rightDockOpen}
         />
       </div>
 

@@ -186,7 +186,14 @@ export function validateInvariants(doc: DocumentModel): InvariantViolation[] {
           if (obj.nodes.length < minNodes) {
             violations.push({ code: 'INVALID_PATH_NODE_COUNT', message: `Object '${objectId}' path has too few nodes (${obj.nodes.length}, need >= ${minNodes}).` });
           }
+          const nodeIds = obj.nodes.map((node) => node.id).filter((id): id is string => Boolean(id));
+          if (new Set(nodeIds).size !== nodeIds.length) {
+            violations.push({ code: 'DUPLICATE_PATH_NODE_ID', message: `Object '${objectId}' contains duplicate path node IDs.` });
+          }
           for (const node of obj.nodes) {
+            if (node.id !== undefined && node.id.trim() === '') {
+              violations.push({ code: 'INVALID_PATH_NODE_ID', message: `Object '${objectId}' contains an empty path node ID.` });
+            }
             if (!Number.isFinite(node.point.x) || !Number.isFinite(node.point.y)) {
               violations.push({ code: 'NON_FINITE_PATH_NODE', message: `Object '${objectId}' has non-finite path node coordinates.` });
               break;

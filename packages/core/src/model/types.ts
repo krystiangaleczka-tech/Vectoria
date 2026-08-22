@@ -121,10 +121,12 @@ export interface LineObject extends SceneObjectBase {
 }
 
 export interface PathNode {
+  /** Stable node identity used by node editing and persisted selection. */
+  readonly id?: string;
   readonly point: Vec2;
   readonly inHandle: Vec2 | null;
   readonly outHandle: Vec2 | null;
-  readonly kind: 'corner' | 'smooth';
+  readonly kind: 'corner' | 'cusp' | 'smooth' | 'symmetric' | 'auto';
 }
 
 export interface PathObject extends SceneObjectBase {

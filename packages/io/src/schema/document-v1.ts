@@ -108,10 +108,11 @@ export const LineObjectSchema = z.object({
 });
 
 export const PathNodeSchema = z.object({
+  id: z.string().min(1).optional(),
   point: Vec2Schema,
   inHandle: Vec2Schema.nullable(),
   outHandle: Vec2Schema.nullable(),
-  kind: z.enum(['corner', 'smooth']),
+  kind: z.enum(['corner', 'cusp', 'smooth', 'symmetric', 'auto']),
 });
 
 export const PathObjectSchema = z.object({
@@ -222,7 +223,10 @@ export function parseAndMigrateDocument(raw: unknown): DocumentModel {
       ...artboard,
       frame: artboard.frame ?? { x: artboard.x, y: artboard.y, width: artboard.width, height: artboard.height },
     }]));
-    return { ...parsed, artboards, snap: { ...parsed.snap, sources: { ...DEFAULT_SNAP_SOURCES, ...parsed.snap.sources } } } as unknown as DocumentModel;
+    const objects = Object.fromEntries(Object.entries(parsed.objects).map(([id, object]) => [id, object.type === 'path'
+      ? { ...object, nodes: object.nodes.map((node, index) => ({ ...node, id: node.id ?? `${object.id}-node-${index + 1}` })) }
+      : object]));
+    return { ...parsed, objects, artboards, snap: { ...parsed.snap, sources: { ...DEFAULT_SNAP_SOURCES, ...parsed.snap.sources } } } as unknown as DocumentModel;
   }
 
   throw new Error(`Unsupported schema version: ${String(schemaVersion)}`);

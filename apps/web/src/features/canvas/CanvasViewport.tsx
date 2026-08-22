@@ -8,7 +8,6 @@ import type {
   EllipseObject,
   LineObject,
   PathObject,
-  PathNode,
   Command,
   SelectionState,
 } from '@vectoria/core';
@@ -17,6 +16,8 @@ import {
   TransformObjectsCommand,
   SetRectangleGeometryCommand,
   SetEllipseGeometryCommand,
+  SetPathGeometryCommand,
+  RemovePathNodeCommand,
   DeleteObjectsCommand,
   createTransform,
   defaultObjectStyle,
@@ -26,7 +27,7 @@ import {
   normalizeShapeDrag,
   isValidShapeGeometry,
 } from '@vectoria/core';
-import { Camera, DragSession, SelectTool, DirectSelectTool, snapToGrid as snapPointToGrid, type GridSettings } from '@vectoria/editor-engine';
+import { Camera, DragSession, SelectTool, DirectSelectTool, PenTool, snapToGrid as snapPointToGrid, type GridSettings } from '@vectoria/editor-engine';
 import { mat3TransformPoint } from '@vectoria/shared';
 import {
   RenderLoop,
@@ -58,7 +59,7 @@ export interface CanvasViewportProps {
 }
 
 interface DragState {
-  type: 'pan' | 'create-shape' | 'move-object' | 'resize-object' | 'rotate-object' | 'marquee';
+  type: 'pan' | 'create-shape' | 'move-object' | 'move-node' | 'resize-object' | 'rotate-object' | 'marquee';
   shape?: 'rectangle' | 'ellipse' | 'line';
   startScreen: Vec2;
   startWorld: Vec2;
@@ -70,13 +71,8 @@ interface DragState {
   initialSize?: { width: number; height: number };
   pivotWorld?: Vec2;
   initialTransform?: import('@vectoria/core').Transform2D;
-}
-
-interface PenState {
-  nodes: PathNode[];
-  pendingPoint: Vec2 | null;
-  pendingStart: Vec2 | null;
-  pendingDragged: boolean;
+  nodeIndex?: number;
+  initialNodes?: readonly import('@vectoria/core').PathNode[];
 }
 
 export const CanvasViewport: React.FC<CanvasViewportProps> = ({
@@ -106,7 +102,9 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   const dragSessionRef = useRef<DragSession | null>(null);
   const [isSpacePressed, setIsSpacePressed] = React.useState(false);
   const [dragPreview, setDragPreview] = React.useState<Record<string, import('@vectoria/core').Transform2D>>({});
-  const penStateRef = useRef<PenState>({ nodes: [], pendingPoint: null, pendingStart: null, pendingDragged: false });
+  const [pathPreview, setPathPreview] = React.useState<Record<string, readonly import('@vectoria/core').PathNode[]>>({});
+  const penToolRef = useRef<PenTool | null>(null);
+  if (!penToolRef.current) penToolRef.current = new PenTool();
   const [penVersion, setPenVersion] = React.useState(0);
 
   // Selected IDs as Set for renderer
@@ -139,6 +137,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         ? new Map(Object.entries(dragPreview) as [string, import('@vectoria/core').Transform2D][])
         : undefined,
       nodeSelectionIds: selection.nodeIds,
+      pathPreviews: new Map(Object.entries(pathPreview) as [ObjectId, readonly import('@vectoria/core').PathNode[]][]),
       marquee: dragStateRef.current?.type === 'marquee' ? {
         start: dragStateRef.current.startWorld,
         end: dragStateRef.current.currentWorld,
@@ -180,8 +179,8 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       overlayCtx.restore();
     }
     // Pen rubber-band preview stays on overlay and never mutates DocumentModel.
-    const pen = penStateRef.current;
-    if (activeTool === 'pen' && (pen.nodes.length > 0 || pen.pendingPoint)) {
+    const pen = penToolRef.current?.preview;
+    if (activeTool === 'pen' && pen && (pen.nodes.length > 0 || pen.pendingPoint || pen.cursorPoint)) {
       const dpr = window.devicePixelRatio || 1;
       overlayCtx.save();
       overlayCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -190,22 +189,53 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       overlayCtx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-accent').trim();
       overlayCtx.lineWidth = 1.5 / camera.zoom;
       overlayCtx.beginPath();
-      pen.nodes.forEach((node, index) => index === 0 ? overlayCtx.moveTo(node.point.x, node.point.y) : overlayCtx.lineTo(node.point.x, node.point.y));
-      if (pen.pendingPoint && pen.nodes.length > 0) overlayCtx.lineTo(pen.pendingPoint.x, pen.pendingPoint.y);
+      pen.nodes.forEach((node, index) => {
+        if (index === 0) {
+          overlayCtx.moveTo(node.point.x, node.point.y);
+          return;
+        }
+        const previous = pen.nodes[index - 1]!;
+        overlayCtx.bezierCurveTo(previous.outHandle?.x ?? previous.point.x, previous.outHandle?.y ?? previous.point.y, node.inHandle?.x ?? node.point.x, node.inHandle?.y ?? node.point.y, node.point.x, node.point.y);
+      });
+      const rubberBandPoint = pen.cursorPoint ?? pen.pendingPoint;
+      if (rubberBandPoint && pen.nodes.length > 0) overlayCtx.lineTo(rubberBandPoint.x, rubberBandPoint.y);
       overlayCtx.stroke();
       for (const node of pen.nodes) {
         overlayCtx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-node').trim();
         overlayCtx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-node-selected').trim();
         overlayCtx.lineWidth = 1 / camera.zoom;
+        overlayCtx.fillRect(node.point.x - 3.5 / camera.zoom, node.point.y - 3.5 / camera.zoom, 7 / camera.zoom, 7 / camera.zoom);
+        overlayCtx.strokeRect(node.point.x - 3.5 / camera.zoom, node.point.y - 3.5 / camera.zoom, 7 / camera.zoom, 7 / camera.zoom);
+        for (const handle of [node.inHandle, node.outHandle].filter((value): value is Vec2 => Boolean(value))) {
+          overlayCtx.globalAlpha = 0.7;
+          overlayCtx.beginPath();
+          overlayCtx.moveTo(node.point.x, node.point.y);
+          overlayCtx.lineTo(handle.x, handle.y);
+          overlayCtx.stroke();
+          overlayCtx.globalAlpha = 1;
+          overlayCtx.beginPath();
+          overlayCtx.arc(handle.x, handle.y, 3 / camera.zoom, 0, Math.PI * 2);
+          overlayCtx.fill();
+          overlayCtx.stroke();
+        }
+      }
+      if (pen.pendingPoint && pen.pendingHandle) {
+        overlayCtx.globalAlpha = 0.7;
         overlayCtx.beginPath();
-        overlayCtx.arc(node.point.x, node.point.y, 4 / camera.zoom, 0, Math.PI * 2);
+        overlayCtx.moveTo(pen.pendingPoint.x, pen.pendingPoint.y);
+        overlayCtx.lineTo(pen.pendingHandle.x, pen.pendingHandle.y);
+        overlayCtx.stroke();
+        overlayCtx.globalAlpha = 1;
+        overlayCtx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-node').trim();
+        overlayCtx.beginPath();
+        overlayCtx.arc(pen.pendingHandle.x, pen.pendingHandle.y, 3 / camera.zoom, 0, Math.PI * 2);
         overlayCtx.fill();
         overlayCtx.stroke();
       }
       overlayCtx.restore();
     }
     void penVersion;
-  }, [doc, camera, selectedIds, dragPreview, activeTool, penVersion, showGrid, gridSettings, selection]);
+  }, [doc, camera, selectedIds, dragPreview, pathPreview, activeTool, penVersion, showGrid, gridSettings, selection]);
 
   // Initialize render loop
   useEffect(() => {
@@ -235,7 +265,11 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   // Invalidate on doc or selection changes
   useEffect(() => {
     renderLoopRef.current?.invalidate();
-  }, [doc, selectedIds, dragPreview]);
+  }, [doc, selectedIds, dragPreview, pathPreview, selection, activeTool, penVersion]);
+
+  useEffect(() => {
+    if (activeTool !== 'pen') penToolRef.current?.cancel();
+  }, [activeTool]);
 
   // Canvas resize handler
   const handleResize = useCallback(() => {
@@ -319,14 +353,11 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
 
     if (activeTool === 'pen') {
-      const pen = penStateRef.current;
-      if (pen.nodes.length >= 3 && Math.hypot(worldPos.x - pen.nodes[0]!.point.x, worldPos.y - pen.nodes[0]!.point.y) <= camera.screenToWorldDistance(12)) {
-        finishPen(true);
-        return;
-      }
-      pen.pendingPoint = worldPos;
-      pen.pendingStart = worldPos;
-      pen.pendingDragged = false;
+      const result = penToolRef.current!.pointerDown(
+        { screenPoint: screenPos, worldPoint: worldPos },
+        camera.screenToWorldDistance(12),
+      );
+      if (result?.type === 'commit') commitPen(result.nodes, result.closed);
       setPenVersion((version) => version + 1);
     } else if (activeTool === 'rectangle' || activeTool === 'ellipse' || activeTool === 'line') {
       dragStateRef.current = {
@@ -341,6 +372,15 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       const nodeHit = directSelect.hitNode(doc, worldPos, camera.zoom);
       const nextSelection = directSelect.select(selection, nodeHit, e.shiftKey);
       onSelectSelection?.(nextSelection);
+      if (nodeHit) {
+        const object = doc.objects[nodeHit.objectId];
+        if (object?.type === 'path') {
+          dragStateRef.current = {
+            type: 'move-node', startScreen: screenPos, startWorld: worldPos, currentWorld: worldPos,
+            pointerId: e.pointerId, objectIds: [object.id], nodeIndex: nodeHit.nodeIndex, initialNodes: object.nodes,
+          };
+        }
+      }
     } else if (activeTool === 'select') {
       const selected = selectedObjectId ? doc.objects[selectedObjectId] : null;
       const selectedSize = selected && (selected.type === 'rectangle' || selected.type === 'ellipse') ? { width: selected.width, height: selected.height } : null;
@@ -401,11 +441,8 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
 
     const drag = dragStateRef.current;
     if (!drag) {
-      if (activeTool === 'pen' && penStateRef.current.pendingPoint) {
-        const pen = penStateRef.current;
-        const start = pen.pendingStart ?? pen.pendingPoint!;
-        pen.pendingPoint = worldPos;
-        pen.pendingDragged = Math.hypot(worldPos.x - start.x, worldPos.y - start.y) > 3;
+      if (activeTool === 'pen') {
+        penToolRef.current?.pointerMove({ screenPoint: screenPos, worldPoint: worldPos });
         setPenVersion((version) => version + 1);
       }
       return;
@@ -425,22 +462,16 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       const geometry = drag.shape ? normalizeShapeDrag(drag.shape, drag.startWorld, worldPos, { shift: e.shiftKey }) : null;
       if (geometry) drag.currentWorld = geometry.type === 'line' ? geometry.end : { x: geometry.x + (worldPos.x >= drag.startWorld.x ? geometry.width : 0), y: geometry.y + (worldPos.y >= drag.startWorld.y ? geometry.height : 0) };
        renderLoopRef.current?.invalidate();
-    } else if (activeTool === 'pen') {
-      const pen = penStateRef.current;
-      if (pen.pendingPoint && pen.pendingStart) {
-        const distance = Math.hypot(worldPos.x - pen.pendingStart.x, worldPos.y - pen.pendingStart.y);
-        const node: PathNode = {
-          point: pen.pendingPoint,
-          inHandle: distance > 3 ? { x: worldPos.x, y: worldPos.y } : null,
-          outHandle: distance > 3 ? { x: pen.pendingStart.x - (worldPos.x - pen.pendingStart.x), y: pen.pendingStart.y - (worldPos.y - pen.pendingStart.y) } : null,
-          kind: distance > 3 ? 'smooth' : 'corner',
-        };
-        pen.nodes = [...pen.nodes, node];
-        pen.pendingPoint = null;
-        pen.pendingStart = null;
-        pen.pendingDragged = false;
-        setPenVersion((version) => version + 1);
-      }
+    } else if (drag.type === 'move-node' && drag.objectIds?.[0] && drag.initialNodes) {
+      const objectId = drag.objectIds[0];
+      const delta = { x: worldPos.x - drag.startWorld.x, y: worldPos.y - drag.startWorld.y };
+      const nodes = drag.initialNodes.map((node, index) => index === drag.nodeIndex ? {
+        ...node,
+        point: { x: node.point.x + delta.x, y: node.point.y + delta.y },
+        inHandle: node.inHandle ? { x: node.inHandle.x + delta.x, y: node.inHandle.y + delta.y } : null,
+        outHandle: node.outHandle ? { x: node.outHandle.x + delta.x, y: node.outHandle.y + delta.y } : null,
+      } : node);
+      setPathPreview({ [objectId]: nodes });
     } else if (drag.type === 'move-object') {
       drag.currentWorld = worldPos;
       dragSessionRef.current?.update(worldPos);
@@ -469,15 +500,10 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
 
   const finishInteraction = (e: React.PointerEvent) => {
     if (!dragStateRef.current && activeTool === 'pen') {
-      const pen = penStateRef.current;
-      if (pen.pendingPoint) {
-        const point = pen.pendingDragged && pen.pendingStart ? pen.pendingStart : pen.pendingPoint;
-        const handleDistance = pen.pendingDragged && pen.pendingStart ? Math.hypot(pen.pendingPoint.x - pen.pendingStart.x, pen.pendingPoint.y - pen.pendingStart.y) : 0;
-        pen.nodes = [...pen.nodes, { point, inHandle: handleDistance > 3 ? pen.pendingPoint : null, outHandle: null, kind: handleDistance > 3 ? 'smooth' : 'corner' }];
-        pen.pendingPoint = null;
-        pen.pendingStart = null;
-        setPenVersion((version) => version + 1);
-      }
+      const screenPoint = getPointerScreen(e);
+      const result = penToolRef.current?.pointerUp({ screenPoint, worldPoint: snapWorldPoint(camera.screenToWorld(screenPoint)) });
+      if (result?.type === 'commit') commitPen(result.nodes, result.closed);
+      setPenVersion((version) => version + 1);
       return;
     }
     const drag = dragStateRef.current;
@@ -535,6 +561,11 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         });
         if (moved) onExecuteCommand(new TransformObjectsCommand([...transforms.keys()], transforms));
       }
+    } else if (drag.type === 'move-node' && drag.objectIds?.[0] && drag.nodeIndex !== undefined) {
+      const objectId = drag.objectIds[0];
+      const nodes = pathPreview[objectId];
+      if (nodes) onExecuteCommand(new SetPathGeometryCommand(objectId, { nodes }));
+      setPathPreview({});
     } else if (drag.type === 'rotate-object') {
       const transforms = new Map(Object.entries(dragPreview) as [ObjectId, import('@vectoria/core').Transform2D][]);
       if (transforms.size > 0) onExecuteCommand(new TransformObjectsCommand([...transforms.keys()], transforms));
@@ -562,32 +593,24 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     if (drag.type === 'move-object') {
       setDragPreview({});
     }
+    if (drag.type === 'move-node') setPathPreview({});
     dragSessionRef.current = null;
 
     dragStateRef.current = null;
     renderLoopRef.current?.invalidate();
   };
 
-  const finishPen = useCallback((closed = false) => {
-    const pen = penStateRef.current;
-    if (pen.nodes.length < 2) {
-      pen.nodes = [];
-      pen.pendingPoint = null;
-      setPenVersion((version) => version + 1);
-      return;
-    }
+  const commitPen = useCallback((nodes: readonly import('@vectoria/core').PathNode[], closed: boolean) => {
+    if (nodes.length < 2) return;
     const newId = generateId();
     const path: PathObject = {
       type: 'path', id: newId, name: `Path ${Object.keys(doc.objects).length + 1}`, layerId: doc.activeLayerId,
       visible: true, locked: false, transform: createTransform({ x: 0, y: 0 }),
       style: { ...defaultObjectStyle, fill: closed ? defaultObjectStyle.fill : { type: 'none' }, stroke: defaultStroke },
-      nodes: pen.nodes, closed,
+      nodes, closed,
     };
     onExecuteCommand(new CreateObjectsCommand([path], doc.activeLayerId));
     onSelectObject(newId);
-    pen.nodes = [];
-    pen.pendingPoint = null;
-    pen.pendingStart = null;
     setPenVersion((version) => version + 1);
   }, [doc, onExecuteCommand, onSelectObject]);
 
@@ -604,6 +627,22 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
 
       if (e.code === 'Space') {
         setIsSpacePressed(true);
+      } else if (activeTool === 'pen' && (e.key === 'Delete' || e.key === 'Backspace')) {
+        e.preventDefault();
+        penToolRef.current?.keyDown(e.key);
+        setPenVersion((version) => version + 1);
+      } else if (activeTool === 'direct-select' && (e.key === 'Delete' || e.key === 'Backspace') && selection.nodeIds.length > 0) {
+        e.preventDefault();
+        const [nodeId] = selection.nodeIds;
+        const separator = nodeId?.lastIndexOf(':') ?? -1;
+        if (nodeId && separator > 0) {
+          const objectId = nodeId.slice(0, separator);
+          const nodeIndex = Number(nodeId.slice(separator + 1));
+          if (Number.isInteger(nodeIndex)) {
+            onExecuteCommand(new RemovePathNodeCommand(objectId, nodeIndex));
+            onSelectSelection?.({ ...selection, nodeIds: selection.nodeIds.filter((id) => id !== nodeId) });
+          }
+        }
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
         if (selectedObjectIds.length > 0) {
           e.preventDefault();
@@ -620,11 +659,13 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
           return [id, object ? { ...object.transform, position: { x: object.transform.position.x + delta.x, y: object.transform.position.y + delta.y } } : null] as const;
         }).filter((entry): entry is [ObjectId, import('@vectoria/core').Transform2D] => Boolean(entry[1])));
         onExecuteCommand(new TransformObjectsCommand([...transforms.keys()], transforms));
-      } else if (e.key === 'Enter' && activeTool === 'pen') {
-        finishPen(false);
+      } else if ((e.key === 'Enter' || e.key === 'Escape') && activeTool === 'pen') {
+        const result = penToolRef.current?.keyDown(e.key);
+        if (result?.type === 'commit') commitPen(result.nodes, result.closed);
+        setPenVersion((version) => version + 1);
       } else if (e.key === 'Escape') {
         cancelInteraction();
-        penStateRef.current = { nodes: [], pendingPoint: null, pendingStart: null, pendingDragged: false };
+        penToolRef.current?.cancel();
         setPenVersion((version) => version + 1);
         onSelectObject(null);
       }
@@ -643,7 +684,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [selectedObjectId, selectedObjectIds, doc, onExecuteCommand, onSelectObject, activeTool, finishPen]);
+  }, [selectedObjectId, selectedObjectIds, doc, onExecuteCommand, onSelectObject, activeTool, commitPen]);
 
   return (
     <div

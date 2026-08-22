@@ -61,7 +61,7 @@ export function importSvgToDocument(svgText: string, name = 'Imported SVG'): Doc
     if (tag === 'rect') object = { ...base, type: 'rectangle', transform: createTransform({ x: number(element, 'x'), y: number(element, 'y') }), width: Math.max(0.01, number(element, 'width', 1)), height: Math.max(0.01, number(element, 'height', 1)), cornerRadius: Math.max(0, number(element, 'rx')) };
     if (tag === 'ellipse') object = { ...base, type: 'ellipse', transform: createTransform({ x: number(element, 'cx') - number(element, 'rx', 1), y: number(element, 'cy') - number(element, 'ry', 1) }), width: Math.max(0.01, number(element, 'rx', 1) * 2), height: Math.max(0.01, number(element, 'ry', 1) * 2) };
     if (tag === 'line') object = { ...base, type: 'line', transform: createTransform({ x: number(element, 'x1'), y: number(element, 'y1') }), endPoint: { x: number(element, 'x2') - number(element, 'x1'), y: number(element, 'y2') - number(element, 'y1') }, style: { ...styleFor(element), fill: { type: 'none' }, stroke: stroke(element) ?? defaultStroke } };
-    if (tag === 'path') { const data = element.getAttribute('d') || ''; const nodes = parsePathData(data); if (nodes.length >= 2) object = { ...base, type: 'path', transform: createTransform({ x: 0, y: 0 }), nodes, closed: /z\s*$/i.test(data) }; }
+    if (tag === 'path') { const data = element.getAttribute('d') || ''; const nodes = parsePathData(data).map((node, index) => ({ ...node, id: `${id}-node-${index + 1}` })); if (nodes.length >= 2) object = { ...base, type: 'path', transform: createTransform({ x: 0, y: 0 }), nodes, closed: /z\s*$/i.test(data) }; }
     if (object) {
       objects[id] = object;
       objectIds.push(id);

@@ -19,6 +19,7 @@ import type {
 import { isValidTransform } from '../model/transform.js';
 import { getObjectBounds } from '../model/bounds.js';
 import { normalizeCornerRadii } from '../model/shapes.js';
+import { applyNodeKind, createPathNode, getCubicSegment, isValidPathGeometry, reversePathNodes, splitCubic } from '../model/path.js';
 
 // ─── CreateObjectsCommand ─────────────────────────────────────────────────────
 
@@ -703,19 +704,7 @@ export class SetPathGeometryCommand implements Command {
     const nodes = this.patch.nodes ?? obj.nodes;
     const closed = this.patch.closed ?? obj.closed;
 
-    // Validate path nodes: open path needs >= 2, closed needs >= 3
-    const minNodes = closed ? 3 : 2;
-    if (nodes.length < minNodes) {
-      return doc;
-    }
-
-    // Check all node coordinates are finite
-    for (const node of nodes) {
-      const points = [node.point, node.inHandle, node.outHandle].filter(Boolean) as Vec2[];
-      if (points.some((p) => !Number.isFinite(p.x) || !Number.isFinite(p.y))) {
-        return doc;
-      }
-    }
+    if (!isValidPathGeometry(nodes, closed)) return doc;
 
     this.previous = { nodes: obj.nodes, closed: obj.closed };
 
@@ -743,6 +732,302 @@ export class SetPathGeometryCommand implements Command {
       updatedAt: new Date().toISOString(),
     };
   }
+}
+
+export class UpdatePathNodeCommand implements Command {
+  readonly type = 'UpdatePathNode';
+  readonly description = 'Edit path node';
+  private previous: PathNode | null = null;
+
+  constructor(private readonly objectId: ObjectId, private readonly nodeIndex: number, private readonly patch: Partial<Omit<PathNode, 'id'>>) {}
+
+  execute(doc: DocumentModel): DocumentModel {
+    const object = doc.objects[this.objectId];
+    const node = object?.type === 'path' ? object.nodes[this.nodeIndex] : undefined;
+    if (!object || object.type !== 'path' || object.locked || !node) return doc;
+    const nextNode = { ...node, ...this.patch };
+    const nodes = object.nodes.map((item, index) => index === this.nodeIndex ? nextNode : item);
+    if (!isValidPathGeometry(nodes, object.closed)) return doc;
+    this.previous = node;
+    return { ...doc, objects: { ...doc.objects, [object.id]: { ...object, nodes } }, updatedAt: new Date().toISOString() };
+  }
+
+  undo(doc: DocumentModel): DocumentModel {
+    const object = doc.objects[this.objectId];
+    if (!this.previous || object?.type !== 'path') return doc;
+    return { ...doc, objects: { ...doc.objects, [object.id]: { ...object, nodes: object.nodes.map((node, index) => index === this.nodeIndex ? this.previous! : node) } }, updatedAt: new Date().toISOString() };
+  }
+}
+
+export class SetPathNodeKindCommand extends UpdatePathNodeCommand {
+  constructor(objectId: ObjectId, nodeIndex: number, kind: PathNode['kind'], doc: DocumentModel) {
+    const object = doc.objects[objectId];
+    const node = object?.type === 'path' ? object.nodes[nodeIndex] : undefined;
+    super(objectId, nodeIndex, node ? applyNodeKind(node, kind) : { kind });
+  }
+}
+
+export class AddPathNodeCommand implements Command {
+  readonly type = 'AddPathNode';
+  readonly description = 'Add path node';
+  private previous: readonly PathNode[] | null = null;
+
+  constructor(private readonly objectId: ObjectId, private readonly segmentIndex: number, private readonly t = 0.5) {}
+
+  execute(doc: DocumentModel): DocumentModel {
+    const object = doc.objects[this.objectId];
+    if (object?.type !== 'path' || object.locked || !Number.isFinite(this.t) || this.t <= 0 || this.t >= 1) return doc;
+    const segment = getCubicSegment(object.nodes, this.segmentIndex, object.closed);
+    if (!segment) return doc;
+    const split = splitCubic(segment, this.t);
+    const nextIndex = this.segmentIndex + 1 < object.nodes.length ? this.segmentIndex + 1 : 0;
+    const inserted = createPathNode(split.left.end, { inHandle: split.left.control2, outHandle: split.right.control1, kind: 'smooth' });
+    let nodes = [...object.nodes];
+    const previousIndex = this.segmentIndex;
+    nodes = nodes.map((node, index) => index === previousIndex ? { ...node, outHandle: split.left.control1 } : index === nextIndex ? { ...node, inHandle: split.right.control2 } : node);
+    if (nextIndex === 0 && object.closed) nodes = [...nodes, inserted];
+    else nodes.splice(nextIndex, 0, inserted);
+    if (!isValidPathGeometry(nodes, object.closed)) return doc;
+    this.previous = object.nodes;
+    return { ...doc, objects: { ...doc.objects, [object.id]: { ...object, nodes } }, updatedAt: new Date().toISOString() };
+  }
+
+  undo(doc: DocumentModel): DocumentModel {
+    const object = doc.objects[this.objectId];
+    return this.previous && object?.type === 'path' ? { ...doc, objects: { ...doc.objects, [object.id]: { ...object, nodes: this.previous } }, updatedAt: new Date().toISOString() } : doc;
+  }
+}
+
+export class RemovePathNodeCommand implements Command {
+  readonly type = 'RemovePathNode';
+  readonly description = 'Remove path node';
+  private previous: readonly PathNode[] | null = null;
+
+  constructor(private readonly objectId: ObjectId, private readonly nodeIndex: number) {}
+
+  execute(doc: DocumentModel): DocumentModel {
+    const object = doc.objects[this.objectId];
+    if (object?.type !== 'path' || object.locked || !object.nodes[this.nodeIndex]) return doc;
+    const nodes = object.nodes.filter((_, index) => index !== this.nodeIndex);
+    if (!isValidPathGeometry(nodes, object.closed)) return doc;
+    this.previous = object.nodes;
+    return { ...doc, objects: { ...doc.objects, [object.id]: { ...object, nodes } }, updatedAt: new Date().toISOString() };
+  }
+
+  undo(doc: DocumentModel): DocumentModel {
+    const object = doc.objects[this.objectId];
+    return this.previous && object?.type === 'path' ? { ...doc, objects: { ...doc.objects, [object.id]: { ...object, nodes: this.previous } }, updatedAt: new Date().toISOString() } : doc;
+  }
+}
+
+export class ReversePathCommand implements Command {
+  readonly type = 'ReversePath';
+  readonly description = 'Reverse path direction';
+  private previous: readonly PathNode[] | null = null;
+
+  constructor(private readonly objectId: ObjectId) {}
+
+  execute(doc: DocumentModel): DocumentModel {
+    const object = doc.objects[this.objectId];
+    if (object?.type !== 'path' || object.locked) return doc;
+    this.previous = object.nodes;
+    return { ...doc, objects: { ...doc.objects, [object.id]: { ...object, nodes: reversePathNodes(object.nodes) } }, updatedAt: new Date().toISOString() };
+  }
+
+  undo(doc: DocumentModel): DocumentModel {
+    const object = doc.objects[this.objectId];
+    return this.previous && object?.type === 'path' ? { ...doc, objects: { ...doc.objects, [object.id]: { ...object, nodes: this.previous } }, updatedAt: new Date().toISOString() } : doc;
+  }
+}
+
+export class ConvertPathSegmentCommand implements Command {
+  readonly type = 'ConvertPathSegment';
+  readonly description = 'Convert path segment';
+  private previous: readonly PathNode[] | null = null;
+
+  constructor(private readonly objectId: ObjectId, private readonly segmentIndex: number, private readonly to: 'line' | 'curve') {}
+
+  execute(doc: DocumentModel): DocumentModel {
+    const object = doc.objects[this.objectId];
+    const segment = object?.type === 'path' ? getCubicSegment(object.nodes, this.segmentIndex, object.closed) : null;
+    if (object?.type !== 'path' || object.locked || !segment) return doc;
+    const endIndex = this.segmentIndex + 1 < object.nodes.length ? this.segmentIndex + 1 : 0;
+    const nodes = object.nodes.map((node, index) => {
+      if (this.to === 'line') {
+        return index === this.segmentIndex || index === endIndex ? { ...node, inHandle: index === endIndex ? null : node.inHandle, outHandle: index === this.segmentIndex ? null : node.outHandle } : node;
+      }
+      const first = { x: segment.start.x + (segment.end.x - segment.start.x) / 3, y: segment.start.y + (segment.end.y - segment.start.y) / 3 };
+      const second = { x: segment.start.x + 2 * (segment.end.x - segment.start.x) / 3, y: segment.start.y + 2 * (segment.end.y - segment.start.y) / 3 };
+      return index === this.segmentIndex ? { ...node, outHandle: node.outHandle ?? first } : index === endIndex ? { ...node, inHandle: node.inHandle ?? second } : node;
+    });
+    if (!isValidPathGeometry(nodes, object.closed)) return doc;
+    this.previous = object.nodes;
+    return { ...doc, objects: { ...doc.objects, [object.id]: { ...object, nodes } }, updatedAt: new Date().toISOString() };
+  }
+
+  undo(doc: DocumentModel): DocumentModel {
+    const object = doc.objects[this.objectId];
+    return this.previous && object?.type === 'path' ? { ...doc, objects: { ...doc.objects, [object.id]: { ...object, nodes: this.previous } }, updatedAt: new Date().toISOString() } : doc;
+  }
+}
+
+export class MergePathNodesCommand implements Command {
+  readonly type = 'MergePathNodes';
+  readonly description = 'Merge path nodes';
+  private previous: readonly PathNode[] | null = null;
+
+  constructor(private readonly objectId: ObjectId, private readonly firstIndex: number, private readonly secondIndex: number) {}
+
+  execute(doc: DocumentModel): DocumentModel {
+    const object = doc.objects[this.objectId];
+    if (object?.type !== 'path' || object.locked || this.firstIndex === this.secondIndex) return doc;
+    const first = object.nodes[this.firstIndex];
+    const second = object.nodes[this.secondIndex];
+    if (!first || !second) return doc;
+    const merged = createPathNode({ x: (first.point.x + second.point.x) / 2, y: (first.point.y + second.point.y) / 2 }, {
+      id: first.id, kind: first.kind, inHandle: first.inHandle ?? second.inHandle, outHandle: first.outHandle ?? second.outHandle,
+    });
+    const nodes = object.nodes.map((node, index) => index === this.firstIndex ? merged : node).filter((_, index) => index !== this.secondIndex);
+    if (!isValidPathGeometry(nodes, object.closed)) return doc;
+    this.previous = object.nodes;
+    return { ...doc, objects: { ...doc.objects, [object.id]: { ...object, nodes } }, updatedAt: new Date().toISOString() };
+  }
+
+  undo(doc: DocumentModel): DocumentModel {
+    const object = doc.objects[this.objectId];
+    return this.previous && object?.type === 'path' ? { ...doc, objects: { ...doc.objects, [object.id]: { ...object, nodes: this.previous } }, updatedAt: new Date().toISOString() } : doc;
+  }
+}
+
+export class SplitPathCommand implements Command {
+  readonly type = 'SplitPath';
+  readonly description = 'Split path';
+  private created: SceneObject | null = null;
+  private previous: SceneObject | null = null;
+  private layerIndex = -1;
+
+  constructor(private readonly objectId: ObjectId, private readonly nodeIndex: number) {}
+
+  execute(doc: DocumentModel): DocumentModel {
+    const object = doc.objects[this.objectId];
+    const layer = object ? doc.layers[object.layerId] : undefined;
+    if (object?.type !== 'path' || object.closed || !layer || this.nodeIndex < 1 || this.nodeIndex >= object.nodes.length - 1) return doc;
+    const firstNodes = object.nodes.slice(0, this.nodeIndex + 1);
+    const secondNodes = object.nodes.slice(this.nodeIndex);
+    if (!isValidPathGeometry(firstNodes, false) || !isValidPathGeometry(secondNodes, false)) return doc;
+    const created = { ...object, id: generateId(), name: `${object.name} split`, nodes: secondNodes, closed: false };
+    this.previous = object;
+    this.created = created;
+    this.layerIndex = layer.objectIds.indexOf(object.id);
+    const ids = [...layer.objectIds];
+    ids.splice(this.layerIndex + 1, 0, created.id);
+    return { ...doc, objects: { ...doc.objects, [object.id]: { ...object, nodes: firstNodes }, [created.id]: created }, layers: { ...doc.layers, [layer.id]: { ...layer, objectIds: ids } }, updatedAt: new Date().toISOString() };
+  }
+
+  undo(doc: DocumentModel): DocumentModel {
+    if (!this.previous || !this.created) return doc;
+    const layer = doc.layers[this.previous.layerId];
+    if (!layer) return doc;
+    const objects = { ...doc.objects, [this.previous.id]: this.previous };
+    delete objects[this.created.id];
+    return { ...doc, objects, layers: { ...doc.layers, [layer.id]: { ...layer, objectIds: layer.objectIds.filter((id) => id !== this.created!.id) } }, updatedAt: new Date().toISOString() };
+  }
+}
+
+export class JoinOpenPathsCommand implements Command {
+  readonly type = 'JoinOpenPaths';
+  readonly description = 'Join open paths';
+  private first: SceneObject | null = null;
+  private second: SceneObject | null = null;
+  private secondIndex = -1;
+
+  constructor(private readonly firstId: ObjectId, private readonly secondId: ObjectId) {}
+
+  execute(doc: DocumentModel): DocumentModel {
+    const first = doc.objects[this.firstId];
+    const second = doc.objects[this.secondId];
+    const layer = first ? doc.layers[first.layerId] : undefined;
+    if (first?.type !== 'path' || second?.type !== 'path' || first.closed || second.closed || first.layerId !== second.layerId || !layer || first.id === second.id) return doc;
+    this.first = first;
+    this.second = second;
+    this.secondIndex = layer.objectIds.indexOf(second.id);
+    const sameEnd = first.nodes.at(-1)?.point.x === second.nodes[0]?.point.x && first.nodes.at(-1)?.point.y === second.nodes[0]?.point.y;
+    const nodes = sameEnd ? [...first.nodes, ...second.nodes.slice(1)] : [...first.nodes, ...second.nodes];
+    if (!isValidPathGeometry(nodes, false)) return doc;
+    const objects = { ...doc.objects, [first.id]: { ...first, nodes } };
+    delete objects[second.id];
+    return { ...doc, objects, layers: { ...doc.layers, [layer.id]: { ...layer, objectIds: layer.objectIds.filter((id) => id !== second.id) } }, updatedAt: new Date().toISOString() };
+  }
+
+  undo(doc: DocumentModel): DocumentModel {
+    const layer = this.first ? doc.layers[this.first.layerId] : undefined;
+    if (!this.first || !this.second || !layer) return doc;
+    const objectIds = [...layer.objectIds];
+    if (!objectIds.includes(this.second.id)) objectIds.splice(Math.max(0, this.secondIndex), 0, this.second.id);
+    return { ...doc, objects: { ...doc.objects, [this.first.id]: this.first, [this.second.id]: this.second }, layers: { ...doc.layers, [layer.id]: { ...layer, objectIds } }, updatedAt: new Date().toISOString() };
+  }
+}
+
+export class SetPathNodeHandlesCommand extends UpdatePathNodeCommand {
+  constructor(objectId: ObjectId, nodeIndex: number, handles: Pick<PathNode, 'inHandle' | 'outHandle'>) {
+    super(objectId, nodeIndex, handles);
+  }
+}
+
+export class DisconnectPathNodeHandlesCommand extends UpdatePathNodeCommand {
+  constructor(objectId: ObjectId, nodeIndex: number, side: 'in' | 'out' | 'both' = 'both') {
+    super(objectId, nodeIndex, {
+      ...(side === 'in' || side === 'both' ? { inHandle: null } : {}),
+      ...(side === 'out' || side === 'both' ? { outHandle: null } : {}),
+      kind: 'cusp',
+    });
+  }
+}
+
+export class ConnectPathNodeHandlesCommand extends UpdatePathNodeCommand {
+  constructor(objectId: ObjectId, nodeIndex: number, doc: DocumentModel) {
+    const object = doc.objects[objectId];
+    const node = object?.type === 'path' ? object.nodes[nodeIndex] : undefined;
+    super(objectId, nodeIndex, node ? applyNodeKind(node, 'smooth') : { kind: 'smooth' });
+  }
+}
+
+export class ConvertObjectToPathCommand implements Command {
+  readonly type = 'ConvertObjectToPath';
+  readonly description = 'Convert to curves';
+  private previous: SceneObject | null = null;
+
+  constructor(private readonly objectId: ObjectId) {}
+
+  execute(doc: DocumentModel): DocumentModel {
+    const object = doc.objects[this.objectId];
+    if (!object || object.locked || object.type === 'path') return doc;
+    const nodes: PathNode[] = object.type === 'rectangle'
+      ? [createPathNode({ x: 0, y: 0 }), createPathNode({ x: object.width, y: 0 }), createPathNode({ x: object.width, y: object.height }), createPathNode({ x: 0, y: object.height })]
+      : object.type === 'ellipse'
+        ? ellipsePathNodes(object.width, object.height)
+        : [createPathNode({ x: 0, y: 0 }), createPathNode(object.endPoint)];
+    const path: import('../model/types.js').PathObject = { ...object, type: 'path', nodes, closed: object.type !== 'line', style: object.type === 'line' ? { ...object.style, fill: { type: 'none' } } : object.style };
+    if (!isValidPathGeometry(path.nodes, path.closed)) return doc;
+    this.previous = object;
+    return { ...doc, objects: { ...doc.objects, [object.id]: path }, updatedAt: new Date().toISOString() };
+  }
+
+  undo(doc: DocumentModel): DocumentModel {
+    return this.previous ? { ...doc, objects: { ...doc.objects, [this.previous.id]: this.previous }, updatedAt: new Date().toISOString() } : doc;
+  }
+}
+
+function ellipsePathNodes(width: number, height: number): PathNode[] {
+  const rx = width / 2;
+  const ry = height / 2;
+  const k = 0.5522847498;
+  return [
+    createPathNode({ x: rx, y: 0 }, { outHandle: { x: rx + k * rx, y: 0 }, inHandle: { x: rx - k * rx, y: 0 }, kind: 'smooth' }),
+    createPathNode({ x: width, y: ry }, { outHandle: { x: width, y: ry + k * ry }, inHandle: { x: width, y: ry - k * ry }, kind: 'smooth' }),
+    createPathNode({ x: rx, y: height }, { outHandle: { x: rx - k * rx, y: height }, inHandle: { x: rx + k * rx, y: height }, kind: 'smooth' }),
+    createPathNode({ x: 0, y: ry }, { outHandle: { x: 0, y: ry - k * ry }, inHandle: { x: 0, y: ry + k * ry }, kind: 'smooth' }),
+  ];
 }
 
 // ─── Artboard and layer commands ─────────────────────────────────────────────

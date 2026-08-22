@@ -243,37 +243,37 @@ Wymóg stopniowego rozszerzania artboardu o 10% wynika bezpośrednio z potrzeby 
 
 ## EPIC-05: Pen Tool i ścieżki
 
-- [ ] **PATH-001** Zaimplementować Pen Tool jako osobną state machine
-- [ ] **PATH-002** Tworzyć punkt narożny przez kliknięcie
-- [ ] **PATH-003** Tworzyć punkt Béziera przez kliknięcie i przeciągnięcie
-- [ ] **PATH-004** Rysować segment prosty
-- [ ] **PATH-005** Rysować segment cubic Bézier
-- [ ] **PATH-006** Tworzyć ścieżkę otwartą
-- [ ] **PATH-007** Zamykać ścieżkę kliknięciem punktu początkowego
-- [ ] **PATH-008** Pokazywać rubber band przed dodaniem kolejnego segmentu
-- [ ] **PATH-009** Dodawać węzeł na istniejącym segmencie
-- [ ] **PATH-010** Usuwać węzeł
-- [ ] **PATH-011** Przesuwać węzeł
-- [ ] **PATH-012** Scalać węzły
-- [ ] **PATH-013** Rozcinać ścieżkę
-- [ ] **PATH-014** Łączyć końcówki otwartych ścieżek
-- [ ] **PATH-015** Zamieniać segment prosty na krzywą
-- [ ] **PATH-016** Zamieniać segment krzywy na prosty
-- [ ] **PATH-017** Obsłużyć typ węzła cusp
-- [ ] **PATH-018** Obsłużyć typ węzła smooth
-- [ ] **PATH-019** Obsłużyć typ węzła symmetrical
-- [ ] **PATH-020** Obsłużyć typ węzła auto-smooth
-- [ ] **PATH-021** Edytować uchwyt wejściowy
-- [ ] **PATH-022** Edytować uchwyt wyjściowy
-- [ ] **PATH-023** Rozłączać uchwyty węzła
-- [ ] **PATH-024** Łączyć uchwyty węzła
-- [ ] **PATH-025** Dodawać i usuwać punkty z Pen Tool bez przełączania narzędzia
-- [ ] **PATH-026** Odwracać kierunek ścieżki
-- [ ] **PATH-027** Zamieniać shape na curves
+- [x] **PATH-001** Zaimplementować Pen Tool jako osobną state machine
+- [x] **PATH-002** Tworzyć punkt narożny przez kliknięcie
+- [x] **PATH-003** Tworzyć punkt Béziera przez kliknięcie i przeciągnięcie
+- [x] **PATH-004** Rysować segment prosty
+- [x] **PATH-005** Rysować segment cubic Bézier
+- [x] **PATH-006** Tworzyć ścieżkę otwartą
+- [x] **PATH-007** Zamykać ścieżkę kliknięciem punktu początkowego
+- [x] **PATH-008** Pokazywać rubber band przed dodaniem kolejnego segmentu
+- [x] **PATH-009** Dodawać węzeł na istniejącym segmencie
+- [x] **PATH-010** Usuwać węzeł
+- [x] **PATH-011** Przesuwać węzeł
+- [x] **PATH-012** Scalać węzły
+- [x] **PATH-013** Rozcinać ścieżkę
+- [x] **PATH-014** Łączyć końcówki otwartych ścieżek
+- [x] **PATH-015** Zamieniać segment prosty na krzywą
+- [x] **PATH-016** Zamieniać segment krzywy na prosty
+- [x] **PATH-017** Obsłużyć typ węzła cusp
+- [x] **PATH-018** Obsłużyć typ węzła smooth
+- [x] **PATH-019** Obsłużyć typ węzła symmetrical
+- [x] **PATH-020** Obsłużyć typ węzła auto-smooth
+- [x] **PATH-021** Edytować uchwyt wejściowy
+- [x] **PATH-022** Edytować uchwyt wyjściowy
+- [x] **PATH-023** Rozłączać uchwyty węzła
+- [x] **PATH-024** Łączyć uchwyty węzła
+- [x] **PATH-025** Dodawać i usuwać punkty z Pen Tool bez przełączania narzędzia
+- [x] **PATH-026** Odwracać kierunek ścieżki
+- [x] **PATH-027** Zamieniać shape na curves
 - [ ] **PATH-028** Zamieniać stroke na path
 - [ ] **PATH-029** Dodać precyzyjny podgląd uchwytów i tangent lines
 - [ ] **PATH-030** Dodać skróty modyfikatorów dla Pen Tool
-- [ ] **PATH-031** Dodać testy geometrii, continuity i edge cases Pen Tool
+- [x] **PATH-031** Dodać testy geometrii, continuity i edge cases Pen Tool
 
 ## EPIC-06: Rysowanie swobodne i cięcie
 
@@ -611,26 +611,8 @@ Wymóg stopniowego rozszerzania artboardu o 10% wynika bezpośrednio z potrzeby 
 - [ ] **SAAS-022** Zaprojektować model konfliktów zmian
 - [ ] **SAAS-023** Zaimplementować współedycję realtime dopiero po ustabilizowaniu single-user editora
 
-## EPIC-18: AI
 
-- [ ] **AI-001** Zaprojektować warstwę providerów AI niezależną od jednego API
-- [ ] **AI-002** Dodać generowanie prostych ikon SVG z promptu
-- [ ] **AI-003** Dodać walidację i sanityzację SVG generowanego przez AI
-- [ ] **AI-004** Dodać „zamień szkic w czysty wektor”
-- [ ] **AI-005** Dodać automatyczne usuwanie zbędnych węzłów
-- [ ] **AI-006** Dodać automatyczne wygładzanie ścieżki
-- [ ] **AI-007** Dodać tekstowe polecenia edytora
-- [ ] **AI-008** Dodać komendę wyrównywania i rozstawiania obiektów
-- [ ] **AI-009** Dodać generowanie palety z obrazu
-- [ ] **AI-010** Dodać generowanie palety z brandu
-- [ ] **AI-011** Dodać automatyczne nazwy warstw
-- [ ] **AI-012** Dodać automatyczne porządkowanie struktury SVG
-- [ ] **AI-013** Dodać eksperymentalne OCR/import tekstu z obrazu
-- [ ] **AI-014** Zapewnić, że podstawowy edytor działa w pełni bez AI
-- [ ] **AI-015** Dodać preview i potwierdzenie zmian proponowanych przez AI
-- [ ] **AI-016** Dodać Undo dla każdej operacji AI
-
-## EPIC-19: UX i dostępność
+## EPIC-18: UX i dostępność
 
 - [ ] **UX-001** Zapewnić pełną obsługę klawiatury
 - [ ] **UX-002** Zaprojektować focus management
@@ -655,6 +637,25 @@ Wymóg stopniowego rozszerzania artboardu o 10% wynika bezpośrednio z potrzeby 
 - [ ] **UX-021** Dodać potwierdzenie usunięcia projektu
 - [ ] **UX-022** Dodać potwierdzenie operacji destrukcyjnych
 - [ ] **UX-023** Ostrzegać przed konwersją tekstu na krzywe
+
+## EPIC-19: AI-POSTPONE
+
+- [ ] **AI-001** Zaprojektować warstwę providerów AI niezależną od jednego API
+- [ ] **AI-002** Dodać generowanie prostych ikon SVG z promptu
+- [ ] **AI-003** Dodać walidację i sanityzację SVG generowanego przez AI
+- [ ] **AI-004** Dodać „zamień szkic w czysty wektor”
+- [ ] **AI-005** Dodać automatyczne usuwanie zbędnych węzłów
+- [ ] **AI-006** Dodać automatyczne wygładzanie ścieżki
+- [ ] **AI-007** Dodać tekstowe polecenia edytora
+- [ ] **AI-008** Dodać komendę wyrównywania i rozstawiania obiektów
+- [ ] **AI-009** Dodać generowanie palety z obrazu
+- [ ] **AI-010** Dodać generowanie palety z brandu
+- [ ] **AI-011** Dodać automatyczne nazwy warstw
+- [ ] **AI-012** Dodać automatyczne porządkowanie struktury SVG
+- [ ] **AI-013** Dodać eksperymentalne OCR/import tekstu z obrazu
+- [ ] **AI-014** Zapewnić, że podstawowy edytor działa w pełni bez AI
+- [ ] **AI-015** Dodać preview i potwierdzenie zmian proponowanych przez AI
+- [ ] **AI-016** Dodać Undo dla każdej operacji AI
 
 ## Zakres wersji 0.1
 
