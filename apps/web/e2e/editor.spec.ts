@@ -25,6 +25,16 @@ test.describe('Vectoria MVP Skeleton', () => {
     await page.keyboard.press('Escape');
     await expect(page.getByRole('menuitem', { name: 'Eksportuj SVG' })).toBeHidden();
 
+    await page.getByRole('button', { name: 'Okno' }).click();
+    await page.getByRole('menuitem', { name: 'Historia' }).click();
+    await expect(page.getByTestId('history-panel')).toBeVisible();
+    await page.getByRole('button', { name: 'Okno' }).click();
+    await page.getByRole('menuitem', { name: 'Ukryj dock' }).click();
+    await expect(page.getByTestId('right-dock')).toBeHidden();
+    await page.getByRole('button', { name: 'Okno' }).click();
+    await page.getByRole('menuitem', { name: 'Historia' }).click();
+    await expect(page.getByTestId('history-panel')).toBeVisible();
+
     const canvas = page.locator('[data-testid="canvas-viewport"]');
     const canvasBox = await canvas.boundingBox();
     if (!canvasBox) throw new Error('Canvas not found');
@@ -118,6 +128,32 @@ test.describe('Vectoria MVP Skeleton', () => {
     // Verify rectangle moved again
     await expect.poll(() => xInput.inputValue()).toBe(newX);
     await expect.poll(() => yInput.inputValue()).toBe(newY);
+  });
+
+  test('history panel exposes current cursor and jumps without direct document mutation', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    const canvas = page.locator('[data-testid="canvas-viewport"]');
+    const canvasBox = await canvas.boundingBox();
+    if (!canvasBox) throw new Error('Canvas not found');
+    await page.locator('button[title="Rectangle Tool (R)"]').click();
+    await page.mouse.move(canvasBox.x + 240, canvasBox.y + 180);
+    await page.mouse.down();
+    await page.mouse.move(canvasBox.x + 300, canvasBox.y + 240, { steps: 4 });
+    await page.mouse.up();
+
+    await page.getByRole('tab', { name: 'Historia' }).click();
+    const historyPanel = page.getByTestId('history-panel');
+    await expect(historyPanel).toContainText('Create rectangle');
+    await expect(historyPanel.locator('[aria-current="step"]')).toContainText('Create rectangle');
+
+    await historyPanel.getByRole('button', { name: 'Stan początkowy' }).click();
+    await expect(historyPanel.locator('[aria-current="step"]')).toContainText('Stan początkowy');
+    await expect(page.getByTestId('statusbar')).toContainText('0 objects');
+
+    await historyPanel.getByRole('button', { name: 'Create rectangle' }).click();
+    await expect(historyPanel.locator('[aria-current="step"]')).toContainText('Create rectangle');
   });
 
   test('SVG export contains correct structure', async ({ page }) => {

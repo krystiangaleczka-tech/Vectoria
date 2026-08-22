@@ -21,8 +21,8 @@ export const ToolRail: React.FC<ToolRailProps> = ({ activeTool, onSelectTool }) 
     <aside
       data-testid="tool-rail"
       style={{
-         width: '56px',
-         minWidth: '56px',
+          width: '48px',
+          minWidth: '48px',
         backgroundColor: 'var(--color-toolbar)',
         borderRight: '1px solid var(--color-border-subtle)',
         display: 'flex',

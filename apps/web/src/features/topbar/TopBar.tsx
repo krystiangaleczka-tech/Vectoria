@@ -1,10 +1,11 @@
 import React from 'react';
 import { AppMenuBar } from './AppMenuBar.js';
 import { DocumentTabs } from './DocumentTabs.js';
+import type { DockPanel } from '../panels/RightDock.js';
 
 export interface TopBarProps {
   documentName: string;
-  saveStatus: 'saved' | 'saving' | 'error';
+  saveStatus: 'idle' | 'dirty' | 'saving' | 'saved-locally' | 'error' | 'offline';
   canUndo: boolean;
   canRedo: boolean;
   zoomPercent: number;
@@ -25,6 +26,8 @@ export interface TopBarProps {
   onToggleSnap: () => void;
   theme: 'dark' | 'light';
   onToggleTheme: () => void;
+  onRetrySave: () => void;
+  onShowPanel: (panel: DockPanel) => void;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -50,6 +53,8 @@ export const TopBar: React.FC<TopBarProps> = ({
   onToggleSnap,
   theme,
   onToggleTheme,
+  onRetrySave,
+  onShowPanel,
 }) => {
   return (
     <header
@@ -85,8 +90,10 @@ export const TopBar: React.FC<TopBarProps> = ({
         onToggleSnap={onToggleSnap}
         theme={theme}
         onToggleTheme={onToggleTheme}
+        onRetrySave={onRetrySave}
+        onShowPanel={onShowPanel}
       />
-      <DocumentTabs documentName={documentName} dirty={saveStatus !== 'saved'} />
+      <DocumentTabs documentName={documentName} dirty={saveStatus !== 'saved-locally'} />
     </header>
   );
 };

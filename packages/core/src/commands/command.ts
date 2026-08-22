@@ -7,7 +7,9 @@ import { validateInvariants } from '../model/invariants.js';
  */
 export interface Command {
   readonly type: string;
-  readonly description: string;
+  readonly description?: string;
+  readonly id?: string;
+  readonly label?: string;
 
   /** Apply the command to the document, returning the new state. */
   execute(doc: DocumentModel): DocumentModel;
@@ -20,31 +22,43 @@ export interface Command {
  * Command history with undo/redo stacks.
  */
 export class CommandHistory {
-  private undoStack: Command[] = [];
-  private redoStack: Command[] = [];
+  private entries: HistoryEntry[] = [];
+  private historyCursor = -1;
+  private nextCommandId = 1;
+  private baseRevision = 0;
   private _onChange: (() => void) | null = null;
 
   get canUndo(): boolean {
-    return this.undoStack.length > 0;
+    return this.historyCursor >= 0;
   }
 
   get canRedo(): boolean {
-    return this.redoStack.length > 0;
+    return this.historyCursor < this.entries.length - 1;
   }
 
   get undoDescription(): string | null {
-    const cmd = this.undoStack[this.undoStack.length - 1];
-    return cmd?.description ?? null;
+    const cmd = this.entries[this.historyCursor]?.command;
+    return cmd ? commandLabel(cmd) : null;
   }
 
   get redoDescription(): string | null {
-    const cmd = this.redoStack[0];
-    return cmd?.description ?? null;
+    const cmd = this.entries[this.historyCursor + 1]?.command;
+    return cmd ? commandLabel(cmd) : null;
   }
 
-  /** Commands already applied, oldest first. Used by read-only history views. */
+  /** History entries, including commands currently available for redo. */
+  get history(): readonly HistoryEntry[] {
+    return [...this.entries];
+  }
+
+  /** Current history cursor. -1 represents the state before the first command. */
+  get cursor(): number {
+    return this.historyCursor;
+  }
+
+  /** Commands already applied, oldest first. Used by existing read-only views. */
   get historyEntries(): readonly Command[] {
-    return [...this.undoStack];
+    return this.entries.slice(0, this.historyCursor + 1).map((entry) => entry.command);
   }
 
   set onChange(callback: (() => void) | null) {
@@ -61,19 +75,26 @@ export class CommandHistory {
     // Rejected commands must not create empty undo entries.
     if (newDoc === doc) return doc;
 
-    // Dev-mode invariant validation — uses safe type cast since
-    // import.meta.env is a Vite feature not available in plain tsc.
-    const dev = (import.meta as { env?: { DEV?: boolean } }).env?.DEV;
-    if (dev) {
-      const violations = validateInvariants(newDoc);
-      if (violations.length > 0) {
-        console.error('[Vectoria] Invariant violation after command execution:', violations);
-        // Note: We don't block the command to allow recovery/debugging, but we log it aggressively.
-      }
+    const violations = validateInvariants(newDoc);
+    if (violations.length > 0) {
+      console.error('[Vectoria] Command rejected by document invariants:', violations);
+      return doc;
     }
 
-    this.undoStack.push(command);
-    this.redoStack = [];
+    this.entries = this.entries.slice(0, this.historyCursor + 1);
+    const commandNumber = this.nextCommandId++;
+    const entryId = `${command.type}-${commandNumber}`;
+    const beforeRevision = this.entries[this.entries.length - 1]?.afterRevision ?? this.baseRevision;
+    this.entries.push({
+      id: entryId,
+      commandId: command.id ?? entryId,
+      label: commandLabel(command),
+      timestamp: new Date().toISOString(),
+      beforeRevision,
+      afterRevision: beforeRevision + 1,
+      command,
+    });
+    this.historyCursor = this.entries.length - 1;
     this._onChange?.();
     return newDoc;
   }
@@ -82,11 +103,12 @@ export class CommandHistory {
    * Undo the last command.
    */
   undo(doc: DocumentModel): DocumentModel | null {
-    const command = this.undoStack.pop();
-    if (!command) return null;
+    const entry = this.entries[this.historyCursor];
+    if (!entry) return null;
 
-    const newDoc = command.undo(doc);
-    this.redoStack.unshift(command);
+    const newDoc = entry.command.undo(doc);
+    if (newDoc === doc || validateInvariants(newDoc).length > 0) return null;
+    this.historyCursor -= 1;
     this._onChange?.();
     return newDoc;
   }
@@ -95,21 +117,54 @@ export class CommandHistory {
    * Redo the next command.
    */
   redo(doc: DocumentModel): DocumentModel | null {
-    const command = this.redoStack.shift();
-    if (!command) return null;
+    const entry = this.entries[this.historyCursor + 1];
+    if (!entry) return null;
 
-    const newDoc = command.execute(doc);
-    if (newDoc !== doc) this.undoStack.push(command);
+    const newDoc = entry.command.execute(doc);
+    if (newDoc === doc || validateInvariants(newDoc).length > 0) return null;
+    this.historyCursor += 1;
     this._onChange?.();
     return newDoc;
+  }
+
+  /** Moves document to selected history entry without deleting redo branch. */
+  jumpTo(targetCursor: number, doc: DocumentModel): DocumentModel {
+    const target = Math.max(-1, Math.min(targetCursor, this.entries.length - 1));
+    let nextDoc = doc;
+    while (this.historyCursor > target) {
+      const undone = this.undo(nextDoc);
+      if (!undone) return doc;
+      nextDoc = undone;
+    }
+    while (this.historyCursor < target) {
+      const redone = this.redo(nextDoc);
+      if (!redone) return doc;
+      nextDoc = redone;
+    }
+    return nextDoc;
   }
 
   /**
    * Clear all history.
    */
-  clear(): void {
-    this.undoStack = [];
-    this.redoStack = [];
+  clear(baseRevision = 0): void {
+    this.entries = [];
+    this.historyCursor = -1;
+    this.baseRevision = baseRevision;
     this._onChange?.();
   }
+}
+
+function commandLabel(command: Command): string {
+  return command.label ?? command.description ?? command.type;
+}
+
+export interface HistoryEntry {
+  readonly id: string;
+  readonly commandId: string;
+  readonly label: string;
+  readonly timestamp: string;
+  readonly beforeRevision: number;
+  readonly afterRevision: number;
+  readonly command: Command;
 }

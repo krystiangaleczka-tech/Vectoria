@@ -19,6 +19,31 @@ import {
 } from '../src/index.js';
 
 describe('Command System and History', () => {
+  it('keeps a cursor, supports history jumps, and truncates redo after a new command', () => {
+    let doc = createDefaultDocument();
+    const history = new CommandHistory();
+    const rect: RectangleObject = {
+      type: 'rectangle', id: 'history-rect', name: 'History Rect', layerId: doc.activeLayerId,
+      visible: true, locked: false, transform: createTransform({ x: 10, y: 10 }), style: defaultObjectStyle,
+      width: 20, height: 20, cornerRadius: 0,
+    };
+
+    doc = history.execute(new CreateObjectsCommand([rect], doc.activeLayerId), doc);
+    doc = history.execute(new SetRectangleGeometryCommand(rect.id, { width: 40 }), doc);
+    expect(history.cursor).toBe(1);
+    expect(history.history).toHaveLength(2);
+
+    doc = history.jumpTo(0, doc);
+    expect(history.cursor).toBe(0);
+    expect((doc.objects[rect.id] as RectangleObject).width).toBe(20);
+    doc = history.execute(new SetRectangleGeometryCommand(rect.id, { height: 60 }), doc);
+
+    expect(history.cursor).toBe(1);
+    expect(history.history).toHaveLength(2);
+    expect((doc.objects[rect.id] as RectangleObject).height).toBe(60);
+    expect(history.canRedo).toBe(false);
+  });
+
   it('executes, undoes, and redoes CreateObjectsCommand', () => {
     let doc = createDefaultDocument();
     const history = new CommandHistory();

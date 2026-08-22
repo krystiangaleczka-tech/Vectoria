@@ -30,7 +30,7 @@ import {
 import { Camera } from '@vectoria/editor-engine';
 import {
   bootstrapDocument,
-  saveDocument,
+  saveDocumentSnapshot,
   exportArtboardToSvg,
   downloadSvg,
   rasterizeSvgToPng,
@@ -46,6 +46,7 @@ import { ContextualControlBar } from '../features/panels/ContextualControlBar.js
 import { RightDock } from '../features/panels/RightDock.js';
 import { StatusBar } from '../features/statusbar/StatusBar.js';
 import { NewDocumentDialog } from '../features/dialogs/NewDocumentDialog.js';
+import type { DockPanel } from '../features/panels/RightDock.js';
 
 function isMacPlatform(): boolean {
   const platform = (navigator as { userAgentData?: { platform?: string } }).userAgentData?.platform
@@ -54,16 +55,10 @@ function isMacPlatform(): boolean {
   return /mac/i.test(platform);
 }
 
+type SaveStatus = 'idle' | 'dirty' | 'saving' | 'saved-locally' | 'error' | 'offline';
+
 const RecoveryBanner: React.FC<{ message: string; details?: string }> = ({ message, details }) => (
-  <div style={{
-    backgroundColor: 'var(--color-danger, #541616)',
-    color: '#ffc4c4',
-    padding: '8px 16px',
-    display: 'flex',
-    justifyContent: 'space-between',
-    fontSize: '13px',
-    borderBottom: '1px solid #732222',
-  }}>
+  <div className="recovery-banner" role="alert">
     <span>{message}</span>
     {details && <span style={{ opacity: 0.7 }}>{details}</span>}
   </div>
@@ -75,7 +70,10 @@ export const EditorApp: React.FC = () => {
   const [activeTool, setActiveTool] = useState<ActiveTool>('select');
   const [selectedObjectId, setSelectedObjectId] = useState<ObjectId | null>(null);
   const [rightDockOpen, setRightDockOpen] = useState(true);
-  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error'>('saved');
+  const [activeDockPanel, setActiveDockPanel] = useState<DockPanel>('properties');
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
+  const [revision, setRevision] = useState(0);
+  const [savedRevision, setSavedRevision] = useState(0);
   const [cursorWorld, setCursorWorld] = useState<Vec2 | null>(null);
   const [zoomPercent, setZoomPercent] = useState(100);
   const [newDocumentOpen, setNewDocumentOpen] = useState(false);
@@ -86,6 +84,10 @@ export const EditorApp: React.FC = () => {
   const autosaveTimeoutRef = useRef<number | null>(null);
   const isBootstrappedRef = useRef(false);
   const latestDocRef = useRef<DocumentModel | null>(null);
+  const latestRevisionRef = useRef(0);
+  const savedRevisionRef = useRef(0);
+  const saveQueueRef = useRef<{ pending: { document: DocumentModel; revision: number } | null; inFlight: boolean }>({ pending: null, inFlight: false });
+  const processSaveQueueRef = useRef<() => Promise<void>>(() => Promise.resolve());
   const clipboardRef = useRef<SceneObject[]>([]);
 
   useEffect(() => {
@@ -97,33 +99,63 @@ export const EditorApp: React.FC = () => {
     latestDocRef.current = doc;
   }, [doc]);
 
-  useEffect(() => {
-    const flush = () => {
-      if (autosaveTimeoutRef.current !== null) {
-        window.clearTimeout(autosaveTimeoutRef.current);
-        autosaveTimeoutRef.current = null;
+  const processSaveQueue = useCallback(async () => {
+    const queue = saveQueueRef.current;
+    if (queue.inFlight) return;
+    queue.inFlight = true;
+    try {
+      while (queue.pending) {
+        const request = queue.pending;
+        queue.pending = null;
+        try {
+          await saveDocumentSnapshot(request.document, request.revision);
+          if (latestRevisionRef.current === request.revision) {
+            savedRevisionRef.current = request.revision;
+            setSavedRevision(request.revision);
+            setSaveStatus('saved-locally');
+          }
+        } catch (error) {
+          console.error('[Vectoria] Save error:', error);
+          setSaveStatus('error');
+          break;
+        }
       }
-      const latest = latestDocRef.current;
-      if (latest) {
-        void saveDocument(latest);
-      }
-    };
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') flush();
-    };
-
-    // pagehide is the primary mechanism — better bfcache support than beforeunload.
-    // visibilitychange covers tab switching / app backgrounding on mobile.
-    window.addEventListener('pagehide', flush);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    return () => {
-      window.removeEventListener('pagehide', flush);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      flush();
-    };
+    } finally {
+      queue.inFlight = false;
+      if (queue.pending) void processSaveQueueRef.current();
+    }
   }, []);
+  processSaveQueueRef.current = processSaveQueue;
+
+  const enqueueAutosave = useCallback((document: DocumentModel, nextRevision: number) => {
+    saveQueueRef.current.pending = { document, revision: nextRevision };
+    setSaveStatus('saving');
+    void processSaveQueue();
+  }, [processSaveQueue]);
+
+  const flushAutosave = useCallback(() => {
+    if (autosaveTimeoutRef.current !== null) {
+      window.clearTimeout(autosaveTimeoutRef.current);
+      autosaveTimeoutRef.current = null;
+    }
+    const latest = latestDocRef.current;
+    if (latest && latestRevisionRef.current !== savedRevisionRef.current) {
+      enqueueAutosave(latest, latestRevisionRef.current);
+    }
+  }, [enqueueAutosave]);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') flushAutosave();
+    };
+    window.addEventListener('pagehide', flushAutosave);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      window.removeEventListener('pagehide', flushAutosave);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      flushAutosave();
+    };
+  }, [flushAutosave]);
 
   // Initialize and load document from IndexedDB
   useEffect(() => {
@@ -131,7 +163,14 @@ export const EditorApp: React.FC = () => {
       const state = await bootstrapDocument();
       setBootstrapState(state);
       if (state.status === 'ready' || state.status === 'recovery-error') {
+        history.clear(state.revision);
         setDoc(state.document);
+        latestDocRef.current = state.document;
+        latestRevisionRef.current = state.revision;
+        savedRevisionRef.current = state.revision;
+        setRevision(state.revision);
+        setSavedRevision(state.revision);
+        setSaveStatus(state.status === 'ready' ? 'saved-locally' : 'error');
       }
       isBootstrappedRef.current = true;
     }
@@ -139,7 +178,7 @@ export const EditorApp: React.FC = () => {
   }, []);
 
   // Autosave trigger with 700ms debounce
-  const scheduleAutosave = useCallback((currentDoc: DocumentModel) => {
+  const scheduleAutosave = useCallback((currentDoc: DocumentModel, nextRevision: number) => {
     if (!isBootstrappedRef.current) return;
 
     setSaveStatus('saving');
@@ -147,26 +186,26 @@ export const EditorApp: React.FC = () => {
       window.clearTimeout(autosaveTimeoutRef.current);
     }
 
-    autosaveTimeoutRef.current = window.setTimeout(async () => {
-      try {
-        await saveDocument(currentDoc);
-        setSaveStatus('saved');
-      } catch (err) {
-        console.error('[Vectoria] Save error:', err);
-        setSaveStatus('error');
-      }
-    }, 700);
-  }, []);
+    autosaveTimeoutRef.current = window.setTimeout(() => enqueueAutosave(currentDoc, nextRevision), 700);
+  }, [enqueueAutosave]);
+
+  const commitDocument = useCallback((nextDoc: DocumentModel) => {
+    const nextRevision = latestRevisionRef.current + 1;
+    latestDocRef.current = nextDoc;
+    latestRevisionRef.current = nextRevision;
+    setDoc(nextDoc);
+    setRevision(nextRevision);
+    scheduleAutosave(nextDoc, nextRevision);
+  }, [scheduleAutosave]);
 
   // Execute command handler
   const handleExecuteCommand = useCallback(
     (command: Command) => {
       if (!doc) return;
       const newDoc = history.execute(command, doc);
-      setDoc(newDoc);
-      scheduleAutosave(newDoc);
+      if (newDoc !== doc) commitDocument(newDoc);
     },
-    [doc, history, scheduleAutosave]
+    [commitDocument, doc, history]
   );
 
   // Undo / Redo
@@ -174,19 +213,33 @@ export const EditorApp: React.FC = () => {
     if (!doc || !history.canUndo) return;
     const newDoc = history.undo(doc);
     if (newDoc) {
-      setDoc(newDoc);
-      scheduleAutosave(newDoc);
+      commitDocument(newDoc);
     }
-  }, [doc, history, scheduleAutosave]);
+  }, [commitDocument, doc, history]);
 
   const handleRedo = useCallback(() => {
     if (!doc || !history.canRedo) return;
     const newDoc = history.redo(doc);
     if (newDoc) {
-      setDoc(newDoc);
-      scheduleAutosave(newDoc);
+      commitDocument(newDoc);
     }
-  }, [doc, history, scheduleAutosave]);
+  }, [commitDocument, doc, history]);
+
+  const handleHistoryJump = useCallback((targetCursor: number) => {
+    if (!doc || targetCursor === history.cursor) return;
+    const nextDoc = history.jumpTo(targetCursor, doc);
+    if (nextDoc !== doc) commitDocument(nextDoc);
+  }, [commitDocument, doc, history]);
+
+  const handleRetrySave = useCallback(() => {
+    const latest = latestDocRef.current;
+    if (latest) enqueueAutosave(latest, latestRevisionRef.current);
+  }, [enqueueAutosave]);
+
+  const handleShowPanel = useCallback((panel: DockPanel) => {
+    setActiveDockPanel(panel);
+    setRightDockOpen(true);
+  }, []);
 
   // Fit Artboard & 100% Zoom
   const handleFitArtboard = useCallback(() => {
@@ -195,8 +248,8 @@ export const EditorApp: React.FC = () => {
     if (!activeArtboard) return;
 
     // Viewport approximate size
-    const width = window.innerWidth - 56 - 280; // ToolRail + RightDock
-    const height = window.innerHeight - 72 - 40 - 28; // TopBar + ContextualControlBar + StatusBar
+     const width = window.innerWidth - 48 - 320; // ToolRail + RightDock
+     const height = window.innerHeight - 72 - 36 - 26; // TopBar + ContextualControlBar + StatusBar
 
     camera.fitRect(
       {
@@ -211,8 +264,8 @@ export const EditorApp: React.FC = () => {
   }, [doc, camera]);
 
   const handleZoom100 = useCallback(() => {
-    const width = window.innerWidth - 56 - 280;
-    const height = window.innerHeight - 72 - 40 - 28;
+    const width = window.innerWidth - 48 - 320;
+    const height = window.innerHeight - 72 - 36 - 26;
     camera.zoomTo100({ x: Math.max(100, width), y: Math.max(100, height) });
     setZoomPercent(camera.zoomPercent);
   }, [camera]);
@@ -225,7 +278,7 @@ export const EditorApp: React.FC = () => {
     const minY = Math.min(...bounds.map((rect) => rect.y));
     const maxX = Math.max(...bounds.map((rect) => rect.x + rect.width));
     const maxY = Math.max(...bounds.map((rect) => rect.y + rect.height));
-    camera.fitRect({ x: minX, y: minY, width: Math.max(1, maxX - minX), height: Math.max(1, maxY - minY) }, { x: Math.max(100, window.innerWidth - 336), y: Math.max(100, window.innerHeight - 140) });
+     camera.fitRect({ x: minX, y: minY, width: Math.max(1, maxX - minX), height: Math.max(1, maxY - minY) }, { x: Math.max(100, window.innerWidth - 368), y: Math.max(100, window.innerHeight - 134) });
     setZoomPercent(camera.zoomPercent);
   }, [camera, doc, handleFitArtboard]);
 
@@ -252,15 +305,18 @@ export const EditorApp: React.FC = () => {
 
   const handleCreateDocument = useCallback((options: Parameters<typeof createDefaultDocument>[0]) => {
     const next = createDefaultDocument(options);
-    history.clear();
+    latestRevisionRef.current += 1;
+    history.clear(latestRevisionRef.current);
     setDoc(next);
+    latestDocRef.current = next;
+    setRevision(latestRevisionRef.current);
     setSelectedObjectId(null);
     setNewDocumentOpen(false);
-    scheduleAutosave(next);
+    scheduleAutosave(next, latestRevisionRef.current);
     window.setTimeout(() => {
       const activeArtboard = next.artboards[next.activeArtboardId];
       if (activeArtboard) {
-        camera.fitRect(activeArtboard, { x: Math.max(100, window.innerWidth - 336), y: Math.max(100, window.innerHeight - 140) });
+         camera.fitRect(activeArtboard, { x: Math.max(100, window.innerWidth - 368), y: Math.max(100, window.innerHeight - 134) });
         setZoomPercent(camera.zoomPercent);
       }
     }, 0);
@@ -274,7 +330,7 @@ export const EditorApp: React.FC = () => {
       if (!file) return;
       void file.text().then((svg) => {
         const imported = importSvgToDocument(svg, file.name.replace(/\.svg$/i, '') || 'Imported SVG');
-        history.clear(); setDoc(imported); setSelectedObjectId(null); scheduleAutosave(imported);
+         latestRevisionRef.current += 1; history.clear(latestRevisionRef.current); latestDocRef.current = imported; setRevision(latestRevisionRef.current); setDoc(imported); setSelectedObjectId(null); scheduleAutosave(imported, latestRevisionRef.current);
       }).catch((error) => console.error('[Vectoria] SVG import error:', error));
     };
     input.click();
@@ -536,9 +592,11 @@ export const EditorApp: React.FC = () => {
           snapToGrid={doc.snap.enabled}
           onToggleGrid={() => handleUpdateGridSettings({ ...doc.grid, visible: !doc.grid.visible })}
           onToggleSnap={() => handleUpdateSnap(!doc.snap.enabled)}
-         theme={theme}
-         onToggleTheme={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')}
-      />
+           theme={theme}
+           onToggleTheme={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')}
+           onRetrySave={handleRetrySave}
+           onShowPanel={handleShowPanel}
+       />
 
       {bootstrapState.status === 'recovery-error' && (
         <RecoveryBanner 
@@ -584,7 +642,11 @@ export const EditorApp: React.FC = () => {
         <RightDock
           document={doc}
           selectedObjectId={selectedObjectId}
-          historyEntries={history.historyEntries}
+           history={history.history}
+        historyCursor={history.cursor}
+           onHistoryJump={handleHistoryJump}
+           activePanel={activeDockPanel}
+           onPanelChange={setActiveDockPanel}
           onSelectObject={setSelectedObjectId}
           onUpdatePosition={handleUpdatePosition}
           onUpdateDimensions={handleUpdateDimensions}
@@ -613,7 +675,9 @@ export const EditorApp: React.FC = () => {
         cursorWorld={cursorWorld}
         zoomPercent={zoomPercent}
         saveStatus={saveStatus}
-         objectCount={Object.keys(doc.objects).length}
+         revision={revision}
+         savedRevision={savedRevision}
+        objectCount={Object.keys(doc.objects).length}
          unit={doc.unit}
          snapEnabled={doc.snap.enabled}
        />

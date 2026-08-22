@@ -176,6 +176,22 @@ export const DocumentV1Schema = z.object({
 
 export type DocumentV1DTO = z.infer<typeof DocumentV1Schema>;
 
+export const PersistedDocumentSchema = z.object({
+  app: z.literal('vectoria'),
+  schemaVersion: z.number().int().positive(),
+  document: z.unknown(),
+  revision: z.number().int().nonnegative(),
+  savedAt: z.string(),
+});
+
+export interface PersistedDocument {
+  readonly app: 'vectoria';
+  readonly schemaVersion: number;
+  readonly document: DocumentModel;
+  readonly revision: number;
+  readonly savedAt: string;
+}
+
 const DEFAULT_SNAP_SOURCES = { grid: true, guide: true, node: true, edge: true, center: true, intersection: true, pixel: false } as const;
 
 /**
@@ -187,6 +203,9 @@ export function parseAndMigrateDocument(raw: unknown): DocumentModel {
   }
 
   const rawRecord = raw as Record<string, unknown>;
+  if (rawRecord.app === 'vectoria' && 'document' in rawRecord) {
+    return parseAndMigrateDocument(rawRecord.document);
+  }
   const schemaVersion = rawRecord['schemaVersion'];
 
   if (schemaVersion === 1) {

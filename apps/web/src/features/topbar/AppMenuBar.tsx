@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Button, IconButton, VectoriaIcon } from '@vectoria/ui';
+import type { DockPanel } from '../panels/RightDock.js';
 
 interface AppMenuBarProps {
-  saveStatus: 'saved' | 'saving' | 'error';
+  saveStatus: 'idle' | 'dirty' | 'saving' | 'saved-locally' | 'error' | 'offline';
   canUndo: boolean;
   canRedo: boolean;
   zoomPercent: number;
@@ -23,9 +24,11 @@ interface AppMenuBarProps {
   onToggleSnap: () => void;
   theme: 'dark' | 'light';
   onToggleTheme: () => void;
+  onRetrySave: () => void;
+  onShowPanel: (panel: DockPanel) => void;
 }
 
-type MenuName = 'Plik' | 'Edycja' | 'Obiekt' | 'Tekst' | 'Widok' | 'Pomoc';
+type MenuName = 'Plik' | 'Edycja' | 'Obiekt' | 'Tekst' | 'Widok' | 'Okno' | 'Pomoc';
 
 export const AppMenuBar: React.FC<AppMenuBarProps> = ({
   saveStatus,
@@ -49,10 +52,12 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
   onToggleSnap,
   theme,
   onToggleTheme,
+  onRetrySave,
+  onShowPanel,
 }) => {
   const [openMenu, setOpenMenu] = useState<MenuName | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const menus: MenuName[] = ['Plik', 'Edycja', 'Obiekt', 'Tekst', 'Widok', 'Pomoc'];
+  const menus: MenuName[] = ['Plik', 'Edycja', 'Obiekt', 'Tekst', 'Widok', 'Okno', 'Pomoc'];
 
   useEffect(() => {
     const closeOnOutsideClick = (event: MouseEvent) => {
@@ -100,6 +105,14 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
         <MenuItem label={`Motyw: ${theme === 'dark' ? 'jasny' : 'ciemny'}`} onClick={() => run(onToggleTheme)} />
       </>;
     }
+    if (menu === 'Okno') {
+      return <>
+        <MenuItem label="Właściwości" onClick={() => run(() => onShowPanel('properties'))} />
+        <MenuItem label="Warstwy" onClick={() => run(() => onShowPanel('layers'))} />
+        <MenuItem label="Historia" onClick={() => run(() => onShowPanel('history'))} />
+        <MenuItem label={rightDockOpen ? 'Ukryj dock' : 'Pokaż dock'} onClick={() => run(onToggleRightDock)} />
+      </>;
+    }
     return <MenuItem label="Wkrótce" disabled />;
   };
 
@@ -126,8 +139,9 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
         ))}
       </nav>
       <div className="app-global-actions">
-        <span className={`save-indicator save-${saveStatus}`} role="status">
-          <span aria-hidden="true">●</span> {saveStatus === 'saved' ? 'Zapisano lokalnie' : saveStatus === 'saving' ? 'Zapisywanie…' : 'Błąd zapisu'}
+        <span className={`save-indicator save-${saveStatus}`} role="status" aria-live="polite">
+          <span aria-hidden="true">{saveStatus === 'saved-locally' ? '✓' : saveStatus === 'error' ? '!' : '●'}</span> {saveStatus === 'saved-locally' ? 'Zapisano lokalnie' : saveStatus === 'saving' ? 'Zapisywanie…' : saveStatus === 'offline' ? 'Offline' : saveStatus === 'error' ? 'Błąd zapisu' : 'Niezapisane zmiany'}
+          {saveStatus === 'error' && <button type="button" className="save-retry" onClick={onRetrySave}>Spróbuj ponownie</button>}
         </span>
         <span className="action-divider" aria-hidden="true" />
         <IconButton data-testid="undo-button" icon={<VectoriaIcon name="undo" size={16} />} label="Cofnij" shortcut="Cmd+Z" size="sm" disabled={!canUndo} onClick={onUndo} />

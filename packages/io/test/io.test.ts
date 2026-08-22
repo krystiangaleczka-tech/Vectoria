@@ -15,6 +15,14 @@ import {
 } from '@vectoria/core';
 
 describe('IO - DTO Validation and SVG Export', () => {
+  it('parses versioned persisted envelope without changing document payload', () => {
+    const doc = createDefaultDocument({ name: 'Envelope' });
+    const parsed = parseAndMigrateDocument({
+      app: 'vectoria', schemaVersion: 1, document: doc, revision: 7, savedAt: new Date().toISOString(),
+    });
+    expect(parsed).toEqual(doc);
+  });
+
   it('serializes and parses DocumentV1DTO without loss', () => {
     const doc = createDefaultDocument({ name: 'Test Doc', width: 800, height: 600 });
     const json = serializeDocument(doc);

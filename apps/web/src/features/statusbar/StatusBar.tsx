@@ -9,7 +9,9 @@ export interface StatusBarProps {
   selectedObjectCount: number;
   cursorWorld: Vec2 | null;
   zoomPercent: number;
-  saveStatus: 'saved' | 'saving' | 'error';
+  saveStatus: 'idle' | 'dirty' | 'saving' | 'saved-locally' | 'error' | 'offline';
+  revision: number;
+  savedRevision: number;
   objectCount: number;
   unit?: Unit;
   snapEnabled?: boolean;
@@ -23,6 +25,8 @@ export const StatusBar: React.FC<StatusBarProps> = ({
   cursorWorld,
   zoomPercent,
   saveStatus,
+  revision,
+  savedRevision,
   objectCount,
   unit = 'px',
   snapEnabled = false,
@@ -64,14 +68,14 @@ export const StatusBar: React.FC<StatusBarProps> = ({
         <span
           style={{
             color:
-              saveStatus === 'saved'
+          saveStatus === 'saved-locally'
                 ? 'var(--color-success)'
                 : saveStatus === 'saving'
                 ? 'var(--color-warning)'
                 : 'var(--color-danger)',
           }}
         >
-          {saveStatus === 'saved' ? 'Saved' : saveStatus === 'saving' ? 'Saving…' : 'Sync error'}
+          {saveStatus === 'saved-locally' ? 'Saved locally' : saveStatus === 'saving' ? 'Saving…' : saveStatus === 'offline' ? 'Offline' : saveStatus === 'error' ? 'Sync error' : `Unsaved · ${revision - savedRevision}`}
         </span>
       </div>
     </footer>
