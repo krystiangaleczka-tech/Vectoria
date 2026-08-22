@@ -21,7 +21,7 @@ import {
   defaultObjectStyle,
   defaultStroke,
 } from '@vectoria/core';
-import { Camera, hitTest } from '@vectoria/editor-engine';
+import { Camera, hitTest, snapToGrid as snapPointToGrid, type GridSettings } from '@vectoria/editor-engine';
 import {
   RenderLoop,
   resizeCanvas,
@@ -44,6 +44,7 @@ export interface CanvasViewportProps {
   onZoomChange: (zoomPercent: number) => void;
   showGrid?: boolean;
   snapToGrid?: boolean;
+  gridSettings?: GridSettings;
 }
 
 interface DragState {
@@ -75,6 +76,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   onZoomChange,
   showGrid = true,
   snapToGrid = false,
+  gridSettings = { visible: true, size: 10, subdivisions: 1 },
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const bgCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -109,7 +111,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
 
     const activeArtboard = doc.artboards[doc.activeArtboardId];
     if (activeArtboard) {
-      renderBackground(bgCtx, camera, activeArtboard, bgCanvas.width, bgCanvas.height, { showGrid });
+      renderBackground(bgCtx, camera, activeArtboard, bgCanvas.width, bgCanvas.height, { showGrid, grid: gridSettings });
     }
 
     renderScene(sceneCtx, camera, doc, sceneCanvas.width, sceneCanvas.height, {
@@ -186,7 +188,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       overlayCtx.restore();
     }
     void penVersion;
-  }, [doc, camera, selectedIds, dragPreview, activeTool, penVersion, showGrid]);
+  }, [doc, camera, selectedIds, dragPreview, activeTool, penVersion, showGrid, gridSettings]);
 
   // Initialize render loop
   useEffect(() => {
@@ -255,9 +257,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     };
   };
 
-  const snapWorldPoint = (point: Vec2): Vec2 => snapToGrid
-    ? { x: Math.round(point.x / 10) * 10, y: Math.round(point.y / 10) * 10 }
-    : point;
+  const snapWorldPoint = (point: Vec2): Vec2 => snapToGrid ? snapPointToGrid(point, gridSettings) : point;
 
   // Wheel zoom handler
   const handleWheel = (e: React.WheelEvent) => {

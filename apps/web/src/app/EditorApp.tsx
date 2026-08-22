@@ -15,7 +15,14 @@ import {
   SetRectangleGeometryCommand,
   SetEllipseGeometryCommand,
   SetObjectStyleCommand,
-  UpdateArtboardCommand,
+   UpdateArtboardCommand,
+    SetDocumentUnitCommand,
+    SetGridSettingsCommand,
+   SetSnapSettingsCommand,
+   CreateArtboardCommand,
+   DuplicateArtboardCommand,
+   DeleteArtboardCommand,
+   SelectArtboardCommand,
   UpdateObjectCommand,
   createDefaultDocument,
   getObjectBounds,
@@ -72,8 +79,6 @@ export const EditorApp: React.FC = () => {
   const [cursorWorld, setCursorWorld] = useState<Vec2 | null>(null);
   const [zoomPercent, setZoomPercent] = useState(100);
   const [newDocumentOpen, setNewDocumentOpen] = useState(false);
-  const [showGrid, setShowGrid] = useState(true);
-  const [snapToGrid, setSnapToGrid] = useState(false);
   const [theme, setTheme] = useState<'dark' | 'light'>(() => localStorage.getItem('vectoria-theme') === 'light' ? 'light' : 'dark');
 
   const history = useMemo(() => new CommandHistory(), []);
@@ -252,7 +257,14 @@ export const EditorApp: React.FC = () => {
     setSelectedObjectId(null);
     setNewDocumentOpen(false);
     scheduleAutosave(next);
-  }, [history, scheduleAutosave]);
+    window.setTimeout(() => {
+      const activeArtboard = next.artboards[next.activeArtboardId];
+      if (activeArtboard) {
+        camera.fitRect(activeArtboard, { x: Math.max(100, window.innerWidth - 336), y: Math.max(100, window.innerHeight - 140) });
+        setZoomPercent(camera.zoomPercent);
+      }
+    }, 0);
+  }, [camera, history, scheduleAutosave]);
 
   const handleImportSvg = useCallback(() => {
     const input = document.createElement('input');
@@ -317,10 +329,42 @@ export const EditorApp: React.FC = () => {
     handleExecuteCommand(new TransformObjectsCommand([id], new Map([[id, { ...object.transform, rotation: degrees * Math.PI / 180 }]])));
   }, [doc, handleExecuteCommand]);
 
-  const handleUpdateArtboard = useCallback((width: number, height: number) => {
+  const handleUpdateArtboard = useCallback((width: number, height: number, background?: import('@vectoria/core').Artboard['background']) => {
     if (!doc) return;
-    handleExecuteCommand(new UpdateArtboardCommand(doc.activeArtboardId, { width, height }));
+    handleExecuteCommand(new UpdateArtboardCommand(doc.activeArtboardId, { width, height, ...(background ? { background } : {}) }));
   }, [doc, handleExecuteCommand]);
+
+  const handleUpdateUnit = useCallback((unit: DocumentModel['unit']) => {
+    handleExecuteCommand(new SetDocumentUnitCommand(unit));
+  }, [handleExecuteCommand]);
+
+  const handleUpdateGridSettings = useCallback((settings: DocumentModel['grid']) => {
+    handleExecuteCommand(new SetGridSettingsCommand(settings));
+  }, [handleExecuteCommand]);
+
+  const handleUpdateSnap = useCallback((enabled: boolean) => {
+    handleExecuteCommand(new SetSnapSettingsCommand({ enabled }));
+  }, [handleExecuteCommand]);
+
+  const handleSelectArtboard = useCallback((id: string) => {
+    handleExecuteCommand(new SelectArtboardCommand(id));
+    setSelectedObjectId(null);
+  }, [handleExecuteCommand]);
+
+  const handleCreateArtboard = useCallback(() => {
+    handleExecuteCommand(new CreateArtboardCommand());
+    setSelectedObjectId(null);
+  }, [handleExecuteCommand]);
+
+  const handleDuplicateArtboard = useCallback((id: string) => {
+    handleExecuteCommand(new DuplicateArtboardCommand(id));
+    setSelectedObjectId(null);
+  }, [handleExecuteCommand]);
+
+  const handleDeleteArtboard = useCallback((id: string) => {
+    handleExecuteCommand(new DeleteArtboardCommand(id));
+    setSelectedObjectId(null);
+  }, [handleExecuteCommand]);
 
   const handleToggleObject = useCallback((id: ObjectId, field: 'visible' | 'locked') => {
     const object = doc?.objects[id];
@@ -488,10 +532,10 @@ export const EditorApp: React.FC = () => {
          onExportPng={handleExportPng}
          onFitDrawing={handleFitDrawing}
          onImportSvg={handleImportSvg}
-         showGrid={showGrid}
-         snapToGrid={snapToGrid}
-         onToggleGrid={() => setShowGrid((visible) => !visible)}
-         onToggleSnap={() => setSnapToGrid((enabled) => !enabled)}
+          showGrid={doc.grid.visible}
+          snapToGrid={doc.snap.enabled}
+          onToggleGrid={() => handleUpdateGridSettings({ ...doc.grid, visible: !doc.grid.visible })}
+          onToggleSnap={() => handleUpdateSnap(!doc.snap.enabled)}
          theme={theme}
          onToggleTheme={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')}
       />
@@ -531,9 +575,10 @@ export const EditorApp: React.FC = () => {
             onSelectObject={setSelectedObjectId}
             onCursorMove={setCursorWorld}
             onZoomChange={setZoomPercent}
-            showGrid={showGrid}
-            snapToGrid={snapToGrid}
-          />
+             showGrid={doc.grid.visible}
+            snapToGrid={doc.snap.enabled}
+            gridSettings={doc.grid}
+         />
         </div>
 
         <RightDock
@@ -546,9 +591,16 @@ export const EditorApp: React.FC = () => {
            onUpdateFill={handleUpdateFill}
            onUpdateObjectStyle={handleUpdateObjectStyle}
            onUpdateRotation={handleUpdateRotation}
-           onUpdateArtboard={handleUpdateArtboard}
-           onToggleObject={handleToggleObject}
-           open={rightDockOpen}
+            onUpdateArtboard={handleUpdateArtboard}
+            onUpdateUnit={handleUpdateUnit}
+             gridSettings={doc.grid}
+             onUpdateGridSettings={handleUpdateGridSettings}
+            onToggleObject={handleToggleObject}
+            onSelectArtboard={handleSelectArtboard}
+            onCreateArtboard={handleCreateArtboard}
+            onDuplicateArtboard={handleDuplicateArtboard}
+            onDeleteArtboard={handleDeleteArtboard}
+            open={rightDockOpen}
         />
       </div>
 
@@ -561,8 +613,10 @@ export const EditorApp: React.FC = () => {
         cursorWorld={cursorWorld}
         zoomPercent={zoomPercent}
         saveStatus={saveStatus}
-        objectCount={Object.keys(doc.objects).length}
-      />
+         objectCount={Object.keys(doc.objects).length}
+         unit={doc.unit}
+         snapEnabled={doc.snap.enabled}
+       />
       {newDocumentOpen && <NewDocumentDialog onClose={() => setNewDocumentOpen(false)} onCreate={handleCreateDocument} />}
     </div>
   );

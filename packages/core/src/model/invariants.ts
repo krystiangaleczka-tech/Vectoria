@@ -45,7 +45,12 @@ export function validateInvariants(doc: DocumentModel): InvariantViolation[] {
     if (!Number.isFinite(artboard.x) || !Number.isFinite(artboard.y)) violations.push({ code: 'INVALID_ARTBOARD_POSITION', message: `Artboard '${artboardId}' position must be finite.` });
     if (!Number.isFinite(artboard.width) || artboard.width <= 0) violations.push({ code: 'INVALID_ARTBOARD_WIDTH', message: `Artboard '${artboardId}' width must be positive and finite.` });
     if (!Number.isFinite(artboard.height) || artboard.height <= 0) violations.push({ code: 'INVALID_ARTBOARD_HEIGHT', message: `Artboard '${artboardId}' height must be positive and finite.` });
+    if (artboard.frame && (!Number.isFinite(artboard.frame.x) || !Number.isFinite(artboard.frame.y) || !Number.isFinite(artboard.frame.width) || !Number.isFinite(artboard.frame.height) || artboard.frame.width <= 0 || artboard.frame.height <= 0)) violations.push({ code: 'INVALID_ARTBOARD_FRAME', message: `Artboard '${artboardId}' frame must contain finite positive dimensions.` });
   }
+
+  if (!Number.isFinite(doc.grid.size) || doc.grid.size <= 0 || !Number.isInteger(doc.grid.subdivisions) || doc.grid.subdivisions < 1) violations.push({ code: 'INVALID_GRID', message: 'Grid size must be finite and subdivisions must be a positive integer.' });
+  if (!Number.isFinite(doc.snap.tolerancePx) || doc.snap.tolerancePx < 0) violations.push({ code: 'INVALID_SNAP_TOLERANCE', message: 'Snap tolerance must be finite and non-negative.' });
+  for (const guide of doc.guides) if (!Number.isFinite(guide.position)) violations.push({ code: 'INVALID_GUIDE_POSITION', message: `Guide '${guide.id}' position must be finite.` });
 
   for (const layerId of doc.layerIds) {
     const layer = doc.layers[layerId];

@@ -4,3 +4,4 @@ export * from './model/factory.js';
 export * from './model/invariants.js';
 export * from './model/bounds.js';
 export * from './commands/index.js';
+export { DOCUMENT_PRESETS, type DocumentPreset } from './model/presets.js';

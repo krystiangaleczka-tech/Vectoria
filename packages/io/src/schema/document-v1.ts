@@ -69,8 +69,8 @@ export const RectangleObjectSchema = z.object({
   locked: z.boolean(),
   transform: Transform2DSchema,
   style: ObjectStyleSchema,
-  width: z.number().positive(),
-  height: z.number().positive(),
+  width: z.number().positive().finite(),
+  height: z.number().positive().finite(),
   cornerRadius: z.number().nonnegative(),
 });
 
@@ -83,8 +83,8 @@ export const EllipseObjectSchema = z.object({
   locked: z.boolean(),
   transform: Transform2DSchema,
   style: ObjectStyleSchema,
-  width: z.number().positive(),
-  height: z.number().positive(),
+  width: z.number().positive().finite(),
+  height: z.number().positive().finite(),
 });
 
 export const LineObjectSchema = z.object({
@@ -140,17 +140,26 @@ export const ArtboardSchema = z.object({
   name: z.string(),
   x: z.number().refine(Number.isFinite),
   y: z.number().refine(Number.isFinite),
-  width: z.number().positive(),
-  height: z.number().positive(),
-  background: z.string().nullable(),
+  width: z.number().positive().finite(),
+  height: z.number().positive().finite(),
+  background: z.union([
+    z.object({ type: z.literal('transparent') }),
+    z.object({ type: z.literal('color'), color: z.string() }),
+    z.string().nullable(), // legacy v1 payloads
+  ]).transform((background) => {
+    if (background === null || background === 'transparent') return { type: 'transparent' as const };
+    if (typeof background === 'string') return { type: 'color' as const, color: background };
+    return background;
+  }),
   visible: z.boolean().default(true),
+  frame: z.object({ x: z.number().finite(), y: z.number().finite(), width: z.number().positive().finite(), height: z.number().positive().finite() }).optional(),
 });
 
 export const DocumentV1Schema = z.object({
   schemaVersion: z.literal(1),
   id: z.string().min(1),
   name: z.string(),
-  unit: z.enum(['px', 'mm', 'cm', 'pt', 'in']),
+  unit: z.enum(['px', 'mm', 'cm', 'in']),
   artboards: z.record(ArtboardSchema),
   artboardIds: z.array(z.string().min(1)),
   activeArtboardId: z.string().min(1),
@@ -158,11 +167,16 @@ export const DocumentV1Schema = z.object({
   layerIds: z.array(z.string().min(1)),
   activeLayerId: z.string().min(1),
   objects: z.record(SceneObjectSchema),
+  guides: z.array(z.object({ id: z.string().min(1), axis: z.enum(['horizontal', 'vertical']), position: z.number().finite(), visible: z.boolean(), locked: z.boolean() })).default([]),
+  grid: z.object({ visible: z.boolean(), size: z.number().positive().finite(), subdivisions: z.number().int().min(1) }).default({ visible: true, size: 10, subdivisions: 1 }),
+  snap: z.object({ enabled: z.boolean(), tolerancePx: z.number().nonnegative().finite(), sources: z.record(z.boolean()) }).default({ enabled: false, tolerancePx: 8, sources: { grid: true, guide: true, node: true, edge: true, center: true, intersection: true, pixel: false } }),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
 
 export type DocumentV1DTO = z.infer<typeof DocumentV1Schema>;
+
+const DEFAULT_SNAP_SOURCES = { grid: true, guide: true, node: true, edge: true, center: true, intersection: true, pixel: false } as const;
 
 /**
  * Validates and parses raw stored document JSON, migrating if needed.
@@ -177,7 +191,11 @@ export function parseAndMigrateDocument(raw: unknown): DocumentModel {
 
   if (schemaVersion === 1) {
     const parsed = DocumentV1Schema.parse(raw);
-    return parsed as unknown as DocumentModel;
+    const artboards = Object.fromEntries(Object.entries(parsed.artboards).map(([id, artboard]) => [id, {
+      ...artboard,
+      frame: artboard.frame ?? { x: artboard.x, y: artboard.y, width: artboard.width, height: artboard.height },
+    }]));
+    return { ...parsed, artboards, snap: { ...parsed.snap, sources: { ...DEFAULT_SNAP_SOURCES, ...parsed.snap.sources } } } as unknown as DocumentModel;
   }
 
   throw new Error(`Unsupported schema version: ${String(schemaVersion)}`);

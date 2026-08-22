@@ -6,6 +6,11 @@ import {
   getInverseTransformMatrix,
   createTransform,
   defaultObjectStyle,
+  CommandHistory,
+  CreateArtboardCommand,
+  DeleteArtboardCommand,
+  DuplicateArtboardCommand,
+  SetDocumentUnitCommand,
 } from '../src/index.js';
 import { mat3TransformPoint } from '@vectoria/shared';
 
@@ -45,6 +50,30 @@ describe('Document Model & Invariants', () => {
     };
     const violations = validateInvariants(brokenDoc);
     expect(violations.some((v) => v.code === 'DUPLICATE_OBJECT_IN_LAYERS')).toBe(true);
+  });
+});
+
+describe('Artboard and unit commands', () => {
+  it('creates, duplicates and deletes artboards without losing active fallback', () => {
+    const history = new CommandHistory();
+    let doc = createDefaultDocument();
+    const created = new CreateArtboardCommand({ width: 400, height: 300 });
+    doc = history.execute(created, doc);
+    expect(doc.artboardIds).toHaveLength(2);
+    const duplicate = new DuplicateArtboardCommand(doc.activeArtboardId);
+    doc = history.execute(duplicate, doc);
+    expect(doc.artboardIds).toHaveLength(3);
+    doc = history.execute(new DeleteArtboardCommand(doc.activeArtboardId), doc);
+    expect(doc.artboardIds).toHaveLength(2);
+    expect(doc.artboards[doc.activeArtboardId]).toBeDefined();
+  });
+
+  it('changes presentation unit without changing canonical artboard geometry', () => {
+    const doc = createDefaultDocument({ width: 210, height: 297, unit: 'mm' });
+    const width = doc.artboards[doc.activeArtboardId]!.width;
+    const changed = new SetDocumentUnitCommand('in').execute(doc);
+    expect(changed.artboards[changed.activeArtboardId]!.width).toBe(width);
+    expect(changed.unit).toBe('in');
   });
 });
 

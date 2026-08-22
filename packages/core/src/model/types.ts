@@ -1,4 +1,4 @@
-import type { Vec2 } from '@vectoria/shared';
+import type { Vec2, Unit } from '@vectoria/shared';
 
 // ─── ID Types ─────────────────────────────────────────────────────────────────
 
@@ -9,7 +9,11 @@ export type ObjectId = string;
 
 // ─── Units ────────────────────────────────────────────────────────────────────
 
-export type DocumentUnit = 'px' | 'mm' | 'cm' | 'pt' | 'in';
+export type DocumentUnit = Unit;
+
+export type ArtboardBackground =
+  | { readonly type: 'transparent' }
+  | { readonly type: 'color'; readonly color: string };
 
 // ─── Schema Version ───────────────────────────────────────────────────────────
 
@@ -145,8 +149,32 @@ export interface Artboard {
   readonly y: number;
   readonly width: number;
   readonly height: number;
-  readonly background: string | null;
+  readonly background: ArtboardBackground;
   readonly visible: boolean;
+  /** Preferred world-space frame. x/y remain as legacy aliases during schema v1. */
+  readonly frame?: { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
+}
+
+export interface Guide {
+  readonly id: string;
+  readonly axis: 'horizontal' | 'vertical';
+  readonly position: number;
+  readonly visible: boolean;
+  readonly locked: boolean;
+}
+
+export interface GridSettings {
+  readonly visible: boolean;
+  readonly size: number;
+  readonly subdivisions: number;
+}
+
+export type SnapSource = 'grid' | 'guide' | 'node' | 'edge' | 'center' | 'intersection' | 'pixel';
+
+export interface SnapSettings {
+  readonly enabled: boolean;
+  readonly tolerancePx: number;
+  readonly sources: Readonly<Record<SnapSource, boolean>>;
 }
 
 // ─── Document Model ───────────────────────────────────────────────────────────
@@ -166,6 +194,9 @@ export interface DocumentModel {
   readonly activeLayerId: LayerId;
 
   readonly objects: Readonly<Record<ObjectId, SceneObject>>;
+  readonly guides: readonly Guide[];
+  readonly grid: GridSettings;
+  readonly snap: SnapSettings;
 
   readonly createdAt: string;
   readonly updatedAt: string;

@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { parseNumericExpression } from '@vectoria/shared';
 
 export interface NumberInputProps {
   label: string;
@@ -38,8 +39,8 @@ export const NumberInput: React.FC<NumberInputProps> = ({
   }, [value, decimals, isFocused]);
 
   const commit = (newText: string) => {
-    const parsed = parseFloat(newText);
-    if (!Number.isNaN(parsed) && Number.isFinite(parsed)) {
+    const parsed = parseNumericExpression(newText);
+    if (parsed !== null && Number.isFinite(parsed)) {
       let clamped = parsed;
       if (min !== undefined) clamped = Math.max(min, clamped);
       if (max !== undefined) clamped = Math.min(max, clamped);

@@ -1,5 +1,6 @@
 import React from 'react';
 import type { Vec2 } from '@vectoria/shared';
+import { convertUnit, type Unit } from '@vectoria/shared';
 
 export interface StatusBarProps {
   toolHint: string;
@@ -10,6 +11,8 @@ export interface StatusBarProps {
   zoomPercent: number;
   saveStatus: 'saved' | 'saving' | 'error';
   objectCount: number;
+  unit?: Unit;
+  snapEnabled?: boolean;
 }
 
 export const StatusBar: React.FC<StatusBarProps> = ({
@@ -21,6 +24,8 @@ export const StatusBar: React.FC<StatusBarProps> = ({
   zoomPercent,
   saveStatus,
   objectCount,
+  unit = 'px',
+  snapEnabled = false,
 }) => {
   return (
     <footer
@@ -50,11 +55,12 @@ export const StatusBar: React.FC<StatusBarProps> = ({
       <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontFamily: 'var(--font-mono)' }}>
         {cursorWorld && (
           <span>
-            X: {Math.round(cursorWorld.x)} px · Y: {Math.round(cursorWorld.y)} px
+            X: {convertUnit(cursorWorld.x, 'px', unit).toFixed(1)} {unit} · Y: {convertUnit(cursorWorld.y, 'px', unit).toFixed(1)} {unit}
           </span>
         )}
         <span>{objectCount} {objectCount === 1 ? 'object' : 'objects'}</span>
         <span>{zoomPercent}%</span>
+        <span>Snap: {snapEnabled ? 'Grid' : 'Off'}</span>
         <span
           style={{
             color:

@@ -1,4 +1,4 @@
-import { generateId } from '@vectoria/shared';
+import { generateId, unitToPx } from '@vectoria/shared';
 import type {
   DocumentModel,
   DocumentUnit,
@@ -59,10 +59,11 @@ export function createDefaultDocument(options: CreateDocumentOptions = {}): Docu
     name: 'Artboard 1',
     x: 0,
     y: 0,
-    width,
-    height,
-    background: '#ffffff',
+    width: unitToPx(width, unit),
+    height: unitToPx(height, unit),
+    background: { type: 'color', color: '#ffffff' },
     visible: true,
+    frame: { x: 0, y: 0, width: unitToPx(width, unit), height: unitToPx(height, unit) },
   };
 
   const layer: Layer = {
@@ -86,6 +87,9 @@ export function createDefaultDocument(options: CreateDocumentOptions = {}): Docu
     layerIds: [layerId],
     activeLayerId: layerId,
     objects: {},
+    guides: [],
+    grid: { visible: true, size: 10, subdivisions: 1 },
+    snap: { enabled: false, tolerancePx: 8, sources: { grid: true, guide: true, node: true, edge: true, center: true, intersection: true, pixel: false } },
     createdAt: now,
     updatedAt: now,
   };

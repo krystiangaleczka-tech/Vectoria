@@ -1,6 +1,7 @@
 import React from 'react';
 import type { DocumentModel, ObjectId, RectangleObject } from '@vectoria/core';
 import { ColorControl, NumberInput } from '@vectoria/ui';
+import { convertUnit } from '@vectoria/shared';
 import type { ActiveTool } from '../toolbar/ToolRail.js';
 
 export interface ContextualControlBarProps {
@@ -29,10 +30,10 @@ export const ContextualControlBar: React.FC<ContextualControlBarProps> = ({
       {rectangle ? (
         <>
           <div className="contextual-field-group" aria-label="Transformacja">
-            <NumberInput data-testid="contextual-x" label="X" value={rectangle.transform.position.x} onChange={(value) => onUpdatePosition(rectangle.id, value, rectangle.transform.position.y)} />
-            <NumberInput data-testid="contextual-y" label="Y" value={rectangle.transform.position.y} onChange={(value) => onUpdatePosition(rectangle.id, rectangle.transform.position.x, value)} />
-            <NumberInput data-testid="contextual-w" label="W" min={1} value={rectangle.width} onChange={(value) => onUpdateDimensions(rectangle.id, value, rectangle.height)} />
-            <NumberInput data-testid="contextual-h" label="H" min={1} value={rectangle.height} onChange={(value) => onUpdateDimensions(rectangle.id, rectangle.width, value)} />
+            <NumberInput data-testid="contextual-x" label="X" value={convertUnit(rectangle.transform.position.x, 'px', doc.unit)} unit={doc.unit} onChange={(value) => onUpdatePosition(rectangle.id, convertUnit(value, doc.unit, 'px'), rectangle.transform.position.y)} />
+            <NumberInput data-testid="contextual-y" label="Y" value={convertUnit(rectangle.transform.position.y, 'px', doc.unit)} unit={doc.unit} onChange={(value) => onUpdatePosition(rectangle.id, rectangle.transform.position.x, convertUnit(value, doc.unit, 'px'))} />
+            <NumberInput data-testid="contextual-w" label="W" min={0.000001} value={convertUnit(rectangle.width, 'px', doc.unit)} unit={doc.unit} onChange={(value) => onUpdateDimensions(rectangle.id, convertUnit(value, doc.unit, 'px'), rectangle.height)} />
+            <NumberInput data-testid="contextual-h" label="H" min={0.000001} value={convertUnit(rectangle.height, 'px', doc.unit)} unit={doc.unit} onChange={(value) => onUpdateDimensions(rectangle.id, rectangle.width, convertUnit(value, doc.unit, 'px'))} />
           </div>
           <ColorControl label="Fill" color={rectangle.style.fill.type === 'solid' ? rectangle.style.fill.color : null} onChange={(value) => onUpdateFill(rectangle.id, value)} />
         </>

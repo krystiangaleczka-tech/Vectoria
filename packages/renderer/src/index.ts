@@ -1,6 +1,20 @@
 import type { Camera } from '@vectoria/editor-engine';
+import type { Vec2 } from '@vectoria/shared';
 import type { DocumentModel, Artboard, RectangleObject, EllipseObject, LineObject, PathObject, ObjectId, Transform2D, LinearGradientFill } from '@vectoria/core';
 import { getTransformMatrix, getObjectBounds, rectsIntersect } from '@vectoria/core';
+export interface GridSettings { visible: boolean; size: number; subdivisions: number }
+
+interface Line { start: Vec2; end: Vec2 }
+function getGridLines(rect: { x: number; y: number; width: number; height: number }, settings: GridSettings): { major: Line[]; minor: Line[] } {
+  const size = Number.isFinite(settings.size) && settings.size > 0 ? settings.size : 10;
+  const subdivisions = Number.isInteger(settings.subdivisions) && settings.subdivisions >= 1 ? settings.subdivisions : 1;
+  const spacing = size / subdivisions;
+  const major: Line[] = [];
+  const minor: Line[] = [];
+  for (let x = Math.floor(rect.x / spacing) * spacing; x <= rect.x + rect.width; x += spacing) (Math.abs(x / size - Math.round(x / size)) < 1e-8 ? major : minor).push({ start: { x, y: rect.y }, end: { x, y: rect.y + rect.height } });
+  for (let y = Math.floor(rect.y / spacing) * spacing; y <= rect.y + rect.height; y += spacing) (Math.abs(y / size - Math.round(y / size)) < 1e-8 ? major : minor).push({ start: { x: rect.x, y }, end: { x: rect.x + rect.width, y } });
+  return { major, minor };
+}
 
 // ─── Render Loop ──────────────────────────────────────────────────────────────
 
@@ -69,7 +83,7 @@ export function renderBackground(
   artboard: Artboard,
   canvasWidth: number,
   canvasHeight: number,
-  options?: { showGrid?: boolean },
+  options?: { showGrid?: boolean; grid?: GridSettings },
 ): void {
   const dpr = window.devicePixelRatio || 1;
 
@@ -86,19 +100,26 @@ export function renderBackground(
   if (options?.showGrid !== false) {
     const gridColor = getComputedStyle(document.documentElement)
       .getPropertyValue('--color-workspace-grid').trim() || 'rgba(255, 255, 255, 0.035)';
-    const gridSize = Math.max(16, 40 * camera.zoom);
-    ctx.strokeStyle = gridColor;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    for (let x = camera.pan.x % gridSize; x < canvasWidth / dpr; x += gridSize) {
-      ctx.moveTo(Math.round(x) + 0.5, 0);
-      ctx.lineTo(Math.round(x) + 0.5, canvasHeight / dpr);
+    const visible = camera.getVisibleWorldRect({ x: canvasWidth / dpr, y: canvasHeight / dpr });
+    const lines = getGridLines(visible, options?.grid ?? { visible: true, size: 10, subdivisions: 1 });
+    const drawLines = (groups: Line[], alpha: number) => {
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = gridColor;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (const line of groups) {
+        const start = camera.worldToScreen(line.start);
+        const end = camera.worldToScreen(line.end);
+        ctx.moveTo(Math.round(start.x) + 0.5, Math.round(start.y) + 0.5);
+        ctx.lineTo(Math.round(end.x) + 0.5, Math.round(end.y) + 0.5);
+      }
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    };
+    if (options?.grid?.visible !== false) {
+      drawLines(lines.minor, 0.12);
+      drawLines(lines.major, 0.24);
     }
-    for (let y = camera.pan.y % gridSize; y < canvasHeight / dpr; y += gridSize) {
-      ctx.moveTo(0, Math.round(y) + 0.5);
-      ctx.lineTo(canvasWidth / dpr, Math.round(y) + 0.5);
-    }
-    ctx.stroke();
   }
 
   // Artboard shadow
@@ -112,8 +133,30 @@ export function renderBackground(
   ctx.shadowOffsetY = 4;
 
   // Artboard fill
-  ctx.fillStyle = artboard.background ?? '#ffffff';
-  ctx.fillRect(screenPos.x, screenPos.y, screenW, screenH);
+  const background = artboard.background;
+  if (background.type === 'transparent') {
+    const checker = 12;
+    const left = Math.max(0, screenPos.x);
+    const top = Math.max(0, screenPos.y);
+    const right = Math.min(canvasWidth / dpr, screenPos.x + screenW);
+    const bottom = Math.min(canvasHeight / dpr, screenPos.y + screenH);
+    const rootStyle = getComputedStyle(document.documentElement);
+    const checkerLight = rootStyle.getPropertyValue('--color-artboard').trim() || '#ffffff';
+    const checkerDark = rootStyle.getPropertyValue('--color-workspace-deep').trim() || '#d8d8d2';
+    if (right > left && bottom > top) {
+      ctx.fillStyle = checkerLight;
+      ctx.fillRect(left, top, right - left, bottom - top);
+    }
+    ctx.fillStyle = checkerDark;
+    const startX = Math.floor((left - screenPos.x) / checker) * checker;
+    const startY = Math.floor((top - screenPos.y) / checker) * checker;
+    for (let y = startY; screenPos.y + y < bottom; y += checker) for (let x = startX; screenPos.x + x < right; x += checker) {
+      if ((Math.floor(x / checker) + Math.floor(y / checker)) % 2 === 0) ctx.fillRect(Math.max(left, screenPos.x + x), Math.max(top, screenPos.y + y), Math.min(checker, right - screenPos.x - x), Math.min(checker, bottom - screenPos.y - y));
+    }
+  } else {
+    ctx.fillStyle = background.color;
+    ctx.fillRect(screenPos.x, screenPos.y, screenW, screenH);
+  }
 
   ctx.shadowColor = 'transparent';
   ctx.shadowBlur = 0;
