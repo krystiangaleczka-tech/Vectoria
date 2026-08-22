@@ -286,62 +286,6 @@ export class SetObjectStyleCommand implements Command {
   }
 }
 
-// ─── SetObjectGeometryCommand (deprecated — use type-specific commands) ──────
-
-/**
- * @deprecated Use SetRectangleGeometryCommand, SetEllipseGeometryCommand,
- * SetLineGeometryCommand, or SetPathGeometryCommand instead.
- * This command uses unsafe `Record<string, unknown>` typing and will be
- * removed after all call sites are migrated.
- */
-export class SetObjectGeometryCommand implements Command {
-  readonly type = 'SetObjectGeometry';
-  readonly description = 'Resize';
-  private previousGeometry: Map<ObjectId, Record<string, unknown>> = new Map();
-
-  constructor(
-    private readonly objectId: ObjectId,
-    private readonly geometryPatch: Record<string, unknown>,
-  ) {}
-
-  execute(doc: DocumentModel): DocumentModel {
-    const obj = doc.objects[this.objectId];
-    if (!obj) return doc;
-
-    // Save previous geometry
-    const prev: Record<string, unknown> = {};
-    for (const key of Object.keys(this.geometryPatch)) {
-      prev[key] = (obj as unknown as Record<string, unknown>)[key];
-    }
-    this.previousGeometry.set(this.objectId, prev);
-
-    return {
-      ...doc,
-      objects: {
-        ...doc.objects,
-        [this.objectId]: { ...obj, ...this.geometryPatch },
-      },
-      updatedAt: new Date().toISOString(),
-    };
-  }
-
-  undo(doc: DocumentModel): DocumentModel {
-    const obj = doc.objects[this.objectId];
-    if (!obj) return doc;
-
-    const prev = this.previousGeometry.get(this.objectId);
-    if (!prev) return doc;
-
-    return {
-      ...doc,
-      objects: {
-        ...doc.objects,
-        [this.objectId]: { ...obj, ...prev },
-      },
-      updatedAt: new Date().toISOString(),
-    };
-  }
-}
 
 // ─── SetRectangleGeometryCommand ─────────────────────────────────────────────
 
@@ -376,7 +320,7 @@ export class SetRectangleGeometryCommand implements Command {
       height / 2,
     );
 
-    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0 || !Number.isFinite(cornerRadius)) {
       return doc;
     }
 

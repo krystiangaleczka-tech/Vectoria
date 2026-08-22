@@ -1,5 +1,5 @@
 import type { Camera } from '@vectoria/editor-engine';
-import type { DocumentModel, Artboard, RectangleObject, EllipseObject, LineObject, PathObject, ObjectId, Transform2D } from '@vectoria/core';
+import type { DocumentModel, Artboard, RectangleObject, EllipseObject, LineObject, PathObject, ObjectId, Transform2D, LinearGradientFill } from '@vectoria/core';
 import { getTransformMatrix } from '@vectoria/core';
 
 // ─── Render Loop ──────────────────────────────────────────────────────────────
@@ -171,6 +171,36 @@ export function renderScene(
   ctx.restore();
 }
 
+
+/**
+ * Build a Canvas CanvasGradient from a LinearGradientFill.
+ * Coordinates are in the object's local space (before transform).
+ */
+function buildLinearGradient(
+  ctx: CanvasRenderingContext2D,
+  fill: LinearGradientFill,
+): CanvasGradient {
+  const grad = ctx.createLinearGradient(fill.start.x, fill.start.y, fill.end.x, fill.end.y);
+  for (const stop of fill.stops) {
+    // Parse hex color and apply stop opacity via rgba
+    const r = parseInt(stop.color.slice(1, 3), 16);
+    const g = parseInt(stop.color.slice(3, 5), 16);
+    const b = parseInt(stop.color.slice(5, 7), 16);
+    grad.addColorStop(stop.offset, `rgba(${r}, ${g}, ${b}, ${stop.opacity})`);
+  }
+  return grad;
+}
+
+/** Resolve fill style to a Canvas fill style (color string or gradient). */
+function resolveFill(
+  ctx: CanvasRenderingContext2D,
+  fill: import('@vectoria/core').FillStyle,
+): string | CanvasGradient {
+  if (fill.type === 'solid') return fill.color;
+  if (fill.type === 'linear-gradient') return buildLinearGradient(ctx, fill);
+  return 'transparent'; // 'none'
+}
+
 function renderRectangle(
   ctx: CanvasRenderingContext2D,
   obj: RectangleObject,
@@ -182,8 +212,8 @@ function renderRectangle(
   ctx.globalAlpha = obj.style.opacity;
 
   // Fill
-  if (obj.style.fill.type === 'solid') {
-    ctx.fillStyle = obj.style.fill.color;
+  if (obj.style.fill.type !== 'none') {
+    ctx.fillStyle = resolveFill(ctx, obj.style.fill);
     if (obj.cornerRadius > 0) {
       roundRect(ctx, 0, 0, obj.width, obj.height, obj.cornerRadius);
       ctx.fill();
@@ -229,8 +259,8 @@ function renderEllipse(
   const ry = obj.height / 2;
 
   // Fill
-  if (obj.style.fill.type === 'solid') {
-    ctx.fillStyle = obj.style.fill.color;
+  if (obj.style.fill.type !== 'none') {
+    ctx.fillStyle = resolveFill(ctx, obj.style.fill);
     ctx.beginPath();
     ctx.ellipse(rx, ry, rx, ry, 0, 0, Math.PI * 2);
     ctx.fill();
@@ -306,8 +336,8 @@ function renderPath(
   });
   if (obj.closed) ctx.closePath();
 
-  if (obj.style.fill.type === 'solid' && obj.closed) {
-    ctx.fillStyle = obj.style.fill.color;
+  if (obj.style.fill.type !== 'none' && obj.closed) {
+    ctx.fillStyle = resolveFill(ctx, obj.style.fill);
     ctx.fill();
   }
   if (obj.style.stroke) {

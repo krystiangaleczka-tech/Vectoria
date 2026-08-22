@@ -86,24 +86,29 @@ export function validateInvariants(doc: DocumentModel): InvariantViolation[] {
           });
         }
 
-        // Geometry dimensions must be positive
-        if ('width' in obj && obj.width <= 0) {
-          violations.push({
-            code: 'INVALID_WIDTH',
-            message: `Object '${objectId}' has non-positive width: ${obj.width}.`,
-          });
+        // Geometry dimensions must be positive and finite
+        if ('width' in obj) {
+          if (!Number.isFinite(obj.width) || obj.width <= 0) {
+            violations.push({
+              code: 'INVALID_WIDTH',
+              message: `Object '${objectId}' has non-positive or non-finite width: ${obj.width}.`,
+            });
+          }
         }
-        if ('height' in obj && (obj as { height: number }).height <= 0) {
-          violations.push({
-            code: 'INVALID_HEIGHT',
-            message: `Object '${objectId}' has non-positive height: ${(obj as { height: number }).height}.`,
-          });
+        if ('height' in obj) {
+          const h = (obj as { height: number }).height;
+          if (!Number.isFinite(h) || h <= 0) {
+            violations.push({
+              code: 'INVALID_HEIGHT',
+              message: `Object '${objectId}' has non-positive or non-finite height: ${h}.`,
+            });
+          }
         }
         
         if ('cornerRadius' in obj) {
           const r = obj.cornerRadius;
-          if (r < 0) {
-            violations.push({ code: 'INVALID_CORNER_RADIUS', message: `Object '${objectId}' has negative corner radius.` });
+          if (!Number.isFinite(r) || r < 0) {
+            violations.push({ code: 'INVALID_CORNER_RADIUS', message: `Object '${objectId}' has negative or non-finite corner radius.` });
           } else if ('width' in obj && 'height' in obj) {
             const height = 'height' in obj ? obj.height : 0;
             const maxR = Math.min(obj.width, height) / 2;
@@ -113,21 +118,21 @@ export function validateInvariants(doc: DocumentModel): InvariantViolation[] {
           }
         }
 
-        if (obj.style.opacity < 0 || obj.style.opacity > 1) {
-          violations.push({ code: 'INVALID_OPACITY', message: `Object '${objectId}' has opacity out of bounds [0, 1].` });
+        if (!Number.isFinite(obj.style.opacity) || obj.style.opacity < 0 || obj.style.opacity > 1) {
+          violations.push({ code: 'INVALID_OPACITY', message: `Object '${objectId}' has opacity out of bounds [0, 1] or non-finite.` });
         }
 
         // ── Stroke validation ──────────────────────────────────────────────
         if (obj.style.stroke) {
           const s = obj.style.stroke;
-          if (s.width < 0) {
-            violations.push({ code: 'INVALID_STROKE_WIDTH', message: `Object '${objectId}' has negative stroke width.` });
+          if (!Number.isFinite(s.width) || s.width < 0) {
+            violations.push({ code: 'INVALID_STROKE_WIDTH', message: `Object '${objectId}' has negative or non-finite stroke width.` });
           }
-          if (s.opacity < 0 || s.opacity > 1) {
-            violations.push({ code: 'INVALID_STROKE_OPACITY', message: `Object '${objectId}' stroke opacity out of range.` });
+          if (!Number.isFinite(s.opacity) || s.opacity < 0 || s.opacity > 1) {
+            violations.push({ code: 'INVALID_STROKE_OPACITY', message: `Object '${objectId}' stroke opacity out of range or non-finite.` });
           }
-          if (s.miterLimit < 1) {
-            violations.push({ code: 'INVALID_MITER_LIMIT', message: `Object '${objectId}' miterLimit must be >= 1.` });
+          if (!Number.isFinite(s.miterLimit) || s.miterLimit < 1) {
+            violations.push({ code: 'INVALID_MITER_LIMIT', message: `Object '${objectId}' miterLimit must be >= 1 and finite.` });
           }
         }
 
@@ -138,8 +143,11 @@ export function validateInvariants(doc: DocumentModel): InvariantViolation[] {
             violations.push({ code: 'INVALID_GRADIENT_STOPS', message: `Object '${objectId}' gradient needs >= 2 stops.` });
           }
           for (const stop of stops) {
-            if (stop.offset < 0 || stop.offset > 1) {
-              violations.push({ code: 'INVALID_GRADIENT_OFFSET', message: `Object '${objectId}' gradient offset out of range.` });
+            if (!Number.isFinite(stop.offset) || stop.offset < 0 || stop.offset > 1) {
+              violations.push({ code: 'INVALID_GRADIENT_OFFSET', message: `Object '${objectId}' gradient offset out of range or non-finite.` });
+            }
+            if (!Number.isFinite(stop.opacity) || stop.opacity < 0 || stop.opacity > 1) {
+              violations.push({ code: 'INVALID_GRADIENT_STOP_OPACITY', message: `Object '${objectId}' gradient stop opacity out of range or non-finite.` });
             }
           }
           if (!Number.isFinite(start.x) || !Number.isFinite(start.y) || !Number.isFinite(end.x) || !Number.isFinite(end.y)) {

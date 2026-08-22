@@ -242,3 +242,53 @@ describe('IO - DTO Validation and SVG Export', () => {
     expect(svg).toContain('fill="#00ff00"');
   });
 });
+
+describe('SVG Export — Gradient', () => {
+  it('exports linear-gradient fill as <linearGradient> definition', () => {
+    const doc = createDefaultDocument({ width: 1000, height: 800 });
+    const rect = {
+      type: 'rectangle' as const,
+      id: 'rect-grad-1',
+      name: 'Rect Gradient',
+      layerId: doc.activeLayerId,
+      visible: true,
+      locked: false,
+      transform: createTransform({ x: 50, y: 50 }),
+      style: {
+        fill: {
+          type: 'linear-gradient' as const,
+          start: { x: 0, y: 0 },
+          end: { x: 200, y: 100 },
+          stops: [
+            { offset: 0, color: '#ff0000', opacity: 1 },
+            { offset: 1, color: '#0000ff', opacity: 0.5 },
+          ],
+        },
+        stroke: null,
+        opacity: 1,
+      },
+      width: 200,
+      height: 100,
+      cornerRadius: 0,
+    };
+
+    const docWithRect = {
+      ...doc,
+      objects: { [rect.id]: rect },
+      layers: {
+        ...doc.layers,
+        [doc.activeLayerId]: {
+          ...doc.layers[doc.activeLayerId]!,
+          objectIds: [rect.id],
+        },
+      },
+    };
+
+    const svg = exportArtboardToSvg(docWithRect);
+    expect(svg).toContain('<linearGradient');
+    expect(svg).toContain('stop-color="#ff0000"');
+    expect(svg).toContain('stop-color="#0000ff"');
+    expect(svg).toContain('stop-opacity="0.5"');
+    expect(svg).toContain('fill="url(#grad-');
+  });
+});

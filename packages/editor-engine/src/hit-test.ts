@@ -170,11 +170,12 @@ function distancePointToSegment(p: Vec2, a: Vec2, b: Vec2): number {
 }
 
 /**
- * Hit-test a path: for filled closed paths, point-in-polygon test.
- * For stroke-only or open paths, distance to each segment.
+ * Hit-test a path: for filled closed paths, point-in-polygon test using
+ * flattened Bézier samples. For stroke-only or open paths, distance to
+ * each flattened segment.
  *
- * Note: uses linear approximation between nodes (ignores Bézier handles).
- * Full Bézier hit-test requires curve sampling and is a future enhancement.
+ * Bézier segments are sampled at 16 points per segment for accurate
+ * hit-testing that matches the rendered curve.
  */
 function hitTestPath(obj: PathObject, worldPoint: Vec2): boolean {
   const inv = mat3Inverse(getTransformMatrix(obj.transform));
@@ -183,19 +184,80 @@ function hitTestPath(obj: PathObject, worldPoint: Vec2): boolean {
   const local = mat3TransformPoint(inv, worldPoint);
   const hasFill = obj.style.fill.type !== 'none';
 
-  if (hasFill && obj.closed && obj.nodes.length >= 3) {
-    return pointInPolygon(local, obj.nodes.map((n) => n.point));
+  // Flatten all Bézier segments into line segments for hit-testing
+  const flatPoints = flattenPath(obj);
+
+  if (hasFill && obj.closed && flatPoints.length >= 3) {
+    return pointInPolygon(local, flatPoints);
   }
 
   const strokeWidth = obj.style.stroke?.width ?? 1;
   const tolerance = Math.max(strokeWidth / 2, 4);
 
-  for (let i = 0; i < obj.nodes.length - (obj.closed ? 0 : 1); i++) {
-    const a = obj.nodes[i]!.point;
-    const b = obj.nodes[(i + 1) % obj.nodes.length]!.point;
+  for (let i = 0; i < flatPoints.length - (obj.closed ? 0 : 1); i++) {
+    const a = flatPoints[i]!;
+    const b = flatPoints[(i + 1) % flatPoints.length]!;
     if (distancePointToSegment(local, a, b) <= tolerance) return true;
   }
   return false;
+}
+
+/** Number of samples per Bézier segment for flattening. */
+const BEZIER_SAMPLES = 16;
+
+/**
+ * Evaluate a cubic Bézier at parameter t.
+ * B(t) = (1-t)³P0 + 3(1-t)²tP1 + 3(1-t)t²P2 + t³P3
+ */
+function cubicBezier(p0: Vec2, p1: Vec2, p2: Vec2, p3: Vec2, t: number): Vec2 {
+  const u = 1 - t;
+  const uu = u * u;
+  const uuu = uu * u;
+  const tt = t * t;
+  const ttt = tt * t;
+  return {
+    x: uuu * p0.x + 3 * uu * t * p1.x + 3 * u * tt * p2.x + ttt * p3.x,
+    y: uuu * p0.y + 3 * uu * t * p1.y + 3 * u * tt * p2.y + ttt * p3.y,
+  };
+}
+
+/**
+ * Flatten a path's Bézier segments into a polyline of sampled points.
+ * Each segment with handles is sampled at BEZIER_SAMPLES intervals.
+ * Segments without handles collapse to a single endpoint.
+ */
+function flattenPath(obj: PathObject): Vec2[] {
+  const points: Vec2[] = [];
+  const n = obj.nodes.length;
+  if (n === 0) return points;
+
+  points.push(obj.nodes[0]!.point);
+
+  const segCount = obj.closed ? n : n - 1;
+  for (let i = 0; i < segCount; i++) {
+    const nodeA = obj.nodes[i]!;
+    const nodeB = obj.nodes[(i + 1) % n]!;
+    const p0 = nodeA.point;
+    const p3 = nodeB.point;
+    const p1 = nodeA.outHandle ?? nodeA.point;
+    const p2 = nodeB.inHandle ?? nodeB.point;
+
+    // Skip intermediate samples if both handles are at the endpoints (straight line)
+    const isStraight =
+      p1.x === p0.x && p1.y === p0.y &&
+      p2.x === p3.x && p2.y === p3.y;
+
+    if (isStraight) {
+      points.push(p3);
+    } else {
+      // Sample the Bézier curve at BEZIER_SAMPLES intervals (skip t=0, already have it)
+      for (let s = 1; s <= BEZIER_SAMPLES; s++) {
+        const t = s / BEZIER_SAMPLES;
+        points.push(cubicBezier(p0, p1, p2, p3, t));
+      }
+    }
+  }
+  return points;
 }
 
 /**

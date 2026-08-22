@@ -5,7 +5,6 @@ export {
   DeleteObjectsCommand,
   TransformObjectsCommand,
   SetObjectStyleCommand,
-  SetObjectGeometryCommand,
   SetRectangleGeometryCommand,
   SetEllipseGeometryCommand,
   SetLineGeometryCommand,

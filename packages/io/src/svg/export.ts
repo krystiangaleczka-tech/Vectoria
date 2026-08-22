@@ -1,4 +1,4 @@
-import type { DocumentModel, SceneObject, RectangleObject, EllipseObject, LineObject, PathObject, StrokeStyle } from '@vectoria/core';
+import type { DocumentModel, SceneObject, RectangleObject, EllipseObject, LineObject, PathObject, StrokeStyle, FillStyle, LinearGradientFill } from '@vectoria/core';
 import { getTransformMatrix } from '@vectoria/core';
 
 export function escapeXml(unsafe: string): string {
@@ -21,6 +21,11 @@ export function exportArtboardToSvg(doc: DocumentModel, artboardId?: string): st
   const { width, height } = artboard;
   const clipId = `artboard-clip-${escapeXml(targetArtboardId)}`;
 
+  // Collect all gradient fills for <defs>
+  const gradientDefs: string[] = [];
+  const gradientMap = new Map<LinearGradientFill, string>();
+  let gradientCounter = 0;
+
   const elements: string[] = [];
 
   // Render objects in global z-order
@@ -32,12 +37,29 @@ export function exportArtboardToSvg(doc: DocumentModel, artboardId?: string): st
       const obj = doc.objects[objectId];
       if (!obj || !obj.visible) continue;
 
-      const elementSvg = renderSceneObjectToSvg(obj);
+      // Register gradient if needed
+      if (obj.style.fill.type === 'linear-gradient') {
+        const fill = obj.style.fill;
+        if (!gradientMap.has(fill)) {
+          const gradId = `grad-${gradientCounter++}`;
+          gradientMap.set(fill, gradId);
+          gradientDefs.push(buildLinearGradientDef(gradId, fill));
+        }
+      }
+
+      const elementSvg = renderSceneObjectToSvg(obj, gradientMap);
       if (elementSvg) {
         elements.push(elementSvg);
       }
     }
   }
+
+  const defsContent = [
+    `    <clipPath id="${clipId}">`,
+    `      <rect x="0" y="0" width="${width}" height="${height}" />`,
+    `    </clipPath>`,
+    ...gradientDefs.map((d) => `    ${d}`),
+  ].join('\n');
 
   const svgContent = `<?xml version="1.0" encoding="UTF-8"?>
 <svg
@@ -48,9 +70,7 @@ export function exportArtboardToSvg(doc: DocumentModel, artboardId?: string): st
   overflow="hidden"
 >
   <defs>
-    <clipPath id="${clipId}">
-      <rect x="0" y="0" width="${width}" height="${height}" />
-    </clipPath>
+${defsContent}
   </defs>
   <g clip-path="url(#${clipId})" transform="translate(${-artboard.x} ${-artboard.y})">
 ${elements.map((el) => `    ${el}`).join('\n')}
@@ -60,29 +80,54 @@ ${elements.map((el) => `    ${el}`).join('\n')}
   return svgContent;
 }
 
-function renderSceneObjectToSvg(obj: SceneObject): string | null {
+/**
+ * Build an SVG <linearGradient> definition element.
+ * Coordinates use userSpaceOnUse (object local space via parent transform).
+ */
+function buildLinearGradientDef(id: string, fill: LinearGradientFill): string {
+  const stops = fill.stops
+    .map((s) => {
+      const opacityAttr = s.opacity < 1 ? ` stop-opacity="${s.opacity}"` : '';
+      return `      <stop offset="${s.offset}" stop-color="${escapeXml(s.color)}"${opacityAttr} />`;
+    })
+    .join('\n');
+
+  return `<linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="${fill.start.x}" y1="${fill.start.y}" x2="${fill.end.x}" y2="${fill.end.y}">\n${stops}\n    </linearGradient>`;
+}
+
+/** Resolve fill to SVG fill attribute value. */
+function resolveFillAttr(fill: FillStyle, gradientMap: Map<LinearGradientFill, string>): string {
+  if (fill.type === 'solid') return `fill="${escapeXml(fill.color)}"`;
+  if (fill.type === 'linear-gradient') {
+    const id = gradientMap.get(fill);
+    return id ? `fill="url(#${id})"` : 'fill="none"';
+  }
+  return 'fill="none"';
+}
+
+function renderSceneObjectToSvg(
+  obj: SceneObject,
+  gradientMap: Map<LinearGradientFill, string>,
+): string | null {
   switch (obj.type) {
     case 'rectangle':
-      return renderRectangleToSvg(obj);
+      return renderRectangleToSvg(obj, gradientMap);
     case 'ellipse':
-      return renderEllipseToSvg(obj);
+      return renderEllipseToSvg(obj, gradientMap);
     case 'line':
-      return renderLineToSvg(obj);
+      return renderLineToSvg(obj, gradientMap);
     case 'path':
-      return renderPathToSvg(obj);
+      return renderPathToSvg(obj, gradientMap);
     default:
       return null;
   }
 }
 
-function renderRectangleToSvg(obj: RectangleObject): string {
+function renderRectangleToSvg(obj: RectangleObject, gradientMap: Map<LinearGradientFill, string>): string {
   const matrix = getTransformMatrix(obj.transform);
   const transformAttr = `matrix(${matrix[0]} ${matrix[1]} ${matrix[3]} ${matrix[4]} ${matrix[6]} ${matrix[7]})`;
 
-  const fillAttr = obj.style.fill.type === 'solid'
-    ? `fill="${escapeXml(obj.style.fill.color)}"`
-    : 'fill="none"';
-
+  const fillAttr = resolveFillAttr(obj.style.fill, gradientMap);
   const strokeAttr = obj.style.stroke ? buildStrokeAttr(obj.style.stroke) : '';
   const opacityAttr = obj.style.opacity < 1 ? ` opacity="${obj.style.opacity}"` : '';
   const radiusAttr = obj.cornerRadius > 0 ? ` rx="${obj.cornerRadius}" ry="${obj.cornerRadius}"` : '';
@@ -90,23 +135,20 @@ function renderRectangleToSvg(obj: RectangleObject): string {
   return `<rect x="0" y="0" width="${obj.width}" height="${obj.height}" transform="${transformAttr}" ${fillAttr}${strokeAttr}${opacityAttr}${radiusAttr} />`;
 }
 
-function renderEllipseToSvg(obj: EllipseObject): string {
+function renderEllipseToSvg(obj: EllipseObject, gradientMap: Map<LinearGradientFill, string>): string {
   const matrix = getTransformMatrix(obj.transform);
   const transformAttr = `matrix(${matrix[0]} ${matrix[1]} ${matrix[3]} ${matrix[4]} ${matrix[6]} ${matrix[7]})`;
   const rx = obj.width / 2;
   const ry = obj.height / 2;
 
-  const fillAttr = obj.style.fill.type === 'solid'
-    ? `fill="${escapeXml(obj.style.fill.color)}"`
-    : 'fill="none"';
-
+  const fillAttr = resolveFillAttr(obj.style.fill, gradientMap);
   const strokeAttr = obj.style.stroke ? buildStrokeAttr(obj.style.stroke) : '';
   const opacityAttr = obj.style.opacity < 1 ? ` opacity="${obj.style.opacity}"` : '';
 
   return `<ellipse cx="${rx}" cy="${ry}" rx="${rx}" ry="${ry}" transform="${transformAttr}" ${fillAttr}${strokeAttr}${opacityAttr} />`;
 }
 
-function renderLineToSvg(obj: LineObject): string {
+function renderLineToSvg(obj: LineObject, _gradientMap: Map<LinearGradientFill, string>): string {
   const matrix = getTransformMatrix(obj.transform);
   const transformAttr = `matrix(${matrix[0]} ${matrix[1]} ${matrix[3]} ${matrix[4]} ${matrix[6]} ${matrix[7]})`;
 
@@ -117,7 +159,7 @@ function renderLineToSvg(obj: LineObject): string {
   return `<line x1="0" y1="0" x2="${obj.endPoint.x}" y2="${obj.endPoint.y}" transform="${transformAttr}" ${fillAttr}${strokeAttr}${opacityAttr} />`;
 }
 
-function renderPathToSvg(obj: PathObject): string {
+function renderPathToSvg(obj: PathObject, gradientMap: Map<LinearGradientFill, string>): string {
   const matrix = getTransformMatrix(obj.transform);
   const transformAttr = `matrix(${matrix[0]} ${matrix[1]} ${matrix[3]} ${matrix[4]} ${matrix[6]} ${matrix[7]})`;
 
@@ -129,10 +171,7 @@ function renderPathToSvg(obj: PathObject): string {
     return `C ${cp1.x} ${cp1.y}, ${cp2.x} ${cp2.y}, ${node.point.x} ${node.point.y}`;
   }).join(' ') + (obj.closed ? ' Z' : '');
 
-  const fillAttr = obj.closed && obj.style.fill.type === 'solid'
-    ? `fill="${escapeXml(obj.style.fill.color)}"`
-    : 'fill="none"';
-
+  const fillAttr = obj.closed ? resolveFillAttr(obj.style.fill, gradientMap) : 'fill="none"';
   const strokeAttr = obj.style.stroke ? buildStrokeAttr(obj.style.stroke) : '';
   const opacityAttr = obj.style.opacity < 1 ? ` opacity="${obj.style.opacity}"` : '';
 

@@ -359,3 +359,200 @@ describe('Extended Invariant Validation', () => {
     expect(violations.some((v) => v.code === 'INVALID_PATH_NODE_COUNT')).toBe(true);
   });
 });
+
+describe('NaN and Infinity Invariant Validation', () => {
+  it('detects NaN stroke width', () => {
+    const doc = createDefaultDocument();
+    const brokenDoc = {
+      ...doc,
+      objects: {
+        'obj-nan-1': {
+          type: 'rectangle' as const,
+          id: 'obj-nan-1',
+          name: 'R',
+          layerId: doc.activeLayerId,
+          visible: true,
+          locked: false,
+          transform: createTransform({ x: 0, y: 0 }),
+          style: {
+            fill: { type: 'none' as const },
+            stroke: {
+              color: '#000',
+              width: NaN,
+              lineCap: 'butt' as const,
+              lineJoin: 'miter' as const,
+              miterLimit: 10,
+              dashArray: [],
+              opacity: 1,
+            },
+            opacity: 1,
+          },
+          width: 100,
+          height: 100,
+          cornerRadius: 0,
+        },
+      },
+      layers: {
+        ...doc.layers,
+        [doc.activeLayerId]: {
+          ...doc.layers[doc.activeLayerId]!,
+          objectIds: ['obj-nan-1'],
+        },
+      },
+    };
+    const violations = validateInvariants(brokenDoc);
+    expect(violations.some((v) => v.code === 'INVALID_STROKE_WIDTH')).toBe(true);
+  });
+
+  it('detects Infinity in width', () => {
+    const doc = createDefaultDocument();
+    const brokenDoc = {
+      ...doc,
+      objects: {
+        'obj-inf-1': {
+          type: 'rectangle' as const,
+          id: 'obj-inf-1',
+          name: 'R',
+          layerId: doc.activeLayerId,
+          visible: true,
+          locked: false,
+          transform: createTransform({ x: 0, y: 0 }),
+          style: defaultObjectStyle,
+          width: Infinity,
+          height: 100,
+          cornerRadius: 0,
+        },
+      },
+      layers: {
+        ...doc.layers,
+        [doc.activeLayerId]: {
+          ...doc.layers[doc.activeLayerId]!,
+          objectIds: ['obj-inf-1'],
+        },
+      },
+    };
+    const violations = validateInvariants(brokenDoc);
+    expect(violations.some((v) => v.code === 'INVALID_WIDTH')).toBe(true);
+  });
+
+  it('detects NaN in gradient stop offset', () => {
+    const doc = createDefaultDocument();
+    const brokenDoc = {
+      ...doc,
+      objects: {
+        'obj-nan-grad': {
+          type: 'rectangle' as const,
+          id: 'obj-nan-grad',
+          name: 'R',
+          layerId: doc.activeLayerId,
+          visible: true,
+          locked: false,
+          transform: createTransform({ x: 0, y: 0 }),
+          style: {
+            fill: {
+              type: 'linear-gradient' as const,
+              start: { x: 0, y: 0 },
+              end: { x: 100, y: 100 },
+              stops: [
+                { offset: 0, color: '#fff', opacity: 1 },
+                { offset: NaN, color: '#000', opacity: 1 },
+              ],
+            },
+            stroke: null,
+            opacity: 1,
+          },
+          width: 100,
+          height: 100,
+          cornerRadius: 0,
+        },
+      },
+      layers: {
+        ...doc.layers,
+        [doc.activeLayerId]: {
+          ...doc.layers[doc.activeLayerId]!,
+          objectIds: ['obj-nan-grad'],
+        },
+      },
+    };
+    const violations = validateInvariants(brokenDoc);
+    expect(violations.some((v) => v.code === 'INVALID_GRADIENT_OFFSET')).toBe(true);
+  });
+
+  it('detects NaN in opacity', () => {
+    const doc = createDefaultDocument();
+    const brokenDoc = {
+      ...doc,
+      objects: {
+        'obj-nan-opacity': {
+          type: 'rectangle' as const,
+          id: 'obj-nan-opacity',
+          name: 'R',
+          layerId: doc.activeLayerId,
+          visible: true,
+          locked: false,
+          transform: createTransform({ x: 0, y: 0 }),
+          style: {
+            fill: { type: 'solid' as const, color: '#fff' },
+            stroke: null,
+            opacity: NaN,
+          },
+          width: 100,
+          height: 100,
+          cornerRadius: 0,
+        },
+      },
+      layers: {
+        ...doc.layers,
+        [doc.activeLayerId]: {
+          ...doc.layers[doc.activeLayerId]!,
+          objectIds: ['obj-nan-opacity'],
+        },
+      },
+    };
+    const violations = validateInvariants(brokenDoc);
+    expect(violations.some((v) => v.code === 'INVALID_OPACITY')).toBe(true);
+  });
+
+  it('detects Infinity in miterLimit', () => {
+    const doc = createDefaultDocument();
+    const brokenDoc = {
+      ...doc,
+      objects: {
+        'obj-inf-miter': {
+          type: 'rectangle' as const,
+          id: 'obj-inf-miter',
+          name: 'R',
+          layerId: doc.activeLayerId,
+          visible: true,
+          locked: false,
+          transform: createTransform({ x: 0, y: 0 }),
+          style: {
+            fill: { type: 'none' as const },
+            stroke: {
+              color: '#000',
+              width: 2,
+              lineCap: 'butt' as const,
+              lineJoin: 'miter' as const,
+              miterLimit: Infinity,
+              dashArray: [],
+              opacity: 1,
+            },
+            opacity: 1,
+          },
+          width: 100,
+          height: 100,
+          cornerRadius: 0,
+        },
+      },
+      layers: {
+        ...doc.layers,
+        [doc.activeLayerId]: {
+          ...doc.layers[doc.activeLayerId]!,
+          objectIds: ['obj-inf-miter'],
+        },
+      },
+    };
+    const violations = validateInvariants(brokenDoc);
+    expect(violations.some((v) => v.code === 'INVALID_MITER_LIMIT')).toBe(true);
+  });
+});

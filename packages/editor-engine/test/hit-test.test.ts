@@ -314,3 +314,63 @@ describe('Hit Testing', () => {
     });
   });
 });
+
+describe('Hit Testing — Bézier Path', () => {
+  it('hits on a Bézier curve segment (not just straight line between nodes)', () => {
+    // Path with handles that create a curve that deviates significantly
+    // from the straight line between nodes
+    const path: PathObject = {
+      type: 'path',
+      id: 'bezier-1',
+      name: 'Bezier',
+      layerId: 'layer-1',
+      visible: true,
+      locked: false,
+      transform: createTransform({ x: 0, y: 0 }),
+      style: {
+        fill: { type: 'none' },
+        stroke: { color: '#000', width: 2, lineCap: 'butt', lineJoin: 'miter', miterLimit: 10, dashArray: [], opacity: 1 },
+        opacity: 1,
+      },
+      nodes: [
+        { point: { x: 0, y: 0 }, inHandle: null, outHandle: { x: 0, y: 200 }, kind: 'smooth' },
+        { point: { x: 200, y: 0 }, inHandle: { x: 200, y: 200 }, outHandle: null, kind: 'smooth' },
+      ],
+      closed: false,
+    };
+    const doc = makeDocWithObject(path);
+
+    // The Bézier curve bows downward to about y=150 at x=100
+    // A point on the curve should be hittable
+    // At t=0.5: B(0.5) with these control points gives approximately (100, 150)
+    expect(hitTest(doc, { x: 100, y: 150 })).toBe('bezier-1');
+
+    // A point on the straight line between nodes (y=0) should NOT hit
+    // because the curve bows away from it
+    expect(hitTest(doc, { x: 100, y: 0 })).toBeNull();
+  });
+
+  it('hits inside a closed Bézier path with fill', () => {
+    const path: PathObject = {
+      type: 'path',
+      id: 'bezier-closed',
+      name: 'Closed Bezier',
+      layerId: 'layer-1',
+      visible: true,
+      locked: false,
+      transform: createTransform({ x: 100, y: 100 }),
+      style: { ...defaultObjectStyle, fill: { type: 'solid', color: '#ff0000' } },
+      nodes: [
+        { point: { x: 0, y: 0 }, inHandle: null, outHandle: { x: 50, y: -50 }, kind: 'smooth' },
+        { point: { x: 100, y: 0 }, inHandle: { x: 50, y: -50 }, outHandle: { x: 150, y: 50 }, kind: 'smooth' },
+        { point: { x: 100, y: 100 }, inHandle: { x: 150, y: 50 }, outHandle: { x: 50, y: 150 }, kind: 'smooth' },
+        { point: { x: 0, y: 100 }, inHandle: { x: 50, y: 150 }, outHandle: { x: -50, y: 50 }, kind: 'smooth' },
+      ],
+      closed: true,
+    };
+    const doc = makeDocWithObject(path);
+
+    // Center of the path in world space (transform at 100,100 + center ~50,50)
+    expect(hitTest(doc, { x: 150, y: 150 })).toBe('bezier-closed');
+  });
+});

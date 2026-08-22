@@ -6,7 +6,6 @@ import {
   DeleteObjectsCommand,
   TransformObjectsCommand,
   SetObjectStyleCommand,
-  SetObjectGeometryCommand,
   SetRectangleGeometryCommand,
   SetEllipseGeometryCommand,
   SetLineGeometryCommand,
@@ -151,7 +150,7 @@ describe('Command System and History', () => {
     expect(doc.objects['r1']!.style.fill).toEqual({ type: 'solid', color: '#ff0000' });
 
     // Geometry
-    doc = history.execute(new SetObjectGeometryCommand('r1', { width: 120, height: 90 }), doc);
+    doc = history.execute(new SetRectangleGeometryCommand('r1', { width: 120, height: 90 }), doc);
     expect((doc.objects['r1'] as RectangleObject).width).toBe(120);
     expect((doc.objects['r1'] as RectangleObject).height).toBe(90);
 
