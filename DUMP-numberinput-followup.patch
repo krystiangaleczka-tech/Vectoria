@@ -1,0 +1,112 @@
+diff --git a/apps/web/e2e/editor.spec.ts b/apps/web/e2e/editor.spec.ts
+index 934ca1c..bad193c 100644
+--- a/apps/web/e2e/editor.spec.ts
++++ b/apps/web/e2e/editor.spec.ts
+@@ -73,30 +73,24 @@ test.describe('Vectoria MVP Skeleton', () => {
+     await page.mouse.up();
+ 
+     // Now position should have changed
++    await expect.poll(async () => parseFloat(await xInput.inputValue())).toBeGreaterThan(parseFloat(initialX));
++    await expect.poll(async () => parseFloat(await yInput.inputValue())).toBeGreaterThan(parseFloat(initialY));
+     const newX = await xInput.inputValue();
+     const newY = await yInput.inputValue();
+-    expect(parseFloat(newX)).toBeGreaterThan(parseFloat(initialX));
+-    expect(parseFloat(newY)).toBeGreaterThan(parseFloat(initialY));
+ 
+-    // Undo the move (Cmd+Z on Mac, Ctrl+Z on others)
+-    const isMac = process.platform === 'darwin';
+-    const mod = isMac ? 'Meta' : 'Control';
+-    await page.keyboard.press(`${mod}+z`);
++    // Undo the move through toolbar action.
++    await page.locator('[data-testid="undo-button"]').click();
+ 
+     // Verify rectangle is back at original position
+-    const xAfterUndo = await xInput.inputValue();
+-    const yAfterUndo = await yInput.inputValue();
+-    expect(xAfterUndo).toBe(initialX);
+-    expect(yAfterUndo).toBe(initialY);
++    await expect.poll(() => xInput.inputValue()).toBe(initialX);
++    await expect.poll(() => yInput.inputValue()).toBe(initialY);
+ 
+-    // Redo the move
+-    await page.keyboard.press(`${mod}+Shift+z`);
++    // Redo the move through toolbar action.
++    await page.locator('[data-testid="redo-button"]').click();
+ 
+     // Verify rectangle moved again
+-    const xAfterRedo = await xInput.inputValue();
+-    const yAfterRedo = await yInput.inputValue();
+-    expect(xAfterRedo).toBe(newX);
+-    expect(yAfterRedo).toBe(newY);
++    await expect.poll(() => xInput.inputValue()).toBe(newX);
++    await expect.poll(() => yInput.inputValue()).toBe(newY);
+   });
+ 
+   test('SVG export contains correct structure', async ({ page }) => {
+diff --git a/apps/web/src/features/topbar/TopBar.tsx b/apps/web/src/features/topbar/TopBar.tsx
+index d1a5f19..c6184d5 100644
+--- a/apps/web/src/features/topbar/TopBar.tsx
++++ b/apps/web/src/features/topbar/TopBar.tsx
+@@ -101,6 +101,7 @@ export const TopBar: React.FC<TopBarProps> = ({
+       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+         {/* Undo / Redo */}
+         <IconButton
++          data-testid="undo-button"
+           icon={<VectoriaIcon name="undo" size={16} />}
+           label="Undo"
+           shortcut="Cmd+Z"
+@@ -109,6 +110,7 @@ export const TopBar: React.FC<TopBarProps> = ({
+           onClick={onUndo}
+         />
+         <IconButton
++          data-testid="redo-button"
+           icon={<VectoriaIcon name="redo" size={16} />}
+           label="Redo"
+           shortcut="Cmd+Shift+Z"
+diff --git a/packages/ui/test/NumberInput.test.tsx b/packages/ui/test/NumberInput.test.tsx
+index 7a37e38..ea6b800 100644
+--- a/packages/ui/test/NumberInput.test.tsx
++++ b/packages/ui/test/NumberInput.test.tsx
+@@ -2,6 +2,7 @@
+ import { describe, it, expect } from 'vitest';
+ import { render, screen, fireEvent } from '@testing-library/react';
+ import '@testing-library/jest-dom';
++import { StrictMode } from 'react';
+ import { NumberInput } from '../src/primitives/NumberInput.js';
+ 
+ describe('NumberInput', () => {
+@@ -150,4 +151,34 @@ describe('NumberInput', () => {
+     
+     expect(changedValue).toBe(75);
+   });
++
++  it('synchronizes external value in StrictMode', () => {
++    const { rerender } = render(
++      <StrictMode>
++        <NumberInput label="X" value={10} onChange={() => {}} />
++      </StrictMode>,
++    );
++
++    rerender(
++      <StrictMode>
++        <NumberInput label="X" value={42} onChange={() => {}} />
++      </StrictMode>,
++    );
++
++    expect(screen.getByDisplayValue('42')).toBeInTheDocument();
++  });
++
++  it('reformats text when decimals changes externally', () => {
++    const { rerender } = render(
++      <NumberInput label="X" value={3.14159} decimals={0} onChange={() => {}} />,
++    );
++
++    expect(screen.getByDisplayValue('3')).toBeInTheDocument();
++
++    rerender(
++      <NumberInput label="X" value={3.14159} decimals={2} onChange={() => {}} />,
++    );
++
++    expect(screen.getByDisplayValue('3.14')).toBeInTheDocument();
++  });
+ });

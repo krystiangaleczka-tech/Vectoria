@@ -101,6 +101,7 @@ export const TopBar: React.FC<TopBarProps> = ({
       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
         {/* Undo / Redo */}
         <IconButton
+          data-testid="undo-button"
           icon={<VectoriaIcon name="undo" size={16} />}
           label="Undo"
           shortcut="Cmd+Z"
@@ -109,6 +110,7 @@ export const TopBar: React.FC<TopBarProps> = ({
           onClick={onUndo}
         />
         <IconButton
+          data-testid="redo-button"
           icon={<VectoriaIcon name="redo" size={16} />}
           label="Redo"
           shortcut="Cmd+Shift+Z"

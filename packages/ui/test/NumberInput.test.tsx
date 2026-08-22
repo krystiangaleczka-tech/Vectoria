@@ -2,6 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
+import { StrictMode } from 'react';
 import { NumberInput } from '../src/primitives/NumberInput.js';
 
 describe('NumberInput', () => {
@@ -149,5 +150,35 @@ describe('NumberInput', () => {
     fireEvent.keyDown(input, { key: 'Enter' });
     
     expect(changedValue).toBe(75);
+  });
+
+  it('synchronizes external value in StrictMode', () => {
+    const { rerender } = render(
+      <StrictMode>
+        <NumberInput label="X" value={10} onChange={() => {}} />
+      </StrictMode>,
+    );
+
+    rerender(
+      <StrictMode>
+        <NumberInput label="X" value={42} onChange={() => {}} />
+      </StrictMode>,
+    );
+
+    expect(screen.getByDisplayValue('42')).toBeInTheDocument();
+  });
+
+  it('reformats text when decimals changes externally', () => {
+    const { rerender } = render(
+      <NumberInput label="X" value={3.14159} decimals={0} onChange={() => {}} />,
+    );
+
+    expect(screen.getByDisplayValue('3')).toBeInTheDocument();
+
+    rerender(
+      <NumberInput label="X" value={3.14159} decimals={2} onChange={() => {}} />,
+    );
+
+    expect(screen.getByDisplayValue('3.14')).toBeInTheDocument();
   });
 });

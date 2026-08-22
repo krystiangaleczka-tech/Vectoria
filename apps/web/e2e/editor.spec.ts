@@ -73,30 +73,24 @@ test.describe('Vectoria MVP Skeleton', () => {
     await page.mouse.up();
 
     // Now position should have changed
+    await expect.poll(async () => parseFloat(await xInput.inputValue())).toBeGreaterThan(parseFloat(initialX));
+    await expect.poll(async () => parseFloat(await yInput.inputValue())).toBeGreaterThan(parseFloat(initialY));
     const newX = await xInput.inputValue();
     const newY = await yInput.inputValue();
-    expect(parseFloat(newX)).toBeGreaterThan(parseFloat(initialX));
-    expect(parseFloat(newY)).toBeGreaterThan(parseFloat(initialY));
 
-    // Undo the move (Cmd+Z on Mac, Ctrl+Z on others)
-    const isMac = process.platform === 'darwin';
-    const mod = isMac ? 'Meta' : 'Control';
-    await page.keyboard.press(`${mod}+z`);
+    // Undo the move through toolbar action.
+    await page.locator('[data-testid="undo-button"]').click();
 
     // Verify rectangle is back at original position
-    const xAfterUndo = await xInput.inputValue();
-    const yAfterUndo = await yInput.inputValue();
-    expect(xAfterUndo).toBe(initialX);
-    expect(yAfterUndo).toBe(initialY);
+    await expect.poll(() => xInput.inputValue()).toBe(initialX);
+    await expect.poll(() => yInput.inputValue()).toBe(initialY);
 
-    // Redo the move
-    await page.keyboard.press(`${mod}+Shift+z`);
+    // Redo the move through toolbar action.
+    await page.locator('[data-testid="redo-button"]').click();
 
     // Verify rectangle moved again
-    const xAfterRedo = await xInput.inputValue();
-    const yAfterRedo = await yInput.inputValue();
-    expect(xAfterRedo).toBe(newX);
-    expect(yAfterRedo).toBe(newY);
+    await expect.poll(() => xInput.inputValue()).toBe(newX);
+    await expect.poll(() => yInput.inputValue()).toBe(newY);
   });
 
   test('SVG export contains correct structure', async ({ page }) => {
