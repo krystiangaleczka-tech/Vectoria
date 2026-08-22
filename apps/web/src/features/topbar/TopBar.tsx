@@ -28,6 +28,7 @@ export const TopBar: React.FC<TopBarProps> = ({
 }) => {
   return (
     <header
+      data-testid="topbar"
       style={{
         height: '40px',
         minHeight: '40px',
@@ -159,6 +160,7 @@ export const TopBar: React.FC<TopBarProps> = ({
 
         {/* Export SVG */}
         <Button
+          data-testid="export-svg-button"
           size="sm"
           variant="primary"
           icon={<VectoriaIcon name="fileExport" size={14} />}

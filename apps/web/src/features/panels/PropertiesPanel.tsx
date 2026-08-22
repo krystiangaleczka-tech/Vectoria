@@ -22,6 +22,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
   return (
     <aside
+      data-testid="properties-panel"
       style={{
         width: '280px',
         minWidth: '280px',
@@ -69,6 +70,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               </span>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
                 <NumberInput
+                  data-testid="prop-x"
                   label="X"
                   value={selectedObject.transform.position.x}
                   onChange={(newX) =>
@@ -76,6 +78,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                   }
                 />
                 <NumberInput
+                  data-testid="prop-y"
                   label="Y"
                   value={selectedObject.transform.position.y}
                   onChange={(newY) =>
@@ -85,6 +88,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
                 <NumberInput
+                  data-testid="prop-w"
                   label="W"
                   value={(selectedObject as RectangleObject).width}
                   min={1}
@@ -93,6 +97,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                   }
                 />
                 <NumberInput
+                  data-testid="prop-h"
                   label="H"
                   value={(selectedObject as RectangleObject).height}
                   min={1}

@@ -9,6 +9,7 @@ export interface NumberInputProps {
   step?: number;
   decimals?: number;
   disabled?: boolean;
+  'data-testid'?: string;
   onChange: (val: number) => void;
 }
 
@@ -21,6 +22,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
   step = 1,
   decimals = 0,
   disabled = false,
+  'data-testid': testId,
   onChange,
 }) => {
   const [text, setText] = useState(() => value.toFixed(decimals));
@@ -75,6 +77,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
 
   return (
     <div
+      data-testid={testId}
       style={{
         display: 'flex',
         alignItems: 'center',

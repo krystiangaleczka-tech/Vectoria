@@ -420,6 +420,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   return (
     <div
       ref={containerRef}
+      data-testid="canvas-viewport"
       onWheel={handleWheel}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}

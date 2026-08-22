@@ -11,6 +11,7 @@ export interface ToolRailProps {
 export const ToolRail: React.FC<ToolRailProps> = ({ activeTool, onSelectTool }) => {
   return (
     <aside
+      data-testid="tool-rail"
       style={{
         width: '48px',
         minWidth: '48px',

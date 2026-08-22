@@ -18,6 +18,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
 }) => {
   return (
     <footer
+      data-testid="statusbar"
       style={{
         height: '26px',
         minHeight: '26px',
