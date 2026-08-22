@@ -15,15 +15,17 @@ import {
   TransformObjectsCommand,
   SetRectangleGeometryCommand,
   SetEllipseGeometryCommand,
+  SetLineGeometryCommand,
+  type CornerRadii,
   SetObjectStyleCommand,
-   UpdateArtboardCommand,
-    SetDocumentUnitCommand,
-    SetGridSettingsCommand,
-   SetSnapSettingsCommand,
-   CreateArtboardCommand,
-   DuplicateArtboardCommand,
-   DeleteArtboardCommand,
-   SelectArtboardCommand,
+  UpdateArtboardCommand,
+  SetDocumentUnitCommand,
+  SetGridSettingsCommand,
+  SetSnapSettingsCommand,
+  CreateArtboardCommand,
+  DuplicateArtboardCommand,
+  DeleteArtboardCommand,
+  SelectArtboardCommand,
   UpdateObjectCommand,
   createDefaultDocument,
   getObjectBounds,
@@ -381,6 +383,14 @@ export const EditorApp: React.FC = () => {
     [doc, handleExecuteCommand]
   );
 
+  const handleUpdateLineEndpoint = useCallback((id: ObjectId, endPoint: Vec2) => {
+    handleExecuteCommand(new SetLineGeometryCommand(id, { endPoint }));
+  }, [handleExecuteCommand]);
+
+  const handleUpdateCornerRadius = useCallback((id: ObjectId, radii: CornerRadii) => {
+    handleExecuteCommand(new SetRectangleGeometryCommand(id, { cornerRadius: radii }));
+  }, [handleExecuteCommand]);
+
   const handleUpdateFill = useCallback(
     (id: ObjectId, color: string | null) => {
       const fillStyle = color ? { type: 'solid' as const, color } : { type: 'none' as const };
@@ -498,10 +508,10 @@ export const EditorApp: React.FC = () => {
               setActiveTool('direct-select');
            } else if (e.key.toLowerCase() === 'r') {
              setActiveTool('rectangle');
-           } else if (e.key.toLowerCase() === 'e') {
-             setActiveTool('ellipse');
-           } else if (e.key.toLowerCase() === 'l') {
-             setActiveTool('line');
+            } else if (e.key.toLowerCase() === 'l') {
+              setActiveTool('ellipse');
+            } else if (e.key === '\\') {
+              setActiveTool('line');
            } else if (e.key.toLowerCase() === 'p') {
              setActiveTool('pen');
           } else if (e.key.toLowerCase() === 'h') {
@@ -628,8 +638,9 @@ export const EditorApp: React.FC = () => {
         activeTool={activeTool}
         selectedObjectId={selectedObjectId}
         onUpdatePosition={handleUpdatePosition}
-        onUpdateDimensions={handleUpdateDimensions}
-        onUpdateFill={handleUpdateFill}
+         onUpdateDimensions={handleUpdateDimensions}
+         onUpdateLineEndpoint={handleUpdateLineEndpoint}
+         onUpdateFill={handleUpdateFill}
       />
 
       {/* Main Workspace Area */}
@@ -673,8 +684,10 @@ export const EditorApp: React.FC = () => {
            onSelectObject={handleSelectObject}
            onSelectObjects={handleSelectObjects}
           onUpdatePosition={handleUpdatePosition}
-          onUpdateDimensions={handleUpdateDimensions}
-           onUpdateFill={handleUpdateFill}
+           onUpdateDimensions={handleUpdateDimensions}
+           onUpdateLineEndpoint={handleUpdateLineEndpoint}
+           onUpdateCornerRadius={handleUpdateCornerRadius}
+            onUpdateFill={handleUpdateFill}
            onUpdateObjectStyle={handleUpdateObjectStyle}
            onUpdateRotation={handleUpdateRotation}
             onUpdateArtboard={handleUpdateArtboard}

@@ -1,5 +1,5 @@
 import type { DocumentModel, SceneObject, RectangleObject, EllipseObject, LineObject, PathObject, StrokeStyle, FillStyle, LinearGradientFill } from '@vectoria/core';
-import { getTransformMatrix } from '@vectoria/core';
+import { getTransformMatrix, normalizeCornerRadii } from '@vectoria/core';
 
 export function escapeXml(unsafe: string): string {
   return unsafe
@@ -130,9 +130,21 @@ function renderRectangleToSvg(obj: RectangleObject, gradientMap: Map<LinearGradi
   const fillAttr = resolveFillAttr(obj.style.fill, gradientMap);
   const strokeAttr = obj.style.stroke ? buildStrokeAttr(obj.style.stroke) : '';
   const opacityAttr = obj.style.opacity < 1 ? ` opacity="${obj.style.opacity}"` : '';
-  const radiusAttr = obj.cornerRadius > 0 ? ` rx="${obj.cornerRadius}" ry="${obj.cornerRadius}"` : '';
+  const radii = normalizeCornerRadii(obj.cornerRadius, obj.width, obj.height);
+  const radiusAttr = radii.topLeft === radii.topRight && radii.topRight === radii.bottomRight && radii.bottomRight === radii.bottomLeft && radii.topLeft > 0
+    ? ` rx="${radii.topLeft}" ry="${radii.topLeft}"`
+    : '';
+  if (radii.topLeft !== radii.topRight || radii.topRight !== radii.bottomRight || radii.bottomRight !== radii.bottomLeft) {
+    const d = roundedRectanglePath(obj.width, obj.height, radii);
+    return `<path d="${d}" transform="${transformAttr}" ${fillAttr}${strokeAttr}${opacityAttr} />`;
+  }
 
   return `<rect x="0" y="0" width="${obj.width}" height="${obj.height}" transform="${transformAttr}" ${fillAttr}${strokeAttr}${opacityAttr}${radiusAttr} />`;
+}
+
+function roundedRectanglePath(width: number, height: number, radii: { topLeft: number; topRight: number; bottomRight: number; bottomLeft: number }): string {
+  const { topLeft, topRight, bottomRight, bottomLeft } = radii;
+  return `M ${topLeft} 0 H ${width - topRight} A ${topRight} ${topRight} 0 0 1 ${width} ${topRight} V ${height - bottomRight} A ${bottomRight} ${bottomRight} 0 0 1 ${width - bottomRight} ${height} H ${bottomLeft} A ${bottomLeft} ${bottomLeft} 0 0 1 0 ${height - bottomLeft} V ${topLeft} A ${topLeft} ${topLeft} 0 0 1 ${topLeft} 0 Z`;
 }
 
 function renderEllipseToSvg(obj: EllipseObject, gradientMap: Map<LinearGradientFill, string>): string {

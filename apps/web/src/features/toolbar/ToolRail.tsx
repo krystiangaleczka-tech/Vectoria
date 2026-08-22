@@ -12,7 +12,7 @@ export interface ToolRailProps {
 export const ToolRail: React.FC<ToolRailProps> = ({ activeTool, onSelectTool }) => {
   const groups: readonly ToolGroup[] = [
     { label: 'Selection', tools: [{ id: 'select', label: 'Select Tool', shortcut: 'V', icon: 'select' }, { id: 'direct-select', label: 'Direct Select Tool', shortcut: 'A', icon: 'directSelect' }] },
-    { label: 'Shape', tools: [{ id: 'rectangle', label: 'Rectangle Tool', shortcut: 'R', icon: 'rectangle' }, { id: 'ellipse', label: 'Ellipse Tool', shortcut: 'E', icon: 'ellipse' }, { id: 'line', label: 'Line Tool', shortcut: 'L', icon: 'line' }] },
+    { label: 'Shape', tools: [{ id: 'rectangle', label: 'Rectangle Tool', shortcut: 'R', icon: 'rectangle' }, { id: 'ellipse', label: 'Ellipse Tool', shortcut: 'L', icon: 'ellipse' }, { id: 'line', label: 'Line Tool', shortcut: '\\', icon: 'line' }] },
     { label: 'Draw', tools: [{ id: 'pen', label: 'Pen Tool', shortcut: 'P', icon: 'pen' }, { id: 'text', label: 'Text Tool', shortcut: 'T', icon: 'text', disabled: true }] },
     { label: 'Navigate', tools: [{ id: 'hand', label: 'Hand / Pan Tool', shortcut: 'Space', icon: 'hand' }, { id: 'zoom', label: 'Zoom Tool', shortcut: 'Z', icon: 'zoom' }] },
   ];

@@ -170,6 +170,20 @@ describe('IO - DTO Validation and SVG Export', () => {
     expect(svg).toContain('fill="#5caeff"');
   });
 
+  it('exports independent rectangle corner radii as a path', () => {
+    const doc = createDefaultDocument({ width: 400, height: 300 });
+    const rect: RectangleObject = {
+      type: 'rectangle', id: 'rounded-rect', name: 'Rounded', layerId: doc.activeLayerId,
+      visible: true, locked: false, transform: createTransform({ x: 20, y: 20 }),
+      style: { fill: { type: 'solid', color: '#5caeff' }, stroke: null, opacity: 1 },
+      width: 120, height: 80, cornerRadius: { topLeft: 20, topRight: 10, bottomRight: 8, bottomLeft: 4 },
+    };
+    const withRect = { ...doc, objects: { [rect.id]: rect }, layers: { ...doc.layers, [doc.activeLayerId]: { ...doc.layers[doc.activeLayerId]!, objectIds: [rect.id] } } };
+    const svg = exportArtboardToSvg(withRect);
+    expect(svg).toContain('<path d="M 20 0 H 110 A 10 10');
+    expect(svg).toContain('fill="#5caeff"');
+  });
+
   it('exports line to SVG', () => {
     const doc = createDefaultDocument({ width: 1000, height: 800 });
     const line: LineObject = {

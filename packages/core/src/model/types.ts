@@ -82,6 +82,13 @@ export interface ObjectStyle {
   readonly opacity: number;
 }
 
+export interface CornerRadii {
+  readonly topLeft: number;
+  readonly topRight: number;
+  readonly bottomRight: number;
+  readonly bottomLeft: number;
+}
+
 // ─── Scene Objects ────────────────────────────────────────────────────────────
 
 export interface SceneObjectBase {
@@ -98,7 +105,8 @@ export interface RectangleObject extends SceneObjectBase {
   readonly type: 'rectangle';
   readonly width: number;
   readonly height: number;
-  readonly cornerRadius: number;
+  /** Number is accepted for schema-v1 documents; new objects use four radii. */
+  readonly cornerRadius: number | CornerRadii;
 }
 
 export interface EllipseObject extends SceneObjectBase {

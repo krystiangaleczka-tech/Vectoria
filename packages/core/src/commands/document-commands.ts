@@ -14,9 +14,11 @@ import type {
   Guide,
   GridSettings,
   SnapSettings,
+  CornerRadii,
 } from '../model/types.js';
 import { isValidTransform } from '../model/transform.js';
 import { getObjectBounds } from '../model/bounds.js';
+import { normalizeCornerRadii } from '../model/shapes.js';
 
 // ─── CreateObjectsCommand ─────────────────────────────────────────────────────
 
@@ -513,14 +515,14 @@ export class SetObjectStyleCommand implements Command {
 export class SetRectangleGeometryCommand implements Command {
   readonly type = 'SetRectangleGeometry';
   readonly description: string;
-  private previous: { width: number; height: number; cornerRadius: number } | null = null;
+  private previous: { width: number; height: number; cornerRadius: number | CornerRadii } | null = null;
 
   constructor(
     private readonly objectId: ObjectId,
     private readonly patch: Readonly<{
       width?: number;
       height?: number;
-      cornerRadius?: number;
+      cornerRadius?: number | Partial<CornerRadii>;
     }>,
   ) {
     this.description =
@@ -535,13 +537,13 @@ export class SetRectangleGeometryCommand implements Command {
 
     const width = this.patch.width ?? obj.width;
     const height = this.patch.height ?? obj.height;
-    const cornerRadius = Math.min(
-      Math.max(0, this.patch.cornerRadius ?? obj.cornerRadius),
-      width / 2,
-      height / 2,
-    );
+    const nextRadius = this.patch.cornerRadius ?? obj.cornerRadius;
+    const normalizedRadii = normalizeCornerRadii(nextRadius, width, height);
+    const cornerRadius = typeof nextRadius === 'number' && typeof obj.cornerRadius === 'number'
+      ? normalizedRadii.topLeft
+      : normalizedRadii;
 
-    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0 || !Number.isFinite(cornerRadius)) {
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
       return doc;
     }
 

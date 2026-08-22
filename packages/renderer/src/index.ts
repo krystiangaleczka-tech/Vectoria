@@ -1,7 +1,7 @@
 import type { Camera } from '@vectoria/editor-engine';
 import type { Vec2 } from '@vectoria/shared';
 import type { DocumentModel, Artboard, RectangleObject, EllipseObject, LineObject, PathObject, ObjectId, Transform2D, LinearGradientFill } from '@vectoria/core';
-import { getTransformMatrix, getObjectBounds, rectsIntersect } from '@vectoria/core';
+import { getTransformMatrix, getObjectBounds, rectsIntersect, normalizeCornerRadii } from '@vectoria/core';
 import { mat3TransformPoint } from '@vectoria/shared';
 export interface GridSettings { visible: boolean; size: number; subdivisions: number }
 
@@ -286,12 +286,14 @@ function renderRectangle(
   ctx.save();
   ctx.transform(matrix[0], matrix[1], matrix[3], matrix[4], matrix[6], matrix[7]);
   ctx.globalAlpha = obj.style.opacity;
+  const radii = normalizeCornerRadii(obj.cornerRadius, obj.width, obj.height);
+  const hasRoundedCorners = radii.topLeft > 0 || radii.topRight > 0 || radii.bottomRight > 0 || radii.bottomLeft > 0;
 
   // Fill
   if (obj.style.fill.type !== 'none') {
     ctx.fillStyle = resolveFill(ctx, obj.style.fill);
-    if (obj.cornerRadius > 0) {
-      roundRect(ctx, 0, 0, obj.width, obj.height, obj.cornerRadius);
+    if (hasRoundedCorners) {
+      roundRect(ctx, 0, 0, obj.width, obj.height, radii);
       ctx.fill();
     } else {
       ctx.fillRect(0, 0, obj.width, obj.height);
@@ -310,8 +312,8 @@ function renderRectangle(
     }
     ctx.globalAlpha = obj.style.opacity * obj.style.stroke.opacity;
 
-    if (obj.cornerRadius > 0) {
-      roundRect(ctx, 0, 0, obj.width, obj.height, obj.cornerRadius);
+    if (hasRoundedCorners) {
+      roundRect(ctx, 0, 0, obj.width, obj.height, radii);
       ctx.stroke();
     } else {
       ctx.strokeRect(0, 0, obj.width, obj.height);
@@ -436,19 +438,19 @@ function roundRect(
   ctx: CanvasRenderingContext2D,
   x: number, y: number,
   w: number, h: number,
-  r: number,
+  radii: ReturnType<typeof normalizeCornerRadii>,
 ): void {
-  const radius = Math.min(r, w / 2, h / 2);
+  const { topLeft, topRight, bottomRight, bottomLeft } = radii;
   ctx.beginPath();
-  ctx.moveTo(x + radius, y);
-  ctx.lineTo(x + w - radius, y);
-  ctx.arcTo(x + w, y, x + w, y + radius, radius);
-  ctx.lineTo(x + w, y + h - radius);
-  ctx.arcTo(x + w, y + h, x + w - radius, y + h, radius);
-  ctx.lineTo(x + radius, y + h);
-  ctx.arcTo(x, y + h, x, y + h - radius, radius);
-  ctx.lineTo(x, y + radius);
-  ctx.arcTo(x, y, x + radius, y, radius);
+  ctx.moveTo(x + topLeft, y);
+  ctx.lineTo(x + w - topRight, y);
+  ctx.arcTo(x + w, y, x + w, y + topRight, topRight);
+  ctx.lineTo(x + w, y + h - bottomRight);
+  ctx.arcTo(x + w, y + h, x + w - bottomRight, y + h, bottomRight);
+  ctx.lineTo(x + bottomLeft, y + h);
+  ctx.arcTo(x, y + h, x, y + h - bottomLeft, bottomLeft);
+  ctx.lineTo(x, y + topLeft);
+  ctx.arcTo(x, y, x + topLeft, y, topLeft);
   ctx.closePath();
 }
 

@@ -125,14 +125,10 @@ export function validateInvariants(doc: DocumentModel): InvariantViolation[] {
         
         if ('cornerRadius' in obj) {
           const r = obj.cornerRadius;
-          if (!Number.isFinite(r) || r < 0) {
-            violations.push({ code: 'INVALID_CORNER_RADIUS', message: `Object '${objectId}' has negative or non-finite corner radius.` });
-          } else if ('width' in obj && 'height' in obj) {
-            const height = 'height' in obj ? obj.height : 0;
-            const maxR = Math.min(obj.width, height) / 2;
-            if (r > maxR) {
-              violations.push({ code: 'INVALID_CORNER_RADIUS', message: `Object '${objectId}' corner radius exceeds min(width, height)/2.` });
-            }
+          const radii = typeof r === 'number' ? [r] : [r.topLeft, r.topRight, r.bottomRight, r.bottomLeft];
+          const maxR = Math.min(obj.width, obj.height) / 2;
+          if (radii.some((radius) => !Number.isFinite(radius) || radius < 0 || radius > maxR)) {
+            violations.push({ code: 'INVALID_CORNER_RADIUS', message: `Object '${objectId}' has a corner radius outside [0, min(width, height)/2].` });
           }
         }
 

@@ -21,7 +21,10 @@ import {
   createTransform,
   defaultObjectStyle,
   defaultStroke,
+  defaultCornerRadii,
   getTransformMatrix,
+  normalizeShapeDrag,
+  isValidShapeGeometry,
 } from '@vectoria/core';
 import { Camera, DragSession, SelectTool, DirectSelectTool, snapToGrid as snapPointToGrid, type GridSettings } from '@vectoria/editor-engine';
 import { mat3TransformPoint } from '@vectoria/shared';
@@ -151,33 +154,28 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       overlayCtx.translate(camera.pan.x, camera.pan.y);
       overlayCtx.scale(camera.zoom, camera.zoom);
 
-      const x = Math.min(drag.startWorld.x, drag.currentWorld.x);
-      const y = Math.min(drag.startWorld.y, drag.currentWorld.y);
-      const w = Math.abs(drag.currentWorld.x - drag.startWorld.x);
-      const h = Math.abs(drag.currentWorld.y - drag.startWorld.y);
-
-       overlayCtx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-accent').trim();
-      overlayCtx.lineWidth = 1 / camera.zoom;
-      overlayCtx.strokeRect(x, y, w, h);
-
-       overlayCtx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-selection-fill').trim();
-       if (drag.shape !== 'line') {
-         if (drag.shape === 'ellipse') {
-           overlayCtx.beginPath();
-           overlayCtx.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
-           overlayCtx.fill();
-         } else overlayCtx.fillRect(x, y, w, h);
-       }
-       if (drag.shape === 'ellipse') {
-         overlayCtx.beginPath();
-         overlayCtx.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
-         overlayCtx.stroke();
-       } else if (drag.shape === 'line') {
-         overlayCtx.beginPath();
-         overlayCtx.moveTo(drag.startWorld.x, drag.startWorld.y);
-         overlayCtx.lineTo(drag.currentWorld.x, drag.currentWorld.y);
-         overlayCtx.stroke();
-       }
+      const geometry = drag.shape
+        ? normalizeShapeDrag(drag.shape, drag.startWorld, drag.currentWorld)
+        : null;
+      if (geometry) {
+        overlayCtx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-accent').trim();
+        overlayCtx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-selection-fill').trim();
+        overlayCtx.lineWidth = 1 / camera.zoom;
+        if (geometry.type === 'line') {
+          overlayCtx.beginPath();
+          overlayCtx.moveTo(geometry.start.x, geometry.start.y);
+          overlayCtx.lineTo(geometry.end.x, geometry.end.y);
+          overlayCtx.stroke();
+        } else if (geometry.type === 'ellipse') {
+          overlayCtx.beginPath();
+          overlayCtx.ellipse(geometry.x + geometry.width / 2, geometry.y + geometry.height / 2, geometry.width / 2, geometry.height / 2, 0, 0, Math.PI * 2);
+          overlayCtx.fill();
+          overlayCtx.stroke();
+        } else {
+          overlayCtx.fillRect(geometry.x, geometry.y, geometry.width, geometry.height);
+          overlayCtx.strokeRect(geometry.x, geometry.y, geometry.width, geometry.height);
+        }
+      }
 
       overlayCtx.restore();
     }
@@ -424,26 +422,9 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       drag.currentWorld = worldPos;
       renderLoopRef.current?.invalidate();
     } else if (drag.type === 'create-shape') {
-      let finalWorld = worldPos;
-      if (e.shiftKey && drag.shape !== 'line') {
-        // Force square 1:1 aspect ratio
-        const dx = worldPos.x - drag.startWorld.x;
-        const dy = worldPos.y - drag.startWorld.y;
-        const size = Math.max(Math.abs(dx), Math.abs(dy));
-        finalWorld = {
-          x: drag.startWorld.x + (dx >= 0 ? size : -size),
-          y: drag.startWorld.y + (dy >= 0 ? size : -size),
-        };
-      }
-      if (drag.shape === 'line' && e.shiftKey) {
-        const dx = worldPos.x - drag.startWorld.x;
-        const dy = worldPos.y - drag.startWorld.y;
-        const length = Math.hypot(dx, dy);
-        const angle = Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) * (Math.PI / 4);
-        finalWorld = { x: drag.startWorld.x + Math.cos(angle) * length, y: drag.startWorld.y + Math.sin(angle) * length };
-      }
-      drag.currentWorld = finalWorld;
-      renderLoopRef.current?.invalidate();
+      const geometry = drag.shape ? normalizeShapeDrag(drag.shape, drag.startWorld, worldPos, { shift: e.shiftKey }) : null;
+      if (geometry) drag.currentWorld = geometry.type === 'line' ? geometry.end : { x: geometry.x + (worldPos.x >= drag.startWorld.x ? geometry.width : 0), y: geometry.y + (worldPos.y >= drag.startWorld.y ? geometry.height : 0) };
+       renderLoopRef.current?.invalidate();
     } else if (activeTool === 'pen') {
       const pen = penStateRef.current;
       if (pen.pendingPoint && pen.pendingStart) {
@@ -523,14 +504,11 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         onSelectObject(null);
       }
     } else if (drag.type === 'create-shape') {
-      const x = Math.min(drag.startWorld.x, drag.currentWorld.x);
-      const y = Math.min(drag.startWorld.y, drag.currentWorld.y);
-      const width = Math.abs(drag.currentWorld.x - drag.startWorld.x);
-      const height = Math.abs(drag.currentWorld.y - drag.startWorld.y);
+      const geometry = drag.shape ? normalizeShapeDrag(drag.shape, drag.startWorld, drag.currentWorld) : null;
 
-      // Only create if non-zero size
-      if (drag.shape === 'line' ? Math.hypot(width, height) >= 2 : width >= 2 && height >= 2) {
-        const newId = generateId();
+       // Only create if non-zero size
+       if (geometry && isValidShapeGeometry(geometry)) {
+         const newId = generateId();
         const common = {
           id: newId,
           name: `${drag.shape === 'ellipse' ? 'Ellipse' : drag.shape === 'line' ? 'Line' : 'Rectangle'} ${Object.keys(doc.objects).length + 1}`,
@@ -538,11 +516,11 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
           visible: true,
           locked: false,
         };
-        const object: RectangleObject | EllipseObject | LineObject = drag.shape === 'ellipse'
-          ? { ...common, type: 'ellipse', transform: createTransform({ x, y }), style: defaultObjectStyle, width, height }
-          : drag.shape === 'line'
-          ? { ...common, type: 'line', transform: createTransform(drag.startWorld), style: { ...defaultObjectStyle, fill: { type: 'none' }, stroke: defaultStroke }, endPoint: { x: drag.currentWorld.x - drag.startWorld.x, y: drag.currentWorld.y - drag.startWorld.y } }
-          : { ...common, type: 'rectangle', transform: createTransform({ x, y }), style: defaultObjectStyle, width, height, cornerRadius: 0 };
+         const object: RectangleObject | EllipseObject | LineObject = geometry.type === 'ellipse'
+           ? { ...common, type: 'ellipse', transform: createTransform({ x: geometry.x, y: geometry.y }), style: defaultObjectStyle, width: geometry.width, height: geometry.height }
+           : geometry.type === 'line'
+           ? { ...common, type: 'line', transform: createTransform(geometry.start), style: { ...defaultObjectStyle, fill: { type: 'none' }, stroke: defaultStroke }, endPoint: { x: geometry.end.x - geometry.start.x, y: geometry.end.y - geometry.start.y } }
+           : { ...common, type: 'rectangle', transform: createTransform({ x: geometry.x, y: geometry.y }), style: defaultObjectStyle, width: geometry.width, height: geometry.height, cornerRadius: defaultCornerRadii };
 
         const cmd = new CreateObjectsCommand([object], doc.activeLayerId);
         onExecuteCommand(cmd);

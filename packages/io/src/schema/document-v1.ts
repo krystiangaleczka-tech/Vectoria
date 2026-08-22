@@ -71,7 +71,15 @@ export const RectangleObjectSchema = z.object({
   style: ObjectStyleSchema,
   width: z.number().positive().finite(),
   height: z.number().positive().finite(),
-  cornerRadius: z.number().nonnegative(),
+  cornerRadius: z.union([
+    z.number().nonnegative(),
+    z.object({
+      topLeft: z.number().nonnegative().finite(),
+      topRight: z.number().nonnegative().finite(),
+      bottomRight: z.number().nonnegative().finite(),
+      bottomLeft: z.number().nonnegative().finite(),
+    }),
+  ]),
 });
 
 export const EllipseObjectSchema = z.object({

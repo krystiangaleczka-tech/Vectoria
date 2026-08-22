@@ -1,5 +1,7 @@
 import React from 'react';
-import type { DocumentModel, ObjectId, ObjectStyle, SceneObject } from '@vectoria/core';
+import type { DocumentModel, ObjectId, ObjectStyle, SceneObject, CornerRadii } from '@vectoria/core';
+import { normalizeCornerRadii } from '@vectoria/core';
+import type { Vec2 } from '@vectoria/shared';
 import { defaultStroke } from '@vectoria/core';
 import { NumberInput, ColorControl, Button } from '@vectoria/ui';
 import { convertUnit } from '@vectoria/shared';
@@ -12,6 +14,8 @@ export interface PropertiesPanelProps {
   selectedObjectIds?: readonly ObjectId[];
   onUpdatePosition: (id: ObjectId, x: number, y: number) => void;
   onUpdateDimensions: (id: ObjectId, width: number, height: number) => void;
+  onUpdateLineEndpoint?: (id: ObjectId, endPoint: Vec2) => void;
+  onUpdateCornerRadius?: (id: ObjectId, radii: CornerRadii) => void;
   onUpdateFill: (id: ObjectId, color: string | null) => void;
   onUpdateObjectStyle?: (id: ObjectId, patch: Partial<ObjectStyle>) => void;
   onUpdateRotation?: (id: ObjectId, degrees: number) => void;
@@ -30,6 +34,8 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   selectedObjectIds = selectedObjectId ? [selectedObjectId] : [],
   onUpdatePosition,
   onUpdateDimensions,
+  onUpdateLineEndpoint,
+  onUpdateCornerRadius,
   onUpdateFill,
   onUpdateObjectStyle,
   onUpdateRotation,
@@ -41,6 +47,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const selected = selectedObjectId ? doc.objects[selectedObjectId] : null;
   const artboard = doc.artboards[doc.activeArtboardId];
   const size = selected ? dimensions(selected) : null;
+  const radii = selected?.type === 'rectangle' ? normalizeCornerRadii(selected.cornerRadius, selected.width, selected.height) : null;
   const patchStyle = (patch: Partial<ObjectStyle>) => selected && onUpdateObjectStyle?.(selected.id, patch);
 
   return (
@@ -54,10 +61,20 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             <div className="property-grid">
               <NumberInput data-testid="prop-x" label="X" disabled={selected.locked} value={convertUnit(selected.transform.position.x, 'px', doc.unit)} unit={doc.unit} decimals={2} onChange={(value) => onUpdatePosition(selected.id, convertUnit(value, doc.unit, 'px'), selected.transform.position.y)} />
               <NumberInput data-testid="prop-y" label="Y" disabled={selected.locked} value={convertUnit(selected.transform.position.y, 'px', doc.unit)} unit={doc.unit} decimals={2} onChange={(value) => onUpdatePosition(selected.id, selected.transform.position.x, convertUnit(value, doc.unit, 'px'))} />
-              {size && <>
-                <NumberInput data-testid="prop-w" label="W" disabled={selected.locked} min={0.000001} value={convertUnit(size.width, 'px', doc.unit)} unit={doc.unit} decimals={2} onChange={(value) => onUpdateDimensions(selected.id, convertUnit(value, doc.unit, 'px'), size.height)} />
-                <NumberInput data-testid="prop-h" label="H" disabled={selected.locked} min={0.000001} value={convertUnit(size.height, 'px', doc.unit)} unit={doc.unit} decimals={2} onChange={(value) => onUpdateDimensions(selected.id, size.width, convertUnit(value, doc.unit, 'px'))} />
-              </>}
+               {size && <>
+                 <NumberInput data-testid="prop-w" label="W" disabled={selected.locked} min={0.000001} value={convertUnit(size.width, 'px', doc.unit)} unit={doc.unit} decimals={2} onChange={(value) => onUpdateDimensions(selected.id, convertUnit(value, doc.unit, 'px'), size.height)} />
+                 <NumberInput data-testid="prop-h" label="H" disabled={selected.locked} min={0.000001} value={convertUnit(size.height, 'px', doc.unit)} unit={doc.unit} decimals={2} onChange={(value) => onUpdateDimensions(selected.id, size.width, convertUnit(value, doc.unit, 'px'))} />
+               </>}
+               {selected.type === 'line' && <>
+                 <NumberInput data-testid="prop-end-x" label="End X" disabled={selected.locked} value={convertUnit(selected.endPoint.x, 'px', doc.unit)} unit={doc.unit} decimals={2} onChange={(value) => onUpdateLineEndpoint?.(selected.id, { x: convertUnit(value, doc.unit, 'px'), y: selected.endPoint.y })} />
+                 <NumberInput data-testid="prop-end-y" label="End Y" disabled={selected.locked} value={convertUnit(selected.endPoint.y, 'px', doc.unit)} unit={doc.unit} decimals={2} onChange={(value) => onUpdateLineEndpoint?.(selected.id, { x: selected.endPoint.x, y: convertUnit(value, doc.unit, 'px') })} />
+               </>}
+               {selected.type === 'rectangle' && radii && <>
+                 <NumberInput data-testid="prop-radius-tl" label="TL" disabled={selected.locked} min={0} value={convertUnit(radii.topLeft, 'px', doc.unit)} unit={doc.unit} decimals={2} onChange={(value) => onUpdateCornerRadius?.(selected.id, { ...radii, topLeft: convertUnit(value, doc.unit, 'px') })} />
+                 <NumberInput data-testid="prop-radius-tr" label="TR" disabled={selected.locked} min={0} value={convertUnit(radii.topRight, 'px', doc.unit)} unit={doc.unit} decimals={2} onChange={(value) => onUpdateCornerRadius?.(selected.id, { ...radii, topRight: convertUnit(value, doc.unit, 'px') })} />
+                 <NumberInput data-testid="prop-radius-br" label="BR" disabled={selected.locked} min={0} value={convertUnit(radii.bottomRight, 'px', doc.unit)} unit={doc.unit} decimals={2} onChange={(value) => onUpdateCornerRadius?.(selected.id, { ...radii, bottomRight: convertUnit(value, doc.unit, 'px') })} />
+                 <NumberInput data-testid="prop-radius-bl" label="BL" disabled={selected.locked} min={0} value={convertUnit(radii.bottomLeft, 'px', doc.unit)} unit={doc.unit} decimals={2} onChange={(value) => onUpdateCornerRadius?.(selected.id, { ...radii, bottomLeft: convertUnit(value, doc.unit, 'px') })} />
+               </>}
               <NumberInput data-testid="prop-rotation" label="Rot" disabled={selected.locked} value={selected.transform.rotation * 180 / Math.PI} decimals={1} unit="°" onChange={(value) => onUpdateRotation?.(selected.id, value)} />
             </div>
           </section>

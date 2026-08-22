@@ -262,6 +262,18 @@ describe('Type-Safe Geometry Commands', () => {
     expect(obj.cornerRadius).toBe(50);
   });
 
+  it('SetRectangleGeometryCommand preserves independent corner radii', () => {
+    let doc = createDefaultDocument();
+    const rect: RectangleObject = {
+      type: 'rectangle', id: 'rect-radii', name: 'R', layerId: doc.activeLayerId,
+      visible: true, locked: false, transform: createTransform({ x: 0, y: 0 }), style: defaultObjectStyle,
+      width: 100, height: 60, cornerRadius: { topLeft: 0, topRight: 0, bottomRight: 0, bottomLeft: 0 },
+    };
+    doc = new CreateObjectsCommand([rect], doc.activeLayerId).execute(doc);
+    doc = new SetRectangleGeometryCommand('rect-radii', { cornerRadius: { topLeft: 80, topRight: 12, bottomRight: 8, bottomLeft: 4 } }).execute(doc);
+    expect((doc.objects['rect-radii'] as RectangleObject).cornerRadius).toEqual({ topLeft: 30, topRight: 12, bottomRight: 8, bottomLeft: 4 });
+  });
+
   it('SetRectangleGeometryCommand rejects negative width', () => {
     let doc = createDefaultDocument();
     const history = new CommandHistory();

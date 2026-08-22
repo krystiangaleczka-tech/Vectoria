@@ -1,7 +1,7 @@
 import type { Vec2 } from '@vectoria/shared';
 import { rectContainsPoint } from '@vectoria/shared';
 import type { DocumentModel, SceneObject, ObjectId, RectangleObject, EllipseObject, LineObject, PathObject } from '@vectoria/core';
-import { getTransformMatrix, getObjectBounds } from '@vectoria/core';
+import { getTransformMatrix, getObjectBounds, normalizeCornerRadii } from '@vectoria/core';
 import { mat3Inverse, mat3TransformPoint } from '@vectoria/shared';
 import type { Rect } from '@vectoria/shared';
 
@@ -120,16 +120,9 @@ function hitTestRectangle(obj: RectangleObject, worldPoint: Vec2, toleranceWorld
   const halfStroke = strokeWidth / 2;
 
   if (hasFill) {
-    // Fill hit-test: point inside rectangle + stroke expansion
-    return rectContainsPoint(
-      {
-        x: -halfStroke,
-        y: -halfStroke,
-        width: obj.width + strokeWidth,
-        height: obj.height + strokeWidth,
-      },
-      localPoint,
-    );
+    // Fill hit-test follows the same corner geometry as Canvas and SVG.
+    const radii = normalizeCornerRadii(obj.cornerRadius, obj.width + strokeWidth, obj.height + strokeWidth);
+    return pointInRoundedRect({ x: localPoint.x + halfStroke, y: localPoint.y + halfStroke }, obj.width + strokeWidth, obj.height + strokeWidth, radii);
   }
 
   // No fill: hit-test stroke only (within halfStroke of edges)
@@ -150,6 +143,16 @@ function hitTestRectangle(obj: RectangleObject, worldPoint: Vec2, toleranceWorld
   );
 
   return insideOuter && !insideInner;
+}
+
+function pointInRoundedRect(point: Vec2, width: number, height: number, radii: ReturnType<typeof normalizeCornerRadii>): boolean {
+  if (!rectContainsPoint({ x: 0, y: 0, width, height }, point)) return false;
+  const { topLeft, topRight, bottomRight, bottomLeft } = radii;
+  if (point.x < topLeft && point.y < topLeft) return Math.hypot(point.x - topLeft, point.y - topLeft) <= topLeft;
+  if (point.x > width - topRight && point.y < topRight) return Math.hypot(point.x - (width - topRight), point.y - topRight) <= topRight;
+  if (point.x > width - bottomRight && point.y > height - bottomRight) return Math.hypot(point.x - (width - bottomRight), point.y - (height - bottomRight)) <= bottomRight;
+  if (point.x < bottomLeft && point.y > height - bottomLeft) return Math.hypot(point.x - bottomLeft, point.y - (height - bottomLeft)) <= bottomLeft;
+  return true;
 }
 
 /**

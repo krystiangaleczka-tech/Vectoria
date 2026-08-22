@@ -6,6 +6,7 @@ import type {
   Layer,
   ObjectStyle,
   StrokeStyle,
+  CornerRadii,
 } from './types.js';
 import { CURRENT_SCHEMA_VERSION } from './types.js';
 
@@ -37,6 +38,8 @@ export const defaultObjectStyle: ObjectStyle = {
   stroke: null,
   opacity: 1,
 };
+
+export const defaultCornerRadii: CornerRadii = { topLeft: 0, topRight: 0, bottomRight: 0, bottomLeft: 0 };
 
 /**
  * Create a default document with one artboard and one empty layer.

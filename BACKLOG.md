@@ -217,16 +217,16 @@ Wymóg stopniowego rozszerzania artboardu o 10% wynika bezpośrednio z potrzeby 
 
 ## EPIC-04: Kształty podstawowe
 
-- [ ] **SHAPE-001** Zaimplementować Rectangle Tool
-- [ ] **SHAPE-002** Zaimplementować Square z constraintem proporcji
-- [ ] **SHAPE-003** Obsłużyć niezależny radius każdego narożnika
-- [ ] **SHAPE-004** Zaimplementować Rounded Rectangle
-- [ ] **SHAPE-005** Zaimplementować Ellipse Tool
-- [ ] **SHAPE-006** Zaimplementować Circle z constraintem proporcji
+- [x] **SHAPE-001** Zaimplementować Rectangle Tool
+- [x] **SHAPE-002** Zaimplementować Square z constraintem proporcji
+- [x] **SHAPE-003** Obsłużyć niezależny radius każdego narożnika
+- [x] **SHAPE-004** Zaimplementować Rounded Rectangle
+- [x] **SHAPE-005** Zaimplementować Ellipse Tool
+- [x] **SHAPE-006** Zaimplementować Circle z constraintem proporcji
 - [ ] **SHAPE-007** Zaimplementować Arc
 - [ ] **SHAPE-008** Zaimplementować Pie
 - [ ] **SHAPE-009** Zaimplementować Ring/Donut
-- [ ] **SHAPE-010** Zaimplementować Line Tool
+- [x] **SHAPE-010** Zaimplementować Line Tool
 - [ ] **SHAPE-011** Zaimplementować Polyline Tool
 - [ ] **SHAPE-012** Dodać strzałki i konfigurację grotów
 - [ ] **SHAPE-013** Zaimplementować Polygon Tool
