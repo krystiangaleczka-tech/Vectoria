@@ -24,10 +24,10 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     <aside
       data-testid="properties-panel"
       style={{
-        width: '280px',
-        minWidth: '280px',
+        width: '100%',
+        minWidth: 0,
         backgroundColor: 'var(--color-panel)',
-        borderLeft: '1px solid var(--color-border-subtle)',
+        borderLeft: 'none',
         display: 'flex',
         flexDirection: 'column',
         zIndex: 5,

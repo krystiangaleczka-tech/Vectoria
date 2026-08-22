@@ -70,7 +70,7 @@ export const Button: React.FC<ButtonProps> = ({
     <button
       style={{ ...baseStyles, ...variantStyles }}
       disabled={disabled}
-      className={className}
+      className={`vectoria-button ${className}`.trim()}
       {...props}
     >
       {icon}

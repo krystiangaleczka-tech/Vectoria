@@ -4,6 +4,7 @@
   --color-app: #1b1b19;
   --color-workspace: #20201e;
   --color-workspace-deep: #161615;
+  --color-workspace-grid: rgba(255, 255, 255, 0.035);
   --color-artboard: #ffffff;
   --color-artboard-shadow: rgba(0, 0, 0, 0.36);
 
@@ -96,6 +97,7 @@
   --color-app: #f4f4f1;
   --color-workspace: #d9d9d4;
   --color-workspace-deep: #c7c7c1;
+  --color-workspace-grid: rgba(24, 24, 20, 0.08);
   --color-artboard: #ffffff;
   --color-artboard-shadow: rgba(24, 24, 20, 0.22);
 

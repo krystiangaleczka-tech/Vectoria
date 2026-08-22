@@ -16,6 +16,33 @@ test.describe('Vectoria MVP Skeleton', () => {
     await expect(rectangleTool).toBeVisible();
   });
 
+  test('workspace navigation closes menus and layers select document objects', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    await page.getByRole('button', { name: 'Plik' }).click();
+    await expect(page.getByRole('menuitem', { name: 'Eksportuj SVG' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('menuitem', { name: 'Eksportuj SVG' })).toBeHidden();
+
+    const canvas = page.locator('[data-testid="canvas-viewport"]');
+    const canvasBox = await canvas.boundingBox();
+    if (!canvasBox) throw new Error('Canvas not found');
+    await page.getByRole('button', { name: 'Rectangle Tool' }).click();
+    const cx = canvasBox.x + canvasBox.width / 2;
+    const cy = canvasBox.y + canvasBox.height / 2;
+    await page.mouse.move(cx - 35, cy - 35);
+    await page.mouse.down();
+    await page.mouse.move(cx + 35, cy + 35, { steps: 5 });
+    await page.mouse.up();
+
+    await page.getByRole('tab', { name: 'Warstwy' }).click();
+    await expect(page.getByTestId('layers-panel')).toContainText('Rectangle 1');
+    await page.getByRole('button', { name: 'Zaznacz Rectangle 1' }).click();
+    await page.getByRole('tab', { name: 'Właściwości' }).click();
+    await expect(page.getByTestId('properties-panel')).toContainText('Object Properties');
+  });
+
   test('draw rectangle → select → drag → verify position changes → undo → redo', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');

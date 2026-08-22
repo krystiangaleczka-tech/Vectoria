@@ -3,6 +3,9 @@ import type { Vec2 } from '@vectoria/shared';
 
 export interface StatusBarProps {
   toolHint: string;
+  activeTool: string;
+  selectedObjectName: string | null;
+  selectedObjectCount: number;
   cursorWorld: Vec2 | null;
   zoomPercent: number;
   saveStatus: 'saved' | 'saving' | 'error';
@@ -11,6 +14,9 @@ export interface StatusBarProps {
 
 export const StatusBar: React.FC<StatusBarProps> = ({
   toolHint,
+  activeTool,
+  selectedObjectName,
+  selectedObjectCount,
   cursorWorld,
   zoomPercent,
   saveStatus,
@@ -19,6 +25,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
   return (
     <footer
       data-testid="statusbar"
+      className="statusbar"
       style={{
         height: '26px',
         minHeight: '26px',
@@ -35,7 +42,8 @@ export const StatusBar: React.FC<StatusBarProps> = ({
     >
       {/* Left: Tool hint */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-        <span>{toolHint}</span>
+        <span className="status-tool"><strong>{activeTool}</strong> · {toolHint}</span>
+        {selectedObjectName && <span className="status-selection">{selectedObjectName} · {selectedObjectCount} zazn.</span>}
       </div>
 
       {/* Right: Info */}

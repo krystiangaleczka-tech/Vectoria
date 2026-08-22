@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import '@vectoria/ui/tokens/index.css';
+import './app/editor.css';
 import { EditorApp } from './app/EditorApp.js';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

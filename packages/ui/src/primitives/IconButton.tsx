@@ -46,8 +46,9 @@ export const IconButton: React.FC<IconButtonProps> = ({
       style={styles}
       title={title}
       aria-label={label}
+      aria-pressed={active || undefined}
       disabled={disabled}
-      className={className}
+      className={`vectoria-icon-button ${className}`.trim()}
       {...props}
     >
       {icon}

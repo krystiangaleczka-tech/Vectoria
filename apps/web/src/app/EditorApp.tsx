@@ -23,7 +23,8 @@ import {
 import { TopBar } from '../features/topbar/TopBar.js';
 import { ToolRail, type ActiveTool } from '../features/toolbar/ToolRail.js';
 import { CanvasViewport } from '../features/canvas/CanvasViewport.js';
-import { PropertiesPanel } from '../features/panels/PropertiesPanel.js';
+import { ContextualControlBar } from '../features/panels/ContextualControlBar.js';
+import { RightDock } from '../features/panels/RightDock.js';
 import { StatusBar } from '../features/statusbar/StatusBar.js';
 
 function isMacPlatform(): boolean {
@@ -53,6 +54,7 @@ export const EditorApp: React.FC = () => {
   const [doc, setDoc] = useState<DocumentModel | null>(null);
   const [activeTool, setActiveTool] = useState<ActiveTool>('select');
   const [selectedObjectId, setSelectedObjectId] = useState<ObjectId | null>(null);
+  const [rightDockOpen, setRightDockOpen] = useState(true);
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error'>('saved');
   const [cursorWorld, setCursorWorld] = useState<Vec2 | null>(null);
   const [zoomPercent, setZoomPercent] = useState(100);
@@ -165,8 +167,8 @@ export const EditorApp: React.FC = () => {
     if (!activeArtboard) return;
 
     // Viewport approximate size
-    const width = window.innerWidth - 48 - 280; // subtracting ToolRail (48) and Properties (280)
-    const height = window.innerHeight - 40 - 26; // subtracting TopBar (40) and StatusBar (26)
+    const width = window.innerWidth - 56 - 280; // ToolRail + RightDock
+    const height = window.innerHeight - 72 - 40 - 28; // TopBar + ContextualControlBar + StatusBar
 
     camera.fitRect(
       {
@@ -181,8 +183,8 @@ export const EditorApp: React.FC = () => {
   }, [doc, camera]);
 
   const handleZoom100 = useCallback(() => {
-    const width = window.innerWidth - 48 - 280;
-    const height = window.innerHeight - 40 - 26;
+    const width = window.innerWidth - 56 - 280;
+    const height = window.innerHeight - 72 - 40 - 28;
     camera.zoomTo100({ x: Math.max(100, width), y: Math.max(100, height) });
     setZoomPercent(camera.zoomPercent);
   }, [camera]);
@@ -263,11 +265,15 @@ export const EditorApp: React.FC = () => {
       } else if (cmdKey && e.key === '1') {
         e.preventDefault();
         handleFitArtboard();
-      } else if (!cmdKey && !e.shiftKey && !e.altKey) {
-        if (e.key.toLowerCase() === 'v') {
-          setActiveTool('select');
-        } else if (e.key.toLowerCase() === 'r') {
-          setActiveTool('rectangle');
+        } else if (!cmdKey && !e.shiftKey && !e.altKey) {
+          if (e.key.toLowerCase() === 'v') {
+            setActiveTool('select');
+          } else if (e.key.toLowerCase() === 'r') {
+            setActiveTool('rectangle');
+          } else if (e.key.toLowerCase() === 'h') {
+            setActiveTool('hand');
+          } else if (e.key.toLowerCase() === 'z') {
+            setActiveTool('zoom');
         }
       }
     };
@@ -325,6 +331,8 @@ export const EditorApp: React.FC = () => {
         : 'Click object to select · Space+Drag to pan · Wheel to zoom'
       : activeTool === 'rectangle'
       ? 'Drag to draw rectangle · Hold Shift for square'
+      : activeTool === 'zoom'
+      ? 'Click to zoom in · Wheel to zoom at cursor'
       : 'Drag to pan view';
 
   return (
@@ -350,6 +358,8 @@ export const EditorApp: React.FC = () => {
         onFitArtboard={handleFitArtboard}
         onZoom100={handleZoom100}
         onExportSvg={handleExportSvg}
+        rightDockOpen={rightDockOpen}
+        onToggleRightDock={() => setRightDockOpen((open) => !open)}
       />
 
       {bootstrapState.status === 'recovery-error' && (
@@ -359,36 +369,55 @@ export const EditorApp: React.FC = () => {
         />
       )}
 
+      <ContextualControlBar
+        document={doc}
+        activeTool={activeTool}
+        selectedObjectId={selectedObjectId}
+        onUpdatePosition={handleUpdatePosition}
+        onUpdateDimensions={handleUpdateDimensions}
+        onUpdateFill={handleUpdateFill}
+      />
+
       {/* Main Workspace Area */}
-      <div style={{ display: 'flex', flex: 1, height: 'calc(100vh - 66px)', overflow: 'hidden' }}>
+      <div className="editor-main-area">
         {/* Left Tool Rail */}
         <ToolRail activeTool={activeTool} onSelectTool={setActiveTool} />
 
         {/* Center Canvas */}
-        <CanvasViewport
-          document={doc}
-          activeTool={activeTool}
-          selectedObjectId={selectedObjectId}
-          camera={camera}
-          onExecuteCommand={handleExecuteCommand}
-          onSelectObject={setSelectedObjectId}
-          onCursorMove={setCursorWorld}
-          onZoomChange={setZoomPercent}
-        />
+        <div className="canvas-workspace" data-testid="canvas-workspace">
+          <div className="ruler-corner" aria-hidden="true" />
+          <div className="ruler ruler-horizontal" aria-hidden="true"><span>0</span><span>100</span><span>200</span><span>300</span><span>400</span><span>500</span></div>
+          <div className="ruler ruler-vertical" aria-hidden="true"><span>0</span><span>100</span><span>200</span><span>300</span><span>400</span></div>
+          <CanvasViewport
+            document={doc}
+            activeTool={activeTool}
+            selectedObjectId={selectedObjectId}
+            camera={camera}
+            onExecuteCommand={handleExecuteCommand}
+            onSelectObject={setSelectedObjectId}
+            onCursorMove={setCursorWorld}
+            onZoomChange={setZoomPercent}
+          />
+        </div>
 
-        {/* Right Properties Panel */}
-        <PropertiesPanel
+        <RightDock
           document={doc}
           selectedObjectId={selectedObjectId}
+          historyEntries={history.historyEntries}
+          onSelectObject={setSelectedObjectId}
           onUpdatePosition={handleUpdatePosition}
           onUpdateDimensions={handleUpdateDimensions}
           onUpdateFill={handleUpdateFill}
+          open={rightDockOpen}
         />
       </div>
 
       {/* Status Bar */}
       <StatusBar
         toolHint={toolHint}
+        activeTool={activeTool === 'select' ? 'Select' : activeTool === 'rectangle' ? 'Rectangle' : activeTool === 'hand' ? 'Hand' : 'Zoom'}
+        selectedObjectName={selectedObjectId ? doc.objects[selectedObjectId]?.name ?? null : null}
+        selectedObjectCount={selectedObjectId ? 1 : 0}
         cursorWorld={cursorWorld}
         zoomPercent={zoomPercent}
         saveStatus={saveStatus}

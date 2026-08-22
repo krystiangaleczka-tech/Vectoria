@@ -42,6 +42,11 @@ export class CommandHistory {
     return cmd?.description ?? null;
   }
 
+  /** Commands already applied, oldest first. Used by read-only history views. */
+  get historyEntries(): readonly Command[] {
+    return [...this.undoStack];
+  }
+
   set onChange(callback: (() => void) | null) {
     this._onChange = callback;
   }

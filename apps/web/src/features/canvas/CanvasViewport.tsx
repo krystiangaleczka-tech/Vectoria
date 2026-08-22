@@ -219,6 +219,11 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
 
     if (e.button !== 0) return; // Left click only from here
 
+    if (activeTool === 'zoom') {
+      camera.zoomAtPoint(1.25, screenPos);
+      return;
+    }
+
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
 
     if (activeTool === 'rectangle') {

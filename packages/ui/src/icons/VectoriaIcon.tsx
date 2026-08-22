@@ -20,7 +20,15 @@ export type VectoriaIconName =
   | 'check'
   | 'chevronDown'
   | 'plus'
-  | 'trash';
+  | 'trash'
+  | 'directSelect'
+  | 'text'
+  | 'layers'
+  | 'history'
+  | 'menu'
+  | 'grid'
+  | 'more'
+  | 'sliders';
 
 export interface VectoriaIconProps {
   name: VectoriaIconName;
@@ -209,6 +217,73 @@ export const VectoriaIcon: React.FC<VectoriaIconProps> = ({
         <svg {...iconProps}>
           <polyline points="3 6 5 6 21 6" />
           <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+        </svg>
+      );
+
+    case 'directSelect':
+      return (
+        <svg {...iconProps}>
+          <path d="M5 3l5.5 14 2-5.5L18 9.5 5 3z" />
+          <path d="M12.5 12.5L17 19" />
+        </svg>
+      );
+
+    case 'text':
+      return (
+        <svg {...iconProps}>
+          <path d="M4 5V3h16v2" />
+          <path d="M12 3v18M8 21h8" />
+        </svg>
+      );
+
+    case 'layers':
+      return (
+        <svg {...iconProps}>
+          <path d="M12 3 3 8l9 5 9-5-9-5z" />
+          <path d="m3 12 9 5 9-5M3 16l9 5 9-5" />
+        </svg>
+      );
+
+    case 'history':
+      return (
+        <svg {...iconProps}>
+          <path d="M3 12a9 9 0 1 0 3-6.7" />
+          <path d="M3 4v6h6M12 7v5l3 2" />
+        </svg>
+      );
+
+    case 'menu':
+      return (
+        <svg {...iconProps}>
+          <path d="M4 6h16M4 12h16M4 18h16" />
+        </svg>
+      );
+
+    case 'grid':
+      return (
+        <svg {...iconProps}>
+          <rect x="4" y="4" width="6" height="6" />
+          <rect x="14" y="4" width="6" height="6" />
+          <rect x="4" y="14" width="6" height="6" />
+          <rect x="14" y="14" width="6" height="6" />
+        </svg>
+      );
+
+    case 'more':
+      return (
+        <svg {...iconProps}>
+          <circle cx="5" cy="12" r="1" fill="currentColor" />
+          <circle cx="12" cy="12" r="1" fill="currentColor" />
+          <circle cx="19" cy="12" r="1" fill="currentColor" />
+        </svg>
+      );
+
+    case 'sliders':
+      return (
+        <svg {...iconProps}>
+          <line x1="4" y1="6" x2="20" y2="6" /><circle cx="9" cy="6" r="2" fill="currentColor" />
+          <line x1="4" y1="12" x2="20" y2="12" /><circle cx="15" cy="12" r="2" fill="currentColor" />
+          <line x1="4" y1="18" x2="20" y2="18" /><circle cx="11" cy="18" r="2" fill="currentColor" />
         </svg>
       );
 

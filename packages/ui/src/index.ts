@@ -3,3 +3,4 @@ export * from './primitives/Button.js';
 export * from './primitives/IconButton.js';
 export * from './primitives/NumberInput.js';
 export * from './primitives/ColorControl.js';
+export * from './primitives/Tooltip.js';

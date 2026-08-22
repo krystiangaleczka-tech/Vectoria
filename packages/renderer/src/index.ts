@@ -80,6 +80,24 @@ export function renderBackground(
     .getPropertyValue('--color-workspace').trim() || '#20201e';
   ctx.fillRect(0, 0, canvasWidth / dpr, canvasHeight / dpr);
 
+  // Presentation-only workspace grid. It is drawn before the artboard and is
+  // never part of the document scene or SVG export.
+  const gridColor = getComputedStyle(document.documentElement)
+    .getPropertyValue('--color-workspace-grid').trim() || 'rgba(255, 255, 255, 0.035)';
+  const gridSize = Math.max(16, 40 * camera.zoom);
+  ctx.strokeStyle = gridColor;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let x = camera.pan.x % gridSize; x < canvasWidth / dpr; x += gridSize) {
+    ctx.moveTo(Math.round(x) + 0.5, 0);
+    ctx.lineTo(Math.round(x) + 0.5, canvasHeight / dpr);
+  }
+  for (let y = camera.pan.y % gridSize; y < canvasHeight / dpr; y += gridSize) {
+    ctx.moveTo(0, Math.round(y) + 0.5);
+    ctx.lineTo(canvasWidth / dpr, Math.round(y) + 0.5);
+  }
+  ctx.stroke();
+
   // Artboard shadow
   const screenPos = camera.worldToScreen({ x: artboard.x, y: artboard.y });
   const screenW = artboard.width * camera.zoom;
