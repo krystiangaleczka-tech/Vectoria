@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 
 export interface NumberInputProps {
   label: string;
@@ -29,13 +29,13 @@ export const NumberInput: React.FC<NumberInputProps> = ({
   const [isFocused, setIsFocused] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const prevValueRef = useRef(value);
-  if (value !== prevValueRef.current) {
-    prevValueRef.current = value;
+  // Sync displayed text with external value changes (e.g., after drag, undo/redo)
+  // Only sync when input is not focused to avoid overwriting user's manual edit
+  useEffect(() => {
     if (!isFocused) {
       setText(value.toFixed(decimals));
     }
-  }
+  }, [value, decimals, isFocused]);
 
   const commit = (newText: string) => {
     const parsed = parseFloat(newText);

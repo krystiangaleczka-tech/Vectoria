@@ -1,0 +1,44 @@
+diff --git a/packages/ui/package.json b/packages/ui/package.json
+index 926a099..4a86a81 100644
+--- a/packages/ui/package.json
++++ b/packages/ui/package.json
+@@ -18,8 +18,11 @@
+     "react-dom": "^18.0.0 || ^19.0.0"
+   },
+   "devDependencies": {
++    "@testing-library/jest-dom": "^7.0.1",
++    "@testing-library/react": "^16.3.2",
+     "@types/react": "^19.0.10",
+     "@types/react-dom": "^19.0.4",
++    "jsdom": "^30.0.1",
+     "react": "^19.0.0",
+     "react-dom": "^19.0.0"
+   }
+diff --git a/packages/ui/src/primitives/NumberInput.tsx b/packages/ui/src/primitives/NumberInput.tsx
+index 2cbf55a..64b7593 100644
+--- a/packages/ui/src/primitives/NumberInput.tsx
++++ b/packages/ui/src/primitives/NumberInput.tsx
+@@ -1,4 +1,4 @@
+-import React, { useState, useRef } from 'react';
++import React, { useState, useRef, useEffect } from 'react';
+ 
+ export interface NumberInputProps {
+   label: string;
+@@ -29,13 +29,13 @@ export const NumberInput: React.FC<NumberInputProps> = ({
+   const [isFocused, setIsFocused] = useState(false);
+   const inputRef = useRef<HTMLInputElement>(null);
+ 
+-  const prevValueRef = useRef(value);
+-  if (value !== prevValueRef.current) {
+-    prevValueRef.current = value;
++  // Sync displayed text with external value changes (e.g., after drag, undo/redo)
++  // Only sync when input is not focused to avoid overwriting user's manual edit
++  useEffect(() => {
+     if (!isFocused) {
+       setText(value.toFixed(decimals));
+     }
+-  }
++  }, [value, decimals, isFocused]);
+ 
+   const commit = (newText: string) => {
+     const parsed = parseFloat(newText);
