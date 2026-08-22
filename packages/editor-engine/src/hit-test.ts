@@ -5,6 +5,19 @@ import { getTransformMatrix, getObjectBounds } from '@vectoria/core';
 import { mat3Inverse, mat3TransformPoint } from '@vectoria/shared';
 import type { Rect } from '@vectoria/shared';
 
+export interface HitTestOptions {
+  /** Screen-space tolerance converted to world units using zoom. */
+  readonly tolerancePx?: number;
+  readonly zoom?: number;
+  readonly visibleWorldRect?: Rect;
+}
+
+export interface HitTestResult {
+  readonly objectId: ObjectId;
+  readonly part: 'fill' | 'stroke' | 'bounds' | 'handle' | 'node';
+  readonly distancePx: number;
+}
+
 /**
  * Hit-test a point in world space against all visible, unlocked objects.
  * Returns the topmost hit object ID, or null.
@@ -31,7 +44,7 @@ export function hitTest(
         if (bounds.x > visibleWorldRect.x + visibleWorldRect.width || bounds.x + bounds.width < visibleWorldRect.x || bounds.y > visibleWorldRect.y + visibleWorldRect.height || bounds.y + bounds.height < visibleWorldRect.y) continue;
       }
 
-      if (hitTestObject(obj, worldPoint)) {
+      if (hitTestObject(obj, worldPoint, 4)) {
         return objectId;
       }
     }
@@ -40,19 +53,50 @@ export function hitTest(
   return null;
 }
 
+/** Return all hit candidates in deterministic top-most-first order. */
+export function hitTestCandidates(doc: DocumentModel, worldPoint: Vec2, options: HitTestOptions = {}): HitTestResult[] {
+  const toleranceWorld = (options.tolerancePx ?? 6) / Math.max(options.zoom ?? 1, 0.000001);
+  const results: HitTestResult[] = [];
+  for (let li = doc.layerIds.length - 1; li >= 0; li -= 1) {
+    const layer = doc.layers[doc.layerIds[li]!];
+    if (!layer || !layer.visible || layer.locked) continue;
+    for (let oi = layer.objectIds.length - 1; oi >= 0; oi -= 1) {
+      const object = doc.objects[layer.objectIds[oi]!];
+      if (!object || !object.visible || object.locked) continue;
+      if (options.visibleWorldRect && !rectsOverlap(getObjectBounds(object), options.visibleWorldRect)) continue;
+      if (!hitTestObject(object, worldPoint, toleranceWorld)) continue;
+      results.push({
+        objectId: object.id,
+        part: object.style.fill.type === 'none' ? 'stroke' : 'fill',
+        distancePx: 0,
+      });
+    }
+  }
+  return results;
+}
+
+/** Hit-test with the result contract used by selection tools. */
+export function hitTestDetailed(doc: DocumentModel, worldPoint: Vec2, options: HitTestOptions = {}): HitTestResult[] {
+  return hitTestCandidates(doc, worldPoint, options);
+}
+
+function rectsOverlap(a: Rect, b: Rect): boolean {
+  return a.x <= b.x + b.width && a.x + a.width >= b.x && a.y <= b.y + b.height && a.y + a.height >= b.y;
+}
+
 /**
  * Hit-test a single object.
  */
-function hitTestObject(obj: SceneObject, worldPoint: Vec2): boolean {
+function hitTestObject(obj: SceneObject, worldPoint: Vec2, toleranceWorld: number): boolean {
   switch (obj.type) {
     case 'rectangle':
-      return hitTestRectangle(obj, worldPoint);
+      return hitTestRectangle(obj, worldPoint, toleranceWorld);
     case 'ellipse':
-      return hitTestEllipse(obj, worldPoint);
+      return hitTestEllipse(obj, worldPoint, toleranceWorld);
     case 'line':
-      return hitTestLine(obj, worldPoint);
+      return hitTestLine(obj, worldPoint, toleranceWorld);
     case 'path':
-      return hitTestPath(obj, worldPoint);
+      return hitTestPath(obj, worldPoint, toleranceWorld);
     default:
       return false;
   }
@@ -64,7 +108,7 @@ function hitTestObject(obj: SceneObject, worldPoint: Vec2): boolean {
  *
  * For "No Fill" objects, hit-test the stroke only (within strokeWidth/2 of edges).
  */
-function hitTestRectangle(obj: RectangleObject, worldPoint: Vec2): boolean {
+function hitTestRectangle(obj: RectangleObject, worldPoint: Vec2, toleranceWorld: number): boolean {
   const matrix = getTransformMatrix(obj.transform);
   const inv = mat3Inverse(matrix);
   if (!inv) return false;
@@ -89,7 +133,7 @@ function hitTestRectangle(obj: RectangleObject, worldPoint: Vec2): boolean {
   }
 
   // No fill: hit-test stroke only (within halfStroke of edges)
-  const tolerance = Math.max(halfStroke, 3); // minimum 3px tolerance
+  const tolerance = Math.max(halfStroke, toleranceWorld);
 
   const insideOuter = (
     localPoint.x >= -tolerance &&
@@ -114,7 +158,7 @@ function hitTestRectangle(obj: RectangleObject, worldPoint: Vec2): boolean {
  *
  * For "No Fill" objects, hit-test the stroke ring only.
  */
-function hitTestEllipse(obj: EllipseObject, worldPoint: Vec2): boolean {
+function hitTestEllipse(obj: EllipseObject, worldPoint: Vec2, toleranceWorld: number): boolean {
   const inv = mat3Inverse(getTransformMatrix(obj.transform));
   if (!inv) return false;
 
@@ -129,13 +173,14 @@ function hitTestEllipse(obj: EllipseObject, worldPoint: Vec2): boolean {
   const hasFill = obj.style.fill.type !== 'none';
   const strokeWidth = obj.style.stroke?.width ?? 0;
 
-  const normalized =
-    ((local.x - cx) ** 2) / (rx ** 2) + ((local.y - cy) ** 2) / (ry ** 2);
-
-  if (hasFill) return normalized <= 1;
+  if (hasFill) {
+    const expandedRx = rx + toleranceWorld;
+    const expandedRy = ry + toleranceWorld;
+    return ((local.x - cx) ** 2) / (expandedRx ** 2) + ((local.y - cy) ** 2) / (expandedRy ** 2) <= 1;
+  }
 
   // No fill: hit-test stroke ring
-  const halfStroke = strokeWidth / 2;
+  const halfStroke = Math.max(strokeWidth / 2, toleranceWorld);
   const outerRx = rx + halfStroke;
   const outerRy = ry + halfStroke;
   const innerRx = Math.max(rx - halfStroke, 0);
@@ -151,13 +196,13 @@ function hitTestEllipse(obj: EllipseObject, worldPoint: Vec2): boolean {
  * Hit-test a line: distance from point to line segment (0,0)→endPoint
  * must be within max(strokeWidth/2, 4px) tolerance.
  */
-function hitTestLine(obj: LineObject, worldPoint: Vec2): boolean {
+function hitTestLine(obj: LineObject, worldPoint: Vec2, toleranceWorld: number): boolean {
   const inv = mat3Inverse(getTransformMatrix(obj.transform));
   if (!inv) return false;
 
   const local = mat3TransformPoint(inv, worldPoint);
   const strokeWidth = obj.style.stroke?.width ?? 1;
-  const tolerance = Math.max(strokeWidth / 2, 4); // min 4px tolerance for easy clicking
+  const tolerance = Math.max(strokeWidth / 2, toleranceWorld);
 
   const distance = distancePointToSegment(local, { x: 0, y: 0 }, obj.endPoint);
   return distance <= tolerance;
@@ -183,7 +228,7 @@ function distancePointToSegment(p: Vec2, a: Vec2, b: Vec2): number {
  * Bézier segments are sampled at 16 points per segment for accurate
  * hit-testing that matches the rendered curve.
  */
-function hitTestPath(obj: PathObject, worldPoint: Vec2): boolean {
+function hitTestPath(obj: PathObject, worldPoint: Vec2, toleranceWorld: number): boolean {
   const inv = mat3Inverse(getTransformMatrix(obj.transform));
   if (!inv) return false;
 
@@ -198,7 +243,7 @@ function hitTestPath(obj: PathObject, worldPoint: Vec2): boolean {
   }
 
   const strokeWidth = obj.style.stroke?.width ?? 1;
-  const tolerance = Math.max(strokeWidth / 2, 4);
+  const tolerance = Math.max(strokeWidth / 2, toleranceWorld);
 
   for (let i = 0; i < flatPoints.length - (obj.closed ? 0 : 1); i++) {
     const a = flatPoints[i]!;

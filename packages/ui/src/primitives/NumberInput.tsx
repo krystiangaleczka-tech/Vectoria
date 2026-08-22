@@ -107,6 +107,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
         type="text"
         value={text}
         disabled={disabled}
+        aria-label={`${label}${unit ? ` (${unit})` : ''}`}
         onChange={(e) => setText(e.target.value)}
         onFocus={() => setIsFocused(true)}
         onBlur={() => {

@@ -174,6 +174,8 @@ Wymóg stopniowego rozszerzania artboardu o 10% wynika bezpośrednio z potrzeby 
 
 ## EPIC-03: Zaznaczanie i transformacje
 
+> Implementacja Issue #6 dostarcza Skeleton MVP: selection state wieloelementowy, Select/Direct Select, top-most hit-test z cullingiem i tolerancją screen-space, Shift+click, marquee touching policy, move/resize/rotate, Delete, nudge, Transform Properties oraz visibility/lock feedback. Lasso, grupy, pivot/skew/flip UI, align/distribute, z-order UI, repeat transform i smart distance pozostają jawnie w zakresie 0.1.
+
 - [ ] **SEL-001** Zaimplementować Select/Pick Tool
 - [ ] **SEL-002** Zaznaczać pojedynczy obiekt
 - [ ] **SEL-003** Zaznaczać wiele obiektów z `Shift`

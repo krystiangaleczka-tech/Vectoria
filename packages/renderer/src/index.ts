@@ -2,6 +2,7 @@ import type { Camera } from '@vectoria/editor-engine';
 import type { Vec2 } from '@vectoria/shared';
 import type { DocumentModel, Artboard, RectangleObject, EllipseObject, LineObject, PathObject, ObjectId, Transform2D, LinearGradientFill } from '@vectoria/core';
 import { getTransformMatrix, getObjectBounds, rectsIntersect } from '@vectoria/core';
+import { mat3TransformPoint } from '@vectoria/shared';
 export interface GridSettings { visible: boolean; size: number; subdivisions: number }
 
 interface Line { start: Vec2; end: Vec2 }
@@ -462,6 +463,8 @@ export function renderOverlay(
   canvasHeight: number,
   options?: {
     previewTransforms?: ReadonlyMap<ObjectId, Transform2D>;
+    nodeSelectionIds?: readonly string[];
+    marquee?: { start: Vec2; end: Vec2 };
   },
 ): void {
   const dpr = window.devicePixelRatio || 1;
@@ -470,9 +473,45 @@ export function renderOverlay(
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, canvasWidth / dpr, canvasHeight / dpr);
 
+  if (options?.marquee) {
+    const start = camera.worldToScreen(options.marquee.start);
+    const end = camera.worldToScreen(options.marquee.end);
+    const x = Math.min(start.x, end.x);
+    const y = Math.min(start.y, end.y);
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-selection-fill').trim() || 'rgba(92, 174, 255, 0.13)';
+    ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-selection').trim() || '#5caeff';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 3]);
+    ctx.fillRect(x, y, Math.abs(end.x - start.x), Math.abs(end.y - start.y));
+    ctx.strokeRect(x + 0.5, y + 0.5, Math.abs(end.x - start.x), Math.abs(end.y - start.y));
+    ctx.setLineDash([]);
+  }
+
   if (selectedIds.size === 0) {
     ctx.restore();
     return;
+  }
+
+  if (selectedIds.size > 1) {
+    const bounds = [...selectedIds].map((id) => doc.objects[id]).filter(Boolean).map((object) => getObjectBounds(object!));
+    if (bounds.length > 0) {
+      const minX = Math.min(...bounds.map((bound) => bound.x));
+      const minY = Math.min(...bounds.map((bound) => bound.y));
+      const maxX = Math.max(...bounds.map((bound) => bound.x + bound.width));
+      const maxY = Math.max(...bounds.map((bound) => bound.y + bound.height));
+      const topLeft = camera.worldToScreen({ x: minX, y: minY });
+      const bottomRight = camera.worldToScreen({ x: maxX, y: maxY });
+      ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-selection').trim() || '#5caeff';
+      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-selection-fill').trim() || 'rgba(92, 174, 255, 0.13)';
+      ctx.lineWidth = 1.5;
+      ctx.fillRect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
+      ctx.strokeRect(topLeft.x + 0.5, topLeft.y + 0.5, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
+      drawScreenHandles(ctx, camera, [topLeft, { x: bottomRight.x, y: topLeft.y }, bottomRight, { x: topLeft.x, y: bottomRight.y }]);
+    }
+  }
+
+  if (options?.nodeSelectionIds && options.nodeSelectionIds.length > 0) {
+    renderNodeSelection(ctx, camera, doc, options.nodeSelectionIds);
   }
 
   // Render selection outline for each selected object
@@ -532,6 +571,7 @@ function renderRectangleSelectionOutline(
     .getPropertyValue('--color-selection-fill').trim() || 'rgba(92, 174, 255, 0.13)';
   ctx.fillRect(0, 0, obj.width, obj.height);
   drawResizeHandles(ctx, camera, [{ x: 0, y: 0 }, { x: obj.width, y: 0 }, { x: obj.width, y: obj.height }, { x: 0, y: obj.height }]);
+  drawRotationHandle(ctx, camera, obj.width / 2, 0);
 
   ctx.restore();
 }
@@ -561,6 +601,7 @@ function renderEllipseSelectionOutline(
   ctx.ellipse(rx, ry, rx, ry, 0, 0, Math.PI * 2);
   ctx.stroke();
   drawResizeHandles(ctx, camera, [{ x: 0, y: 0 }, { x: obj.width, y: 0 }, { x: obj.width, y: obj.height }, { x: 0, y: obj.height }]);
+  drawRotationHandle(ctx, camera, obj.width / 2, 0);
 
   ctx.restore();
 }
@@ -634,5 +675,60 @@ function drawResizeHandles(ctx: CanvasRenderingContext2D, camera: Camera, points
   for (const point of points) {
     ctx.fillRect(point.x - size / 2, point.y - size / 2, size, size);
     ctx.strokeRect(point.x - size / 2, point.y - size / 2, size, size);
+  }
+}
+
+function drawRotationHandle(ctx: CanvasRenderingContext2D, camera: Camera, x: number, y: number): void {
+  const offset = 20 / camera.zoom;
+  ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-selection').trim() || '#5caeff';
+  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-node').trim() || '#ffffff';
+  ctx.lineWidth = 1 / camera.zoom;
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.lineTo(x, y - offset);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(x, y - offset, 4 / camera.zoom, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+}
+
+function drawScreenHandles(ctx: CanvasRenderingContext2D, camera: Camera, points: readonly Vec2[]): void {
+  const size = 8;
+  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-node').trim() || '#ffffff';
+  ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-selection').trim() || '#5caeff';
+  ctx.lineWidth = 1;
+  for (const point of points) {
+    ctx.fillRect(point.x - size / 2, point.y - size / 2, size, size);
+    ctx.strokeRect(point.x - size / 2, point.y - size / 2, size, size);
+  }
+  void camera;
+}
+
+function renderNodeSelection(ctx: CanvasRenderingContext2D, camera: Camera, doc: DocumentModel, nodeIds: readonly string[]): void {
+  const selected = new Set(nodeIds);
+  for (const object of Object.values(doc.objects)) {
+    if (object.type !== 'path' || !object.visible) continue;
+    const matrix = getTransformMatrix(object.transform);
+    for (let index = 0; index < object.nodes.length; index += 1) {
+      const node = object.nodes[index]!;
+      const point = camera.worldToScreen(mat3TransformPoint(matrix, node.point));
+      const selectedNode = selected.has(`${object.id}:${index}`);
+      ctx.fillStyle = selectedNode
+        ? getComputedStyle(document.documentElement).getPropertyValue('--color-node-selected').trim() || '#5caeff'
+        : getComputedStyle(document.documentElement).getPropertyValue('--color-node').trim() || '#ffffff';
+      ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-selection').trim() || '#5caeff';
+      ctx.lineWidth = 1;
+      ctx.fillRect(point.x - 3.5, point.y - 3.5, 7, 7);
+      ctx.strokeRect(point.x - 3.5, point.y - 3.5, 7, 7);
+      if (selectedNode && node.outHandle) {
+        const endpoint = camera.worldToScreen(mat3TransformPoint(matrix, node.outHandle));
+        ctx.globalAlpha = 0.7;
+        ctx.beginPath(); ctx.moveTo(point.x, point.y); ctx.lineTo(endpoint.x, endpoint.y); ctx.stroke();
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-node').trim() || '#ffffff';
+        ctx.beginPath(); ctx.arc(endpoint.x, endpoint.y, 3, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      }
+    }
   }
 }

@@ -127,6 +127,14 @@ export interface PathObject extends SceneObjectBase {
 
 export type SceneObject = RectangleObject | EllipseObject | LineObject | PathObject;
 
+// Selection stays multi-object capable even while the MVP UI exposes one
+// active editing context at a time.
+export interface SelectionState {
+  objectIds: ObjectId[];
+  nodeIds: string[];
+  readonly mode: 'object' | 'node';
+}
+
 // ─── Layer ────────────────────────────────────────────────────────────────────
 
 export interface Layer {

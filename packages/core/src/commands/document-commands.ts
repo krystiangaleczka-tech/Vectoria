@@ -15,6 +15,8 @@ import type {
   GridSettings,
   SnapSettings,
 } from '../model/types.js';
+import { isValidTransform } from '../model/transform.js';
+import { getObjectBounds } from '../model/bounds.js';
 
 // ─── CreateObjectsCommand ─────────────────────────────────────────────────────
 
@@ -36,7 +38,7 @@ export class CreateObjectsCommand implements Command {
     const newObjects = { ...doc.objects };
     const newLayers = { ...doc.layers };
     const layer = newLayers[this.targetLayerId];
-    if (!layer) return doc;
+    if (!layer || layer.locked) return doc;
 
     const newObjectIds = [...layer.objectIds];
 
@@ -133,6 +135,8 @@ export class DeleteObjectsCommand implements Command {
       };
     }
 
+    if (this.deletedInfos.length === 0) return doc;
+
     return {
       ...doc,
       objects: newObjects,
@@ -186,18 +190,22 @@ export class TransformObjectsCommand implements Command {
 
   execute(doc: DocumentModel): DocumentModel {
     const newObjects = { ...doc.objects };
+    let changed = false;
 
     for (const objectId of this.objectIds) {
       const obj = doc.objects[objectId];
-      if (!obj) continue;
+      if (!obj || obj.locked) continue;
 
       this.previousTransforms.set(objectId, obj.transform);
 
       const newTransform = this.newTransforms.get(objectId);
-      if (!newTransform) continue;
+      if (!newTransform || !isValidTransform(newTransform)) continue;
 
       newObjects[objectId] = { ...obj, transform: newTransform };
+      changed = true;
     }
+
+    if (!changed) return doc;
 
     return {
       ...doc,
@@ -227,6 +235,209 @@ export class TransformObjectsCommand implements Command {
   }
 }
 
+/** Update one object's transform through the same command contract as a drag. */
+export class UpdateObjectTransformCommand extends TransformObjectsCommand {
+  constructor(objectId: ObjectId, transform: Transform2D) {
+    super([objectId], new Map([[objectId, transform]]));
+  }
+}
+
+export type ReorderDirection = 'front' | 'back' | 'forward' | 'backward';
+
+/** Reorder selected objects inside their layers without changing ownership. */
+export class ReorderObjectsCommand implements Command {
+  readonly type = 'ReorderObjects';
+  readonly description: string;
+  private previous: Readonly<Record<LayerId, readonly ObjectId[]>> | null = null;
+
+  constructor(private readonly objectIds: readonly ObjectId[], private readonly direction: ReorderDirection) {
+    this.description = direction === 'front' ? 'Bring to front' : direction === 'back' ? 'Send to back' : direction === 'forward' ? 'Bring forward' : 'Send backward';
+  }
+
+  execute(doc: DocumentModel): DocumentModel {
+    const selected = new Set(this.objectIds);
+    const nextLayers = { ...doc.layers };
+    const previous: Record<LayerId, readonly ObjectId[]> = {};
+    let changed = false;
+    for (const layerId of doc.layerIds) {
+      const layer = doc.layers[layerId];
+      if (!layer) continue;
+      const ids = layer.objectIds.filter((id) => selected.has(id));
+      if (ids.length === 0) continue;
+      previous[layerId] = layer.objectIds;
+      let next = [...layer.objectIds];
+      if (this.direction === 'front' || this.direction === 'back') {
+        const rest = next.filter((id) => !selected.has(id));
+        next = this.direction === 'front' ? [...rest, ...ids] : [...ids, ...rest];
+      } else {
+        const step = this.direction === 'forward' ? 1 : -1;
+        const order = this.direction === 'forward' ? [...next].reverse() : [...next];
+        for (const id of order) {
+          if (!selected.has(id)) continue;
+          const index = next.indexOf(id);
+          const target = Math.max(0, Math.min(next.length - 1, index + step));
+          if (target === index || selected.has(next[target]!)) continue;
+          [next[index], next[target]] = [next[target]!, next[index]!];
+        }
+      }
+      if (next.some((id, index) => id !== layer.objectIds[index])) changed = true;
+      nextLayers[layerId] = { ...layer, objectIds: next };
+    }
+    if (!changed) return doc;
+    this.previous = previous;
+    return { ...doc, layers: nextLayers, updatedAt: new Date().toISOString() };
+  }
+
+  undo(doc: DocumentModel): DocumentModel {
+    if (!this.previous) return doc;
+    const layers = { ...doc.layers };
+    for (const [layerId, objectIds] of Object.entries(this.previous)) {
+      const layer = layers[layerId];
+      if (layer) layers[layerId] = { ...layer, objectIds };
+    }
+    return { ...doc, layers, updatedAt: new Date().toISOString() };
+  }
+}
+
+/** Duplicate objects with fresh IDs and a deterministic world-space offset. */
+export class DuplicateObjectsCommand implements Command {
+  readonly type = 'DuplicateObjects';
+  readonly description = 'Duplicate objects';
+  private createdIds: ObjectId[] = [];
+
+  constructor(private readonly objectIds: readonly ObjectId[], private readonly offset: Vec2 = { x: 20, y: 20 }) {}
+
+  execute(doc: DocumentModel): DocumentModel {
+    const objects = { ...doc.objects };
+    const layers = { ...doc.layers };
+    this.createdIds = [];
+    for (const sourceId of this.objectIds) {
+      const source = doc.objects[sourceId];
+      const layer = source ? layers[source.layerId] : undefined;
+      if (!source || source.locked || !layer || layer.locked) continue;
+      const id = generateId();
+      this.createdIds.push(id);
+      objects[id] = { ...structuredClone(source), id, name: `${source.name} copy`, transform: { ...source.transform, position: { x: source.transform.position.x + this.offset.x, y: source.transform.position.y + this.offset.y } } };
+      layers[source.layerId] = { ...layer, objectIds: [...layers[source.layerId]!.objectIds, id] };
+    }
+    if (this.createdIds.length === 0) return doc;
+    return { ...doc, objects, layers, updatedAt: new Date().toISOString() };
+  }
+
+  undo(doc: DocumentModel): DocumentModel {
+    if (this.createdIds.length === 0) return doc;
+    const created = new Set(this.createdIds);
+    const objects = { ...doc.objects };
+    for (const id of this.createdIds) delete objects[id];
+    const layers = Object.fromEntries(Object.entries(doc.layers).map(([id, layer]) => [id, { ...layer, objectIds: layer.objectIds.filter((objectId) => !created.has(objectId)) }])) as DocumentModel['layers'];
+    return { ...doc, objects, layers, updatedAt: new Date().toISOString() };
+  }
+}
+
+export type Alignment = 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom';
+
+/** Align objects to selection bounds or the active artboard. */
+export class AlignObjectsCommand implements Command {
+  readonly type = 'AlignObjects';
+  readonly description = 'Align objects';
+  private previous = new Map<ObjectId, Transform2D>();
+
+  constructor(private readonly objectIds: readonly ObjectId[], private readonly alignment: Alignment, private readonly target: 'selection' | 'artboard' = 'selection') {}
+
+  execute(doc: DocumentModel): DocumentModel {
+    const objects = { ...doc.objects };
+    const selected = this.objectIds.map((id) => doc.objects[id]).filter((object): object is SceneObject => Boolean(object));
+    if (selected.length === 0) return doc;
+    const bounds = selected.map(getObjectBounds);
+    const artboard = doc.artboards[doc.activeArtboardId];
+    const target = this.target === 'artboard' && artboard ? { x: artboard.x, y: artboard.y, width: artboard.width, height: artboard.height } : {
+      x: Math.min(...bounds.map((bound) => bound.x)), y: Math.min(...bounds.map((bound) => bound.y)),
+      width: Math.max(...bounds.map((bound) => bound.x + bound.width)) - Math.min(...bounds.map((bound) => bound.x)),
+      height: Math.max(...bounds.map((bound) => bound.y + bound.height)) - Math.min(...bounds.map((bound) => bound.y)),
+    };
+    let changed = false;
+    selected.forEach((object, index) => {
+      if (object.locked) return;
+      const bound = bounds[index]!;
+      const nextX = this.alignment === 'left' ? target.x : this.alignment === 'right' ? target.x + target.width - bound.width : this.alignment === 'center' ? target.x + (target.width - bound.width) / 2 : bound.x;
+      const nextY = this.alignment === 'top' ? target.y : this.alignment === 'bottom' ? target.y + target.height - bound.height : this.alignment === 'middle' ? target.y + (target.height - bound.height) / 2 : bound.y;
+      const transform = { ...object.transform, position: { x: object.transform.position.x + nextX - bound.x, y: object.transform.position.y + nextY - bound.y } };
+      if (!isValidTransform(transform)) return;
+      this.previous.set(object.id, object.transform);
+      objects[object.id] = { ...object, transform };
+      changed = changed || transform.position.x !== object.transform.position.x || transform.position.y !== object.transform.position.y;
+    });
+    return changed ? { ...doc, objects, updatedAt: new Date().toISOString() } : doc;
+  }
+
+  undo(doc: DocumentModel): DocumentModel {
+    if (this.previous.size === 0) return doc;
+    const objects = { ...doc.objects };
+    for (const [id, transform] of this.previous) if (objects[id]) objects[id] = { ...objects[id]!, transform };
+    return { ...doc, objects, updatedAt: new Date().toISOString() };
+  }
+}
+
+/** Apply equal spacing between three or more selected object bounds. */
+export class DistributeObjectsCommand implements Command {
+  readonly type = 'DistributeObjects';
+  readonly description = 'Distribute objects';
+  private previous = new Map<ObjectId, Transform2D>();
+
+  constructor(private readonly objectIds: readonly ObjectId[], private readonly axis: 'horizontal' | 'vertical') {}
+
+  execute(doc: DocumentModel): DocumentModel {
+    const selected = this.objectIds.map((id) => doc.objects[id]).filter((object): object is SceneObject => Boolean(object)).filter((object) => !object.locked).map((object) => ({ object, bounds: getObjectBounds(object) })).sort((a, b) => this.axis === 'horizontal' ? a.bounds.x - b.bounds.x : a.bounds.y - b.bounds.y);
+    if (selected.length < 3) return doc;
+    const first = selected[0]!.bounds;
+    const last = selected[selected.length - 1]!.bounds;
+    const total = this.axis === 'horizontal' ? last.x + last.width - first.x : last.y + last.height - first.y;
+    const occupied = selected.reduce((sum, item) => sum + (this.axis === 'horizontal' ? item.bounds.width : item.bounds.height), 0);
+    const gap = (total - occupied) / (selected.length - 1);
+    const objects = { ...doc.objects };
+    let cursor = this.axis === 'horizontal' ? first.x : first.y;
+    for (const item of selected) {
+      const coordinate = this.axis === 'horizontal' ? item.bounds.x : item.bounds.y;
+      const delta = cursor - coordinate;
+      if (delta !== 0) {
+        this.previous.set(item.object.id, item.object.transform);
+        objects[item.object.id] = { ...item.object, transform: { ...item.object.transform, position: { x: item.object.transform.position.x + (this.axis === 'horizontal' ? delta : 0), y: item.object.transform.position.y + (this.axis === 'vertical' ? delta : 0) } } };
+      }
+      cursor += (this.axis === 'horizontal' ? item.bounds.width : item.bounds.height) + gap;
+    }
+    return this.previous.size > 0 ? { ...doc, objects, updatedAt: new Date().toISOString() } : doc;
+  }
+
+  undo(doc: DocumentModel): DocumentModel {
+    const objects = { ...doc.objects };
+    for (const [id, transform] of this.previous) if (objects[id]) objects[id] = { ...objects[id]!, transform };
+    return this.previous.size > 0 ? { ...doc, objects, updatedAt: new Date().toISOString() } : doc;
+  }
+}
+
+/** Flip selected objects around their current local center. */
+export class FlipObjectsCommand extends TransformObjectsCommand {
+  constructor(objectIds: readonly ObjectId[], axis: 'horizontal' | 'vertical', doc: DocumentModel) {
+    super(objectIds, new Map(objectIds.map((id) => {
+      const object = doc.objects[id];
+      if (!object) return [id, undefined] as const;
+      const bounds = getObjectBounds(object);
+      return [id, { ...object.transform, scale: { x: axis === 'horizontal' ? -object.transform.scale.x : object.transform.scale.x, y: axis === 'vertical' ? -object.transform.scale.y : object.transform.scale.y }, position: { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 }, pivot: { x: bounds.width / 2, y: bounds.height / 2 } }] as const;
+    }).filter((entry): entry is [ObjectId, Transform2D] => Boolean(entry[1]))));
+  }
+}
+
+/** Apply last transform delta to current objects. */
+export class RepeatTransformCommand extends TransformObjectsCommand {
+  constructor(objectIds: readonly ObjectId[], delta: Readonly<Partial<Transform2D>>, doc: DocumentModel) {
+    super(objectIds, new Map(objectIds.map((id) => {
+      const object = doc.objects[id];
+      if (!object) return [id, undefined] as const;
+      return [id, { ...object.transform, position: { x: object.transform.position.x + (delta.position?.x ?? 0), y: object.transform.position.y + (delta.position?.y ?? 0) }, rotation: object.transform.rotation + (delta.rotation ?? 0), scale: { x: object.transform.scale.x * (delta.scale?.x ?? 1), y: object.transform.scale.y * (delta.scale?.y ?? 1) } }] as const;
+    }).filter((entry): entry is [ObjectId, Transform2D] => Boolean(entry[1]))));
+  }
+}
+
 // ─── SetObjectStyleCommand ────────────────────────────────────────────────────
 
 export class SetObjectStyleCommand implements Command {
@@ -251,10 +462,11 @@ export class SetObjectStyleCommand implements Command {
 
   execute(doc: DocumentModel): DocumentModel {
     const newObjects = { ...doc.objects };
+    let changed = false;
 
     for (const objectId of this.objectIds) {
       const obj = doc.objects[objectId];
-      if (!obj) continue;
+      if (!obj || obj.locked) continue;
 
       this.previousStyles.set(objectId, obj.style);
 
@@ -262,7 +474,10 @@ export class SetObjectStyleCommand implements Command {
         ...obj,
         style: { ...obj.style, ...this.stylePatch },
       };
+      changed = true;
     }
+
+    if (!changed) return doc;
 
     return {
       ...doc,
@@ -316,7 +531,7 @@ export class SetRectangleGeometryCommand implements Command {
 
   execute(doc: DocumentModel): DocumentModel {
     const obj = doc.objects[this.objectId];
-    if (!obj || obj.type !== 'rectangle') return doc;
+    if (!obj || obj.type !== 'rectangle' || obj.locked) return doc;
 
     const width = this.patch.width ?? obj.width;
     const height = this.patch.height ?? obj.height;
@@ -375,7 +590,7 @@ export class SetEllipseGeometryCommand implements Command {
 
   execute(doc: DocumentModel): DocumentModel {
     const obj = doc.objects[this.objectId];
-    if (!obj || obj.type !== 'ellipse') return doc;
+    if (!obj || obj.type !== 'ellipse' || obj.locked) return doc;
 
     const width = this.patch.width ?? obj.width;
     const height = this.patch.height ?? obj.height;
@@ -428,7 +643,7 @@ export class SetLineGeometryCommand implements Command {
 
   execute(doc: DocumentModel): DocumentModel {
     const obj = doc.objects[this.objectId];
-    if (!obj || obj.type !== 'line') return doc;
+    if (!obj || obj.type !== 'line' || obj.locked) return doc;
 
     const endPoint = this.patch.endPoint ?? obj.endPoint;
 
@@ -481,7 +696,7 @@ export class SetPathGeometryCommand implements Command {
 
   execute(doc: DocumentModel): DocumentModel {
     const obj = doc.objects[this.objectId];
-    if (!obj || obj.type !== 'path') return doc;
+    if (!obj || obj.type !== 'path' || obj.locked) return doc;
 
     const nodes = this.patch.nodes ?? obj.nodes;
     const closed = this.patch.closed ?? obj.closed;
@@ -828,6 +1043,7 @@ export class UpdateObjectCommand implements Command {
   execute(doc: DocumentModel): DocumentModel {
     const object = doc.objects[this.objectId];
     if (!object) return doc;
+    if (object.locked && this.patch.locked !== false) return doc;
     this.previous = { name: object.name, visible: object.visible, locked: object.locked };
     return { ...doc, objects: { ...doc.objects, [this.objectId]: { ...object, ...this.patch } }, updatedAt: new Date().toISOString() };
   }

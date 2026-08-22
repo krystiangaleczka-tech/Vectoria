@@ -7,6 +7,7 @@ import type {
   Command,
   ObjectStyle,
   SceneObject,
+  SelectionState,
 } from '@vectoria/core';
 import {
   CommandHistory,
@@ -27,7 +28,7 @@ import {
   createDefaultDocument,
   getObjectBounds,
 } from '@vectoria/core';
-import { Camera } from '@vectoria/editor-engine';
+import { Camera, emptySelection, selectionService } from '@vectoria/editor-engine';
 import {
   bootstrapDocument,
   saveDocumentSnapshot,
@@ -68,7 +69,9 @@ export const EditorApp: React.FC = () => {
   const [bootstrapState, setBootstrapState] = useState<BootstrapState>({ status: 'loading' });
   const [doc, setDoc] = useState<DocumentModel | null>(null);
   const [activeTool, setActiveTool] = useState<ActiveTool>('select');
-  const [selectedObjectId, setSelectedObjectId] = useState<ObjectId | null>(null);
+  const [selection, setSelection] = useState<SelectionState>(emptySelection);
+  const selectedObjectIds = selection.objectIds;
+  const selectedObjectId = selectedObjectIds[0] ?? null;
   const [rightDockOpen, setRightDockOpen] = useState(true);
   const [activeDockPanel, setActiveDockPanel] = useState<DockPanel>('properties');
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
@@ -89,6 +92,18 @@ export const EditorApp: React.FC = () => {
   const saveQueueRef = useRef<{ pending: { document: DocumentModel; revision: number } | null; inFlight: boolean }>({ pending: null, inFlight: false });
   const processSaveQueueRef = useRef<() => Promise<void>>(() => Promise.resolve());
   const clipboardRef = useRef<SceneObject[]>([]);
+
+  const handleSelectObject = useCallback((id: ObjectId | null, additive = false) => {
+    setSelection((current) => selectionService.selectObject(current, id, additive));
+  }, []);
+
+  const handleSelectObjects = useCallback((ids: readonly ObjectId[], additive = false) => {
+    setSelection((current) => selectionService.selectObjects(current, ids, additive));
+  }, []);
+
+  const handleSelectSelection = useCallback((next: SelectionState) => {
+    setSelection(next);
+  }, []);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -310,7 +325,7 @@ export const EditorApp: React.FC = () => {
     setDoc(next);
     latestDocRef.current = next;
     setRevision(latestRevisionRef.current);
-    setSelectedObjectId(null);
+    setSelection(emptySelection());
     setNewDocumentOpen(false);
     scheduleAutosave(next, latestRevisionRef.current);
     window.setTimeout(() => {
@@ -330,7 +345,7 @@ export const EditorApp: React.FC = () => {
       if (!file) return;
       void file.text().then((svg) => {
         const imported = importSvgToDocument(svg, file.name.replace(/\.svg$/i, '') || 'Imported SVG');
-         latestRevisionRef.current += 1; history.clear(latestRevisionRef.current); latestDocRef.current = imported; setRevision(latestRevisionRef.current); setDoc(imported); setSelectedObjectId(null); scheduleAutosave(imported, latestRevisionRef.current);
+         latestRevisionRef.current += 1; history.clear(latestRevisionRef.current); latestDocRef.current = imported; setRevision(latestRevisionRef.current); setDoc(imported); setSelection(emptySelection()); scheduleAutosave(imported, latestRevisionRef.current);
       }).catch((error) => console.error('[Vectoria] SVG import error:', error));
     };
     input.click();
@@ -404,22 +419,22 @@ export const EditorApp: React.FC = () => {
 
   const handleSelectArtboard = useCallback((id: string) => {
     handleExecuteCommand(new SelectArtboardCommand(id));
-    setSelectedObjectId(null);
+    setSelection(emptySelection());
   }, [handleExecuteCommand]);
 
   const handleCreateArtboard = useCallback(() => {
     handleExecuteCommand(new CreateArtboardCommand());
-    setSelectedObjectId(null);
+    setSelection(emptySelection());
   }, [handleExecuteCommand]);
 
   const handleDuplicateArtboard = useCallback((id: string) => {
     handleExecuteCommand(new DuplicateArtboardCommand(id));
-    setSelectedObjectId(null);
+    setSelection(emptySelection());
   }, [handleExecuteCommand]);
 
   const handleDeleteArtboard = useCallback((id: string) => {
     handleExecuteCommand(new DeleteArtboardCommand(id));
-    setSelectedObjectId(null);
+    setSelection(emptySelection());
   }, [handleExecuteCommand]);
 
   const handleToggleObject = useCallback((id: ObjectId, field: 'visible' | 'locked') => {
@@ -441,7 +456,7 @@ export const EditorApp: React.FC = () => {
       const cmdKey = isMac ? e.metaKey : e.ctrlKey;
 
       if (cmdKey && e.key.toLowerCase() === 'c') {
-        if (selectedObjectId && doc?.objects[selectedObjectId]) clipboardRef.current = [doc.objects[selectedObjectId]!];
+        if (doc) clipboardRef.current = selectedObjectIds.map((id) => doc.objects[id]).filter((object): object is SceneObject => Boolean(object));
       } else if (cmdKey && e.key.toLowerCase() === 'v') {
         if (doc && clipboardRef.current.length > 0) {
           const pasted = clipboardRef.current.map((object) => ({
@@ -452,14 +467,13 @@ export const EditorApp: React.FC = () => {
             transform: { ...object.transform, position: { x: object.transform.position.x + 20, y: object.transform.position.y + 20 } },
           } as SceneObject));
           handleExecuteCommand(new CreateObjectsCommand(pasted, doc.activeLayerId));
-          setSelectedObjectId(pasted[0]?.id ?? null);
+          handleSelectObjects(pasted.map((object) => object.id));
         }
       } else if (cmdKey && e.key.toLowerCase() === 'd') {
-        if (doc && selectedObjectId && doc.objects[selectedObjectId]) {
-          const object = doc.objects[selectedObjectId]!;
-          const duplicate = { ...structuredClone(object), id: generateId(), name: `${object.name} copy`, transform: { ...object.transform, position: { x: object.transform.position.x + 20, y: object.transform.position.y + 20 } } } as SceneObject;
-          handleExecuteCommand(new CreateObjectsCommand([duplicate], doc.activeLayerId));
-          setSelectedObjectId(duplicate.id);
+        if (doc && selectedObjectIds.length > 0) {
+          const duplicates = selectedObjectIds.map((id) => doc.objects[id]).filter((object): object is SceneObject => Boolean(object)).map((object) => ({ ...structuredClone(object), id: generateId(), name: `${object.name} copy`, layerId: doc.activeLayerId, transform: { ...object.transform, position: { x: object.transform.position.x + 20, y: object.transform.position.y + 20 } } } as SceneObject));
+          handleExecuteCommand(new CreateObjectsCommand(duplicates, doc.activeLayerId));
+          handleSelectObjects(duplicates.map((object) => object.id));
         }
       } else if (cmdKey && e.key.toLowerCase() === 'z') {
         e.preventDefault();
@@ -478,8 +492,10 @@ export const EditorApp: React.FC = () => {
         e.preventDefault();
         handleFitArtboard();
         } else if (!cmdKey && !e.shiftKey && !e.altKey) {
-          if (e.key.toLowerCase() === 'v') {
-            setActiveTool('select');
+           if (e.key.toLowerCase() === 'v') {
+             setActiveTool('select');
+            } else if (e.key.toLowerCase() === 'a') {
+              setActiveTool('direct-select');
            } else if (e.key.toLowerCase() === 'r') {
              setActiveTool('rectangle');
            } else if (e.key.toLowerCase() === 'e') {
@@ -498,7 +514,7 @@ export const EditorApp: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [doc, selectedObjectId, handleExecuteCommand, handleUndo, handleRedo, handleZoom100, handleFitArtboard]);
+  }, [doc, selectedObjectId, selectedObjectIds, handleExecuteCommand, handleUndo, handleRedo, handleZoom100, handleFitArtboard, handleSelectObjects]);
 
   // Center / Fit artboard on initial load once ready
   useEffect(() => {
@@ -547,7 +563,9 @@ export const EditorApp: React.FC = () => {
       ? selectedObjectId
         ? 'Drag to move · Click empty to deselect · Delete to remove'
         : 'Click object to select · Space+Drag to pan · Wheel to zoom'
-      : activeTool === 'rectangle'
+       : activeTool === 'direct-select'
+       ? 'Click node to select · Shift+click adds nodes'
+       : activeTool === 'rectangle'
       ? 'Drag to draw rectangle · Hold Shift for square'
       : activeTool === 'ellipse'
       ? 'Drag to draw ellipse · Hold Shift for circle'
@@ -624,13 +642,17 @@ export const EditorApp: React.FC = () => {
           <div className="ruler-corner" aria-hidden="true" />
           <div className="ruler ruler-horizontal" aria-hidden="true"><span>0</span><span>100</span><span>200</span><span>300</span><span>400</span><span>500</span></div>
           <div className="ruler ruler-vertical" aria-hidden="true"><span>0</span><span>100</span><span>200</span><span>300</span><span>400</span></div>
-          <CanvasViewport
+         <CanvasViewport
             document={doc}
             activeTool={activeTool}
             selectedObjectId={selectedObjectId}
+            selectedObjectIds={selectedObjectIds}
+            selection={selection}
             camera={camera}
             onExecuteCommand={handleExecuteCommand}
-            onSelectObject={setSelectedObjectId}
+            onSelectObject={handleSelectObject}
+            onSelectObjects={handleSelectObjects}
+            onSelectSelection={handleSelectSelection}
             onCursorMove={setCursorWorld}
             onZoomChange={setZoomPercent}
              showGrid={doc.grid.visible}
@@ -642,12 +664,14 @@ export const EditorApp: React.FC = () => {
         <RightDock
           document={doc}
           selectedObjectId={selectedObjectId}
+          selectedObjectIds={selectedObjectIds}
            history={history.history}
         historyCursor={history.cursor}
            onHistoryJump={handleHistoryJump}
            activePanel={activeDockPanel}
            onPanelChange={setActiveDockPanel}
-          onSelectObject={setSelectedObjectId}
+           onSelectObject={handleSelectObject}
+           onSelectObjects={handleSelectObjects}
           onUpdatePosition={handleUpdatePosition}
           onUpdateDimensions={handleUpdateDimensions}
            onUpdateFill={handleUpdateFill}
@@ -669,9 +693,9 @@ export const EditorApp: React.FC = () => {
       {/* Status Bar */}
       <StatusBar
         toolHint={toolHint}
-         activeTool={activeTool === 'select' ? 'Select' : activeTool === 'rectangle' ? 'Rectangle' : activeTool === 'ellipse' ? 'Ellipse' : activeTool === 'line' ? 'Line' : activeTool === 'pen' ? 'Pen' : activeTool === 'hand' ? 'Hand' : 'Zoom'}
+         activeTool={activeTool === 'select' ? 'Select' : activeTool === 'direct-select' ? 'Direct Select' : activeTool === 'rectangle' ? 'Rectangle' : activeTool === 'ellipse' ? 'Ellipse' : activeTool === 'line' ? 'Line' : activeTool === 'pen' ? 'Pen' : activeTool === 'hand' ? 'Hand' : 'Zoom'}
         selectedObjectName={selectedObjectId ? doc.objects[selectedObjectId]?.name ?? null : null}
-        selectedObjectCount={selectedObjectId ? 1 : 0}
+        selectedObjectCount={selectedObjectIds.length}
         cursorWorld={cursorWorld}
         zoomPercent={zoomPercent}
         saveStatus={saveStatus}

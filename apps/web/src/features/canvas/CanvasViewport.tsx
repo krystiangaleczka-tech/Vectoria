@@ -10,6 +10,7 @@ import type {
   PathObject,
   PathNode,
   Command,
+  SelectionState,
 } from '@vectoria/core';
 import {
   CreateObjectsCommand,
@@ -20,8 +21,10 @@ import {
   createTransform,
   defaultObjectStyle,
   defaultStroke,
+  getTransformMatrix,
 } from '@vectoria/core';
-import { Camera, hitTest, snapToGrid as snapPointToGrid, type GridSettings } from '@vectoria/editor-engine';
+import { Camera, DragSession, SelectTool, DirectSelectTool, snapToGrid as snapPointToGrid, type GridSettings } from '@vectoria/editor-engine';
+import { mat3TransformPoint } from '@vectoria/shared';
 import {
   RenderLoop,
   resizeCanvas,
@@ -37,9 +40,13 @@ export interface CanvasViewportProps {
   document: DocumentModel;
   activeTool: ActiveTool;
   selectedObjectId: ObjectId | null;
+  selectedObjectIds?: readonly ObjectId[];
+  selection?: SelectionState;
   camera: Camera;
   onExecuteCommand: (cmd: Command) => void;
   onSelectObject: (id: ObjectId | null) => void;
+  onSelectObjects?: (ids: readonly ObjectId[], additive?: boolean) => void;
+  onSelectSelection?: (selection: SelectionState) => void;
   onCursorMove: (worldPos: Vec2 | null) => void;
   onZoomChange: (zoomPercent: number) => void;
   showGrid?: boolean;
@@ -48,14 +55,18 @@ export interface CanvasViewportProps {
 }
 
 interface DragState {
-  type: 'pan' | 'create-shape' | 'move-object' | 'resize-object';
+  type: 'pan' | 'create-shape' | 'move-object' | 'resize-object' | 'rotate-object' | 'marquee';
   shape?: 'rectangle' | 'ellipse' | 'line';
   startScreen: Vec2;
   startWorld: Vec2;
   currentWorld: Vec2;
   pointerId: number;
   initialObjectTransform?: { position: Vec2 };
+  objectIds?: readonly ObjectId[];
+  initialTransforms?: Readonly<Record<string, import('@vectoria/core').Transform2D>>;
   initialSize?: { width: number; height: number };
+  pivotWorld?: Vec2;
+  initialTransform?: import('@vectoria/core').Transform2D;
 }
 
 interface PenState {
@@ -69,9 +80,12 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   document: doc,
   activeTool,
   selectedObjectId,
+  selectedObjectIds = selectedObjectId ? [selectedObjectId] : [],
+  selection = { objectIds: [...selectedObjectIds], nodeIds: [], mode: 'object' },
   camera,
   onExecuteCommand,
   onSelectObject,
+  onSelectSelection,
   onCursorMove,
   onZoomChange,
   showGrid = true,
@@ -86,16 +100,16 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   const renderLoopRef = useRef<RenderLoop | null>(null);
   const renderAllRef = useRef<() => void>(() => undefined);
   const dragStateRef = useRef<DragState | null>(null);
+  const dragSessionRef = useRef<DragSession | null>(null);
   const [isSpacePressed, setIsSpacePressed] = React.useState(false);
   const [dragPreview, setDragPreview] = React.useState<Record<string, import('@vectoria/core').Transform2D>>({});
   const penStateRef = useRef<PenState>({ nodes: [], pendingPoint: null, pendingStart: null, pendingDragged: false });
   const [penVersion, setPenVersion] = React.useState(0);
 
   // Selected IDs as Set for renderer
-  const selectedIds = React.useMemo(
-    () => new Set(selectedObjectId ? [selectedObjectId] : []),
-    [selectedObjectId]
-  );
+  const selectedIds = React.useMemo(() => new Set(selectedObjectIds), [selectedObjectIds]);
+  const selectTool = React.useMemo(() => new SelectTool(), []);
+  const directSelect = React.useMemo(() => new DirectSelectTool(), []);
 
   // Render function called by RenderLoop
   const renderAll = useCallback(() => {
@@ -121,6 +135,11 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       previewTransforms: dragPreview
         ? new Map(Object.entries(dragPreview) as [string, import('@vectoria/core').Transform2D][])
         : undefined,
+      nodeSelectionIds: selection.nodeIds,
+      marquee: dragStateRef.current?.type === 'marquee' ? {
+        start: dragStateRef.current.startWorld,
+        end: dragStateRef.current.currentWorld,
+      } : undefined,
     });
 
     // Draw active creation drag preview on overlay.
@@ -188,7 +207,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       overlayCtx.restore();
     }
     void penVersion;
-  }, [doc, camera, selectedIds, dragPreview, activeTool, penVersion, showGrid, gridSettings]);
+  }, [doc, camera, selectedIds, dragPreview, activeTool, penVersion, showGrid, gridSettings, selection]);
 
   // Initialize render loop
   useEffect(() => {
@@ -320,33 +339,59 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         currentWorld: worldPos,
         pointerId: e.pointerId,
       };
+    } else if (activeTool === 'direct-select') {
+      const nodeHit = directSelect.hitNode(doc, worldPos, camera.zoom);
+      const nextSelection = directSelect.select(selection, nodeHit, e.shiftKey);
+      onSelectSelection?.(nextSelection);
     } else if (activeTool === 'select') {
       const selected = selectedObjectId ? doc.objects[selectedObjectId] : null;
       const selectedSize = selected && (selected.type === 'rectangle' || selected.type === 'ellipse') ? { width: selected.width, height: selected.height } : null;
       if (selected && selectedSize) {
-        const handle = camera.worldToScreen({ x: selected.transform.position.x + selectedSize.width, y: selected.transform.position.y + selectedSize.height });
+        const matrix = getTransformMatrix(selected.transform);
+        const handle = camera.worldToScreen(mat3TransformPoint(matrix, { x: selectedSize.width, y: selectedSize.height }));
+        const pivotWorld = mat3TransformPoint(matrix, { x: selectedSize.width / 2, y: selectedSize.height / 2 });
+        const rotationHandle = camera.worldToScreen(mat3TransformPoint(matrix, { x: selectedSize.width / 2, y: -20 / camera.zoom }));
+        if (!e.shiftKey && Math.hypot(screenPos.x - rotationHandle.x, screenPos.y - rotationHandle.y) <= 12) {
+          (e.target as HTMLElement).setPointerCapture(e.pointerId);
+          dragStateRef.current = { type: 'rotate-object', startScreen: screenPos, startWorld: worldPos, currentWorld: worldPos, pointerId: e.pointerId, objectIds: [selected.id], initialTransforms: { [selected.id]: selected.transform }, initialTransform: selected.transform, pivotWorld };
+          return;
+        }
         if (Math.hypot(screenPos.x - handle.x, screenPos.y - handle.y) <= 12) {
           (e.target as HTMLElement).setPointerCapture(e.pointerId);
           dragStateRef.current = { type: 'resize-object', startScreen: screenPos, startWorld: worldPos, currentWorld: worldPos, pointerId: e.pointerId, initialSize: selectedSize };
           return;
         }
       }
-      const hitId = hitTest(doc, worldPos);
+      const picked = selectTool.pick({ document: doc, selection, screenPoint: screenPos, worldPoint: worldPos, zoom: camera.zoom });
+      const hit = picked.hit;
 
-      if (hitId) {
-        onSelectObject(hitId);
-        const obj = doc.objects[hitId];
+      if (hit) {
+        const nextSelection = e.shiftKey ? selectTool.pick({ document: doc, selection, screenPoint: screenPos, worldPoint: worldPos, zoom: camera.zoom, additive: true }).selection : picked.selection;
+        onSelectSelection?.(nextSelection);
+        const dragIds = nextSelection.objectIds;
+        const obj = doc.objects[hit.objectId];
+        if (dragIds.length === 0) return;
         dragStateRef.current = {
           type: 'move-object',
           startScreen: screenPos,
           startWorld: worldPos,
           currentWorld: worldPos,
           pointerId: e.pointerId,
+          objectIds: dragIds,
+          initialTransforms: Object.fromEntries(dragIds.map((id) => [id, doc.objects[id]?.transform]).filter((entry): entry is [string, import('@vectoria/core').Transform2D] => Boolean(entry[1]))),
           initialObjectTransform: obj ? { position: { ...obj.transform.position } } : undefined,
         };
+        const firstBounds = obj ? getObjectBounds(obj) : { x: worldPos.x, y: worldPos.y, width: 0, height: 0 };
+        dragSessionRef.current = new DragSession({ objectIds: dragIds, initialTransforms: dragStateRef.current.initialTransforms ?? {}, initialBounds: firstBounds, pivotWorld: { x: firstBounds.x + firstBounds.width / 2, y: firstBounds.y + firstBounds.height / 2 }, operation: 'move' }, worldPos);
       } else {
-        // Deselect if clicked empty area
-        onSelectObject(null);
+        // Empty drag becomes marquee; click clears selection on release.
+        dragStateRef.current = {
+          type: 'marquee',
+          startScreen: screenPos,
+          startWorld: worldPos,
+          currentWorld: worldPos,
+          pointerId: e.pointerId,
+        };
       }
     }
   };
@@ -375,6 +420,9 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       };
       camera.panBy(deltaScreen);
       drag.startScreen = screenPos;
+    } else if (drag.type === 'marquee') {
+      drag.currentWorld = worldPos;
+      renderLoopRef.current?.invalidate();
     } else if (drag.type === 'create-shape') {
       let finalWorld = worldPos;
       if (e.shiftKey && drag.shape !== 'line') {
@@ -414,23 +462,24 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       }
     } else if (drag.type === 'move-object') {
       drag.currentWorld = worldPos;
-      if (selectedObjectId && drag.initialObjectTransform) {
-        const deltaWorld = {
-          x: worldPos.x - drag.startWorld.x,
-          y: worldPos.y - drag.startWorld.y,
-        };
-        const obj = doc.objects[selectedObjectId];
-        if (obj) {
-          setDragPreview({
-            [selectedObjectId]: {
-              ...obj.transform,
-              position: {
-                x: drag.initialObjectTransform.position.x + deltaWorld.x,
-                y: drag.initialObjectTransform.position.y + deltaWorld.y,
-              },
-            },
-          });
+      dragSessionRef.current?.update(worldPos);
+      if (drag.objectIds && drag.initialTransforms) {
+        const deltaWorld = dragSessionRef.current?.delta ?? { x: worldPos.x - drag.startWorld.x, y: worldPos.y - drag.startWorld.y };
+        const preview: Record<string, import('@vectoria/core').Transform2D> = {};
+        for (const objectId of drag.objectIds) {
+          const initial = drag.initialTransforms[objectId];
+          if (!initial) continue;
+          preview[objectId] = { ...initial, position: { x: initial.position.x + deltaWorld.x, y: initial.position.y + deltaWorld.y } };
         }
+        setDragPreview(preview);
+      }
+    } else if (drag.type === 'rotate-object' && drag.initialTransform && drag.pivotWorld) {
+      const startAngle = Math.atan2(drag.startWorld.y - drag.pivotWorld.y, drag.startWorld.x - drag.pivotWorld.x);
+      const currentAngle = Math.atan2(worldPos.y - drag.pivotWorld.y, worldPos.x - drag.pivotWorld.x);
+      const object = doc.objects[drag.objectIds?.[0] ?? ''];
+      if (object && (object.type === 'rectangle' || object.type === 'ellipse')) {
+        setDragPreview({ [object.id]: { ...drag.initialTransform, position: drag.pivotWorld, pivot: { x: object.width / 2, y: object.height / 2 }, rotation: drag.initialTransform.rotation + currentAngle - startAngle } });
+        drag.currentWorld = worldPos;
       }
     } else if (drag.type === 'resize-object') {
       drag.currentWorld = worldPos;
@@ -459,7 +508,21 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       // Ignore if capture was already released
     }
 
-    if (drag.type === 'create-shape') {
+    if (drag.type === 'marquee') {
+      const area = {
+        x: Math.min(drag.startWorld.x, drag.currentWorld.x),
+        y: Math.min(drag.startWorld.y, drag.currentWorld.y),
+        width: Math.abs(drag.currentWorld.x - drag.startWorld.x),
+        height: Math.abs(drag.currentWorld.y - drag.startWorld.y),
+      };
+      const moved = area.width > 2 || area.height > 2;
+      if (moved) {
+        const nextSelection = selectTool.marquee({ document: doc, selection, area, additive: e.shiftKey, fullyContained: false, zoom: camera.zoom, visibleWorldRect: camera.getVisibleWorldRect({ x: containerRef.current?.clientWidth ?? 0, y: containerRef.current?.clientHeight ?? 0 }) });
+        onSelectSelection?.(nextSelection);
+      } else if (!e.shiftKey) {
+        onSelectObject(null);
+      }
+    } else if (drag.type === 'create-shape') {
       const x = Math.min(drag.startWorld.x, drag.currentWorld.x);
       const y = Math.min(drag.startWorld.y, drag.currentWorld.y);
       const width = Math.abs(drag.currentWorld.x - drag.startWorld.x);
@@ -486,23 +549,17 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         onSelectObject(newId);
       }
     } else if (drag.type === 'move-object') {
-      if (selectedObjectId && drag.initialObjectTransform) {
-        const obj = doc.objects[selectedObjectId];
-        const preview = dragPreview[selectedObjectId];
-        
-        if (obj && preview) {
-          const deltaX = Math.abs(preview.position.x - drag.initialObjectTransform.position.x);
-          const deltaY = Math.abs(preview.position.y - drag.initialObjectTransform.position.y);
-
-          if (deltaX > 0.5 || deltaY > 0.5) {
-            const newTransforms = new Map([
-              [selectedObjectId, preview],
-            ]);
-            const cmd = new TransformObjectsCommand([selectedObjectId], newTransforms);
-            onExecuteCommand(cmd);
-          }
-        }
+      const transforms = new Map(Object.entries(dragPreview) as [ObjectId, import('@vectoria/core').Transform2D][]);
+      if (transforms.size > 0) {
+        const moved = [...transforms.entries()].some(([id, transform]) => {
+          const initial = drag.initialTransforms?.[id];
+          return initial && (Math.abs(transform.position.x - initial.position.x) > 0.5 || Math.abs(transform.position.y - initial.position.y) > 0.5);
+        });
+        if (moved) onExecuteCommand(new TransformObjectsCommand([...transforms.keys()], transforms));
       }
+    } else if (drag.type === 'rotate-object') {
+      const transforms = new Map(Object.entries(dragPreview) as [ObjectId, import('@vectoria/core').Transform2D][]);
+      if (transforms.size > 0) onExecuteCommand(new TransformObjectsCommand([...transforms.keys()], transforms));
     } else if (drag.type === 'resize-object' && selectedObjectId && drag.initialSize) {
       const object = doc.objects[selectedObjectId];
       if (object?.type === 'rectangle' || object?.type === 'ellipse') {
@@ -514,6 +571,8 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       setDragPreview({});
     }
 
+    if (drag.type === 'move-object') setDragPreview({});
+    dragSessionRef.current = null;
     dragStateRef.current = null;
     renderLoopRef.current?.invalidate();
   };
@@ -522,9 +581,10 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     const drag = dragStateRef.current;
     if (!drag) return;
 
-    if (drag.type === 'move-object' && selectedObjectId) {
+    if (drag.type === 'move-object') {
       setDragPreview({});
     }
+    dragSessionRef.current = null;
 
     dragStateRef.current = null;
     renderLoopRef.current?.invalidate();
@@ -567,12 +627,21 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       if (e.code === 'Space') {
         setIsSpacePressed(true);
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
-        if (selectedObjectId) {
+        if (selectedObjectIds.length > 0) {
           e.preventDefault();
-          const cmd = new DeleteObjectsCommand([selectedObjectId]);
-          onExecuteCommand(cmd);
+          onExecuteCommand(new DeleteObjectsCommand(selectedObjectIds));
           onSelectObject(null);
         }
+      } else if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+        if (selectedObjectIds.length === 0) return;
+        e.preventDefault();
+        const step = e.shiftKey ? 10 : 1;
+        const delta = e.key === 'ArrowUp' ? { x: 0, y: -step } : e.key === 'ArrowDown' ? { x: 0, y: step } : e.key === 'ArrowLeft' ? { x: -step, y: 0 } : { x: step, y: 0 };
+        const transforms = new Map(selectedObjectIds.map((id) => {
+          const object = doc.objects[id];
+          return [id, object ? { ...object.transform, position: { x: object.transform.position.x + delta.x, y: object.transform.position.y + delta.y } } : null] as const;
+        }).filter((entry): entry is [ObjectId, import('@vectoria/core').Transform2D] => Boolean(entry[1])));
+        onExecuteCommand(new TransformObjectsCommand([...transforms.keys()], transforms));
       } else if (e.key === 'Enter' && activeTool === 'pen') {
         finishPen(false);
       } else if (e.key === 'Escape') {
@@ -596,7 +665,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [selectedObjectId, onExecuteCommand, onSelectObject, activeTool, finishPen]);
+  }, [selectedObjectId, selectedObjectIds, doc, onExecuteCommand, onSelectObject, activeTool, finishPen]);
 
   return (
     <div

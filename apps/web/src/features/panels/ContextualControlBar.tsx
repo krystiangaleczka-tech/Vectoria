@@ -26,7 +26,7 @@ export const ContextualControlBar: React.FC<ContextualControlBarProps> = ({
 
   return (
     <section className="contextual-control-bar" data-testid="contextual-control-bar" aria-label="Kontrolki kontekstowe">
-      <span className="contextual-label">{rectangle ? 'Prostokąt' : activeTool === 'select' ? 'Zaznaczenie' : activeTool === 'rectangle' ? 'Prostokąt' : activeTool === 'zoom' ? 'Zoom' : 'Nawigacja'}</span>
+      <span className="contextual-label">{rectangle ? 'Prostokąt' : activeTool === 'select' ? 'Zaznaczenie' : activeTool === 'direct-select' ? 'Węzły' : activeTool === 'rectangle' ? 'Prostokąt' : activeTool === 'zoom' ? 'Zoom' : 'Nawigacja'}</span>
       {rectangle ? (
         <>
           <div className="contextual-field-group" aria-label="Transformacja">
@@ -38,7 +38,7 @@ export const ContextualControlBar: React.FC<ContextualControlBarProps> = ({
           <ColorControl label="Fill" color={rectangle.style.fill.type === 'solid' ? rectangle.style.fill.color : null} onChange={(value) => onUpdateFill(rectangle.id, value)} />
         </>
       ) : (
-        <span className="contextual-hint">{activeTool === 'select' ? 'Wybierz obiekt, aby edytować właściwości' : activeTool === 'rectangle' ? 'Przeciągnij na obszarze roboczym, aby narysować' : 'Przeciągnij, aby nawigować po obszarze roboczym'}</span>
+        <span className="contextual-hint">{activeTool === 'select' ? 'Wybierz obiekt, aby edytować właściwości' : activeTool === 'direct-select' ? 'Wybierz węzeł ścieżki' : activeTool === 'rectangle' ? 'Przeciągnij na obszarze roboczym, aby narysować' : 'Przeciągnij, aby nawigować po obszarze roboczym'}</span>
       )}
     </section>
   );

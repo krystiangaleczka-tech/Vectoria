@@ -12,10 +12,12 @@ export type DockPanel = 'properties' | 'layers' | 'artboards' | 'history';
 export interface RightDockProps {
   document: DocumentModel;
   selectedObjectId: ObjectId | null;
+  selectedObjectIds?: readonly ObjectId[];
   history: readonly HistoryEntry[];
   historyCursor: number;
   onHistoryJump: (cursor: number) => void;
-  onSelectObject: (id: ObjectId | null) => void;
+  onSelectObject: (id: ObjectId | null, additive?: boolean) => void;
+  onSelectObjects?: (ids: readonly ObjectId[], additive?: boolean) => void;
   onUpdatePosition: (id: ObjectId, x: number, y: number) => void;
   onUpdateDimensions: (id: ObjectId, width: number, height: number) => void;
   onUpdateFill: (id: ObjectId, color: string | null) => void;
@@ -42,7 +44,7 @@ const panels: readonly { id: DockPanel; label: string; icon: React.ComponentProp
   { id: 'history', label: 'Historia', icon: 'history' },
 ];
 
-export const RightDock: React.FC<RightDockProps> = ({ document: doc, selectedObjectId, history, historyCursor, onHistoryJump, onSelectObject, onUpdatePosition, onUpdateDimensions, onUpdateFill, onUpdateObjectStyle, onUpdateRotation, onUpdateArtboard, onUpdateUnit, gridSettings, onUpdateGridSettings, onToggleObject, onSelectArtboard, onCreateArtboard, onDuplicateArtboard, onDeleteArtboard, activePanel: requestedPanel, onPanelChange, open }) => {
+export const RightDock: React.FC<RightDockProps> = ({ document: doc, selectedObjectId, selectedObjectIds = [], history, historyCursor, onHistoryJump, onSelectObject, onSelectObjects, onUpdatePosition, onUpdateDimensions, onUpdateFill, onUpdateObjectStyle, onUpdateRotation, onUpdateArtboard, onUpdateUnit, gridSettings, onUpdateGridSettings, onToggleObject, onSelectArtboard, onCreateArtboard, onDuplicateArtboard, onDeleteArtboard, activePanel: requestedPanel, onPanelChange, open }) => {
   const [localActivePanel, setLocalActivePanel] = useState<DockPanel>('properties');
   const activePanel = requestedPanel ?? localActivePanel;
   const activeIndex = panels.findIndex((panel) => panel.id === activePanel);
@@ -63,8 +65,8 @@ export const RightDock: React.FC<RightDockProps> = ({ document: doc, selectedObj
          {panels.map((panel) => <button key={panel.id} type="button" role="tab" id={`tab-${panel.id}`} className={`dock-tab ${activePanel === panel.id ? 'is-active' : ''}`} aria-selected={activePanel === panel.id} aria-controls={`panel-${panel.id}`} tabIndex={activePanel === panel.id ? 0 : -1} onClick={() => selectPanel(panel.id)} onKeyDown={(event) => { if (event.key === 'ArrowRight') moveTab(1); if (event.key === 'ArrowLeft') moveTab(-1); if (event.key === 'Home') selectPanel('properties'); if (event.key === 'End') selectPanel('history'); }}><VectoriaIcon name={panel.icon} size={15} /><span>{panel.label}</span></button>)}
       </div>
       <div id={`panel-${activePanel}`} role="tabpanel" aria-labelledby={`tab-${activePanel}`} className="dock-panel">
-         {activePanel === 'properties' && <PropertiesPanel document={doc} selectedObjectId={selectedObjectId} onUpdatePosition={onUpdatePosition} onUpdateDimensions={onUpdateDimensions} onUpdateFill={onUpdateFill} onUpdateObjectStyle={onUpdateObjectStyle} onUpdateRotation={onUpdateRotation} onUpdateArtboard={onUpdateArtboard} onUpdateUnit={onUpdateUnit} gridSettings={gridSettings} onUpdateGridSettings={onUpdateGridSettings} />}
-        {activePanel === 'layers' && <LayersPanel document={doc} selectedObjectId={selectedObjectId} onSelectObject={onSelectObject} onToggleObject={onToggleObject} />}
+         {activePanel === 'properties' && <PropertiesPanel document={doc} selectedObjectId={selectedObjectId} selectedObjectIds={selectedObjectIds} onUpdatePosition={onUpdatePosition} onUpdateDimensions={onUpdateDimensions} onUpdateFill={onUpdateFill} onUpdateObjectStyle={onUpdateObjectStyle} onUpdateRotation={onUpdateRotation} onUpdateArtboard={onUpdateArtboard} onUpdateUnit={onUpdateUnit} gridSettings={gridSettings} onUpdateGridSettings={onUpdateGridSettings} />}
+         {activePanel === 'layers' && <LayersPanel document={doc} selectedObjectId={selectedObjectId} selectedObjectIds={selectedObjectIds} onSelectObject={onSelectObject} onSelectObjects={onSelectObjects} onToggleObject={onToggleObject} />}
          {activePanel === 'artboards' && onSelectArtboard && onCreateArtboard && onDuplicateArtboard && onDeleteArtboard && <ArtboardsPanel document={doc} onSelect={onSelectArtboard} onCreate={onCreateArtboard} onDuplicate={onDuplicateArtboard} onDelete={onDeleteArtboard} />}
           {activePanel === 'history' && <HistoryPanel entries={history} cursor={historyCursor} onJump={onHistoryJump} />}
       </div>
