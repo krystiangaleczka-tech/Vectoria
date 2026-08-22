@@ -38,4 +38,15 @@ describe('Camera Coordinate Transforms & Navigation', () => {
     expect(worldAfter.x).toBeCloseTo(worldBefore.x, 5);
     expect(worldAfter.y).toBeCloseTo(worldBefore.y, 5);
   });
+
+  it('round-trips coordinates when camera is rotated', () => {
+    const camera = new Camera();
+    camera.setPan({ x: 120, y: 80 });
+    camera.setRotation(Math.PI / 6);
+    camera.setZoom(1.75, { x: 800, y: 600 });
+    const point = { x: 240, y: -90 };
+    const screen = camera.worldToScreen(point);
+    expect(camera.screenToWorld(screen).x).toBeCloseTo(point.x, 5);
+    expect(camera.screenToWorld(screen).y).toBeCloseTo(point.y, 5);
+  });
 });

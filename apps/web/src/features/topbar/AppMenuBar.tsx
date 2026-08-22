@@ -9,10 +9,20 @@ interface AppMenuBarProps {
   onUndo: () => void;
   onRedo: () => void;
   onFitArtboard: () => void;
+  onFitDrawing: () => void;
   onZoom100: () => void;
   onExportSvg: () => void;
+  onExportPng: () => void;
+  onImportSvg: () => void;
   rightDockOpen: boolean;
   onToggleRightDock: () => void;
+  onNewDocument: () => void;
+  showGrid: boolean;
+  snapToGrid: boolean;
+  onToggleGrid: () => void;
+  onToggleSnap: () => void;
+  theme: 'dark' | 'light';
+  onToggleTheme: () => void;
 }
 
 type MenuName = 'Plik' | 'Edycja' | 'Obiekt' | 'Tekst' | 'Widok' | 'Pomoc';
@@ -25,10 +35,20 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
   onUndo,
   onRedo,
   onFitArtboard,
+  onFitDrawing,
   onZoom100,
   onExportSvg,
+  onExportPng,
+  onImportSvg,
   rightDockOpen,
   onToggleRightDock,
+  onNewDocument,
+  showGrid,
+  snapToGrid,
+  onToggleGrid,
+  onToggleSnap,
+  theme,
+  onToggleTheme,
 }) => {
   const [openMenu, setOpenMenu] = useState<MenuName | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -56,7 +76,12 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
 
   const renderItems = (menu: MenuName) => {
     if (menu === 'Plik') {
-      return <MenuItem label="Eksportuj SVG" shortcut="Ctrl+Shift+E" onClick={() => run(onExportSvg)} />;
+      return <>
+        <MenuItem label="Nowy dokument" shortcut="Ctrl+N" onClick={() => run(onNewDocument)} />
+        <MenuItem label="Importuj SVG" onClick={() => run(onImportSvg)} />
+        <MenuItem label="Eksportuj SVG" shortcut="Ctrl+Shift+E" onClick={() => run(onExportSvg)} />
+        <MenuItem label="Eksportuj PNG" onClick={() => run(onExportPng)} />
+      </>;
     }
     if (menu === 'Edycja') {
       return <>
@@ -68,7 +93,11 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
     if (menu === 'Widok') {
       return <>
         <MenuItem label="Dopasuj do obszaru" shortcut="Ctrl+1" onClick={() => run(onFitArtboard)} />
+        <MenuItem label="Dopasuj do rysunku" onClick={() => run(onFitDrawing)} />
         <MenuItem label="Zoom 100%" shortcut="Ctrl+0" onClick={() => run(onZoom100)} />
+        <MenuItem label={`${showGrid ? 'Ukryj' : 'Pokaż'} siatkę`} onClick={() => run(onToggleGrid)} />
+        <MenuItem label={`${snapToGrid ? 'Wyłącz' : 'Włącz'} snap do siatki`} onClick={() => run(onToggleSnap)} />
+        <MenuItem label={`Motyw: ${theme === 'dark' ? 'jasny' : 'ciemny'}`} onClick={() => run(onToggleTheme)} />
       </>;
     }
     return <MenuItem label="Wkrótce" disabled />;

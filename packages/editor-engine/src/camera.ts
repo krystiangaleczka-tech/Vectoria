@@ -16,6 +16,7 @@ export class Camera {
 
   /** Zoom level (1 = 100%). */
   private _zoom = 1;
+  private _rotation = 0;
 
   /** Callback when camera changes. */
   private _onChanged: (() => void) | null = null;
@@ -32,6 +33,10 @@ export class Camera {
     return Math.round(this._zoom * 100);
   }
 
+  get rotation(): number {
+    return this._rotation;
+  }
+
   set onChanged(callback: (() => void) | null) {
     this._onChanged = callback;
   }
@@ -40,9 +45,13 @@ export class Camera {
    * Convert a point from world space to screen space.
    */
   worldToScreen(worldPoint: Vec2): Vec2 {
+    const cos = Math.cos(this._rotation);
+    const sin = Math.sin(this._rotation);
+    const x = worldPoint.x * cos - worldPoint.y * sin;
+    const y = worldPoint.x * sin + worldPoint.y * cos;
     return {
-      x: worldPoint.x * this._zoom + this._pan.x,
-      y: worldPoint.y * this._zoom + this._pan.y,
+      x: x * this._zoom + this._pan.x,
+      y: y * this._zoom + this._pan.y,
     };
   }
 
@@ -50,9 +59,13 @@ export class Camera {
    * Convert a point from screen space to world space.
    */
   screenToWorld(screenPoint: Vec2): Vec2 {
+    const x = (screenPoint.x - this._pan.x) / this._zoom;
+    const y = (screenPoint.y - this._pan.y) / this._zoom;
+    const cos = Math.cos(this._rotation);
+    const sin = Math.sin(this._rotation);
     return {
-      x: (screenPoint.x - this._pan.x) / this._zoom,
-      y: (screenPoint.y - this._pan.y) / this._zoom,
+      x: x * cos + y * sin,
+      y: -x * sin + y * cos,
     };
   }
 
@@ -82,6 +95,12 @@ export class Camera {
     this._onChanged?.();
   }
 
+  setRotation(rotation: number): void {
+    if (!Number.isFinite(rotation)) return;
+    this._rotation = rotation;
+    this._onChanged?.();
+  }
+
   /**
    * Zoom relative to a screen-space point (keeps that world point under cursor).
    *
@@ -108,10 +127,11 @@ export class Camera {
     const center: Vec2 = { x: viewportSize.x / 2, y: viewportSize.y / 2 };
     const worldCenter = this.screenToWorld(center);
     this._zoom = clamp(zoom, MIN_ZOOM, MAX_ZOOM);
+    const rotatedCenter = this.rotateWorldPoint(worldCenter);
 
     this._pan = {
-      x: center.x - worldCenter.x * this._zoom,
-      y: center.y - worldCenter.y * this._zoom,
+      x: center.x - rotatedCenter.x * this._zoom,
+      y: center.y - rotatedCenter.y * this._zoom,
     };
     this._onChanged?.();
   }
@@ -160,5 +180,11 @@ export class Camera {
       width: bottomRight.x - topLeft.x,
       height: bottomRight.y - topLeft.y,
     };
+  }
+
+  private rotateWorldPoint(point: Vec2): Vec2 {
+    const cos = Math.cos(this._rotation);
+    const sin = Math.sin(this._rotation);
+    return { x: point.x * cos - point.y * sin, y: point.x * sin + point.y * cos };
   }
 }

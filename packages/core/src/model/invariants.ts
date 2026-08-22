@@ -39,6 +39,19 @@ export function validateInvariants(doc: DocumentModel): InvariantViolation[] {
     }
   }
 
+  for (const artboardId of doc.artboardIds) {
+    const artboard = doc.artboards[artboardId];
+    if (!artboard) continue;
+    if (!Number.isFinite(artboard.x) || !Number.isFinite(artboard.y)) violations.push({ code: 'INVALID_ARTBOARD_POSITION', message: `Artboard '${artboardId}' position must be finite.` });
+    if (!Number.isFinite(artboard.width) || artboard.width <= 0) violations.push({ code: 'INVALID_ARTBOARD_WIDTH', message: `Artboard '${artboardId}' width must be positive and finite.` });
+    if (!Number.isFinite(artboard.height) || artboard.height <= 0) violations.push({ code: 'INVALID_ARTBOARD_HEIGHT', message: `Artboard '${artboardId}' height must be positive and finite.` });
+  }
+
+  for (const layerId of doc.layerIds) {
+    const layer = doc.layers[layerId];
+    if (layer && (!Number.isFinite(layer.opacity) || layer.opacity < 0 || layer.opacity > 1)) violations.push({ code: 'INVALID_LAYER_OPACITY', message: `Layer '${layerId}' opacity must be within [0, 1].` });
+  }
+
   // ── activeLayerId exists ──────────────────────────────────────────────────
   if (!(doc.activeLayerId in doc.layers)) {
     violations.push({

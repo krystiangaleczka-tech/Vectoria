@@ -58,6 +58,9 @@ export class CommandHistory {
   execute(command: Command, doc: DocumentModel): DocumentModel {
     const newDoc = command.execute(doc);
 
+    // Rejected commands must not create empty undo entries.
+    if (newDoc === doc) return doc;
+
     // Dev-mode invariant validation — uses safe type cast since
     // import.meta.env is a Vite feature not available in plain tsc.
     const dev = (import.meta as { env?: { DEV?: boolean } }).env?.DEV;
@@ -96,7 +99,7 @@ export class CommandHistory {
     if (!command) return null;
 
     const newDoc = command.execute(doc);
-    this.undoStack.push(command);
+    if (newDoc !== doc) this.undoStack.push(command);
     this._onChange?.();
     return newDoc;
   }

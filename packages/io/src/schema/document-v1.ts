@@ -131,6 +131,7 @@ export const LayerSchema = z.object({
   name: z.string(),
   visible: z.boolean(),
   locked: z.boolean(),
+  opacity: z.number().min(0).max(1).default(1),
   objectIds: z.array(z.string().min(1)),
 });
 
@@ -142,6 +143,7 @@ export const ArtboardSchema = z.object({
   width: z.number().positive(),
   height: z.number().positive(),
   background: z.string().nullable(),
+  visible: z.boolean().default(true),
 });
 
 export const DocumentV1Schema = z.object({

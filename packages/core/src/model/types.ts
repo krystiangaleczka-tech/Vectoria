@@ -130,6 +130,7 @@ export interface Layer {
   readonly name: string;
   readonly visible: boolean;
   readonly locked: boolean;
+  readonly opacity: number;
 
   /** Index 0 = bottom-most within this layer. */
   readonly objectIds: readonly ObjectId[];
@@ -145,6 +146,7 @@ export interface Artboard {
   readonly width: number;
   readonly height: number;
   readonly background: string | null;
+  readonly visible: boolean;
 }
 
 // ─── Document Model ───────────────────────────────────────────────────────────

@@ -1,30 +1,29 @@
 import type { Camera } from '@vectoria/editor-engine';
 import type { DocumentModel, Artboard, RectangleObject, EllipseObject, LineObject, PathObject, ObjectId, Transform2D, LinearGradientFill } from '@vectoria/core';
-import { getTransformMatrix } from '@vectoria/core';
+import { getTransformMatrix, getObjectBounds, rectsIntersect } from '@vectoria/core';
 
 // ─── Render Loop ──────────────────────────────────────────────────────────────
 
 export class RenderLoop {
   private rafId: number | null = null;
-  private dirty = true;
+  private started = false;
 
   constructor(private readonly renderFn: () => void) {}
 
   /** Mark the scene as needing a re-render. */
   invalidate(): void {
-    this.dirty = true;
+    if (!this.started || this.rafId !== null) return;
+    this.rafId = requestAnimationFrame(() => {
+      this.rafId = null;
+      this.renderFn();
+    });
   }
 
   /** Start the render loop. */
   start(): void {
-    const tick = () => {
-      if (this.dirty) {
-        this.dirty = false;
-        this.renderFn();
-      }
-      this.rafId = requestAnimationFrame(tick);
-    };
-    this.rafId = requestAnimationFrame(tick);
+    if (this.started) return;
+    this.started = true;
+    this.invalidate();
   }
 
   /** Stop the render loop. */
@@ -33,6 +32,7 @@ export class RenderLoop {
       cancelAnimationFrame(this.rafId);
       this.rafId = null;
     }
+    this.started = false;
   }
 }
 
@@ -69,6 +69,7 @@ export function renderBackground(
   artboard: Artboard,
   canvasWidth: number,
   canvasHeight: number,
+  options?: { showGrid?: boolean },
 ): void {
   const dpr = window.devicePixelRatio || 1;
 
@@ -82,21 +83,23 @@ export function renderBackground(
 
   // Presentation-only workspace grid. It is drawn before the artboard and is
   // never part of the document scene or SVG export.
-  const gridColor = getComputedStyle(document.documentElement)
-    .getPropertyValue('--color-workspace-grid').trim() || 'rgba(255, 255, 255, 0.035)';
-  const gridSize = Math.max(16, 40 * camera.zoom);
-  ctx.strokeStyle = gridColor;
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  for (let x = camera.pan.x % gridSize; x < canvasWidth / dpr; x += gridSize) {
-    ctx.moveTo(Math.round(x) + 0.5, 0);
-    ctx.lineTo(Math.round(x) + 0.5, canvasHeight / dpr);
+  if (options?.showGrid !== false) {
+    const gridColor = getComputedStyle(document.documentElement)
+      .getPropertyValue('--color-workspace-grid').trim() || 'rgba(255, 255, 255, 0.035)';
+    const gridSize = Math.max(16, 40 * camera.zoom);
+    ctx.strokeStyle = gridColor;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let x = camera.pan.x % gridSize; x < canvasWidth / dpr; x += gridSize) {
+      ctx.moveTo(Math.round(x) + 0.5, 0);
+      ctx.lineTo(Math.round(x) + 0.5, canvasHeight / dpr);
+    }
+    for (let y = camera.pan.y % gridSize; y < canvasHeight / dpr; y += gridSize) {
+      ctx.moveTo(0, Math.round(y) + 0.5);
+      ctx.lineTo(canvasWidth / dpr, Math.round(y) + 0.5);
+    }
+    ctx.stroke();
   }
-  for (let y = camera.pan.y % gridSize; y < canvasHeight / dpr; y += gridSize) {
-    ctx.moveTo(0, Math.round(y) + 0.5);
-    ctx.lineTo(canvasWidth / dpr, Math.round(y) + 0.5);
-  }
-  ctx.stroke();
 
   // Artboard shadow
   const screenPos = camera.worldToScreen({ x: artboard.x, y: artboard.y });
@@ -136,6 +139,7 @@ export function renderScene(
   canvasHeight: number,
   options?: {
     previewTransforms?: Record<string, import('@vectoria/core').Transform2D>;
+    showGrid?: boolean;
   }
 ): void {
   const dpr = window.devicePixelRatio || 1;
@@ -150,16 +154,21 @@ export function renderScene(
 
   // Clip to active artboard
   const artboard = doc.artboards[doc.activeArtboardId];
-  if (artboard) {
+  if (artboard && artboard.visible !== false) {
     ctx.beginPath();
     ctx.rect(artboard.x, artboard.y, artboard.width, artboard.height);
     ctx.clip();
   }
 
+  const visibleWorldRect = camera.getVisibleWorldRect({
+    x: canvasWidth / dpr,
+    y: canvasHeight / dpr,
+  });
+
   // Render objects in z-order
   for (const layerId of doc.layerIds) {
     const layer = doc.layers[layerId];
-    if (!layer?.visible) continue;
+    if (!layer?.visible || layer.opacity === 0) continue;
 
     for (const objectId of layer.objectIds) {
       let obj = doc.objects[objectId];
@@ -168,6 +177,11 @@ export function renderScene(
       if (options?.previewTransforms?.[objectId]) {
         obj = { ...obj, transform: options.previewTransforms[objectId]! };
       }
+      if (layer.opacity !== 1) {
+        obj = { ...obj, style: { ...obj.style, opacity: obj.style.opacity * layer.opacity } };
+      }
+
+      if (!rectsIntersect(getObjectBounds(obj), visibleWorldRect)) continue;
 
       switch (obj.type) {
         case 'rectangle':
@@ -474,6 +488,7 @@ function renderRectangleSelectionOutline(
   ctx.fillStyle = getComputedStyle(document.documentElement)
     .getPropertyValue('--color-selection-fill').trim() || 'rgba(92, 174, 255, 0.13)';
   ctx.fillRect(0, 0, obj.width, obj.height);
+  drawResizeHandles(ctx, camera, [{ x: 0, y: 0 }, { x: obj.width, y: 0 }, { x: obj.width, y: obj.height }, { x: 0, y: obj.height }]);
 
   ctx.restore();
 }
@@ -502,6 +517,7 @@ function renderEllipseSelectionOutline(
   ctx.beginPath();
   ctx.ellipse(rx, ry, rx, ry, 0, 0, Math.PI * 2);
   ctx.stroke();
+  drawResizeHandles(ctx, camera, [{ x: 0, y: 0 }, { x: obj.width, y: 0 }, { x: obj.width, y: obj.height }, { x: 0, y: obj.height }]);
 
   ctx.restore();
 }
@@ -565,4 +581,15 @@ function renderPathSelectionOutline(
   ctx.stroke();
 
   ctx.restore();
+}
+
+function drawResizeHandles(ctx: CanvasRenderingContext2D, camera: Camera, points: readonly { x: number; y: number }[]): void {
+  const size = 8 / camera.zoom;
+  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-node').trim() || '#ffffff';
+  ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-selection').trim() || '#5caeff';
+  ctx.lineWidth = 1 / camera.zoom;
+  for (const point of points) {
+    ctx.fillRect(point.x - size / 2, point.y - size / 2, size, size);
+    ctx.strokeRect(point.x - size / 2, point.y - size / 2, size, size);
+  }
 }

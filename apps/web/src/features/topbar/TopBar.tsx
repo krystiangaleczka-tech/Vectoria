@@ -11,10 +11,20 @@ export interface TopBarProps {
   onUndo: () => void;
   onRedo: () => void;
   onFitArtboard: () => void;
+  onFitDrawing: () => void;
   onZoom100: () => void;
   onExportSvg: () => void;
+  onExportPng: () => void;
+  onImportSvg: () => void;
   rightDockOpen: boolean;
   onToggleRightDock: () => void;
+  onNewDocument: () => void;
+  showGrid: boolean;
+  snapToGrid: boolean;
+  onToggleGrid: () => void;
+  onToggleSnap: () => void;
+  theme: 'dark' | 'light';
+  onToggleTheme: () => void;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -26,10 +36,20 @@ export const TopBar: React.FC<TopBarProps> = ({
   onUndo,
   onRedo,
   onFitArtboard,
+  onFitDrawing,
   onZoom100,
   onExportSvg,
+  onExportPng,
+  onImportSvg,
   rightDockOpen,
   onToggleRightDock,
+  onNewDocument,
+  showGrid,
+  snapToGrid,
+  onToggleGrid,
+  onToggleSnap,
+  theme,
+  onToggleTheme,
 }) => {
   return (
     <header
@@ -51,10 +71,20 @@ export const TopBar: React.FC<TopBarProps> = ({
         onUndo={onUndo}
         onRedo={onRedo}
         onFitArtboard={onFitArtboard}
+        onFitDrawing={onFitDrawing}
         onZoom100={onZoom100}
         onExportSvg={onExportSvg}
+        onExportPng={onExportPng}
+        onImportSvg={onImportSvg}
         rightDockOpen={rightDockOpen}
         onToggleRightDock={onToggleRightDock}
+        onNewDocument={onNewDocument}
+        showGrid={showGrid}
+        snapToGrid={snapToGrid}
+        onToggleGrid={onToggleGrid}
+        onToggleSnap={onToggleSnap}
+        theme={theme}
+        onToggleTheme={onToggleTheme}
       />
       <DocumentTabs documentName={documentName} dirty={saveStatus !== 'saved'} />
     </header>

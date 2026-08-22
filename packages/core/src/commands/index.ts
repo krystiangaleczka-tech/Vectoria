@@ -9,4 +9,7 @@ export {
   SetEllipseGeometryCommand,
   SetLineGeometryCommand,
   SetPathGeometryCommand,
+  UpdateArtboardCommand,
+  UpdateLayerCommand,
+  UpdateObjectCommand,
 } from './document-commands.js';

@@ -1,8 +1,9 @@
 import type { Vec2 } from '@vectoria/shared';
 import { rectContainsPoint } from '@vectoria/shared';
 import type { DocumentModel, SceneObject, ObjectId, RectangleObject, EllipseObject, LineObject, PathObject } from '@vectoria/core';
-import { getTransformMatrix } from '@vectoria/core';
+import { getTransformMatrix, getObjectBounds } from '@vectoria/core';
 import { mat3Inverse, mat3TransformPoint } from '@vectoria/shared';
+import type { Rect } from '@vectoria/shared';
 
 /**
  * Hit-test a point in world space against all visible, unlocked objects.
@@ -12,6 +13,7 @@ import { mat3Inverse, mat3TransformPoint } from '@vectoria/shared';
 export function hitTest(
   doc: DocumentModel,
   worldPoint: Vec2,
+  visibleWorldRect?: Rect,
 ): ObjectId | null {
   // Iterate layers top-to-bottom
   for (let li = doc.layerIds.length - 1; li >= 0; li--) {
@@ -24,6 +26,10 @@ export function hitTest(
       const objectId = layer.objectIds[oi]!;
       const obj = doc.objects[objectId];
       if (!obj || !obj.visible || obj.locked) continue;
+      if (visibleWorldRect) {
+        const bounds = getObjectBounds(obj);
+        if (bounds.x > visibleWorldRect.x + visibleWorldRect.width || bounds.x + bounds.width < visibleWorldRect.x || bounds.y > visibleWorldRect.y + visibleWorldRect.height || bounds.y + bounds.height < visibleWorldRect.y) continue;
+      }
 
       if (hitTestObject(obj, worldPoint)) {
         return objectId;

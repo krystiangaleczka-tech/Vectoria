@@ -62,6 +62,7 @@ export function createDefaultDocument(options: CreateDocumentOptions = {}): Docu
     width,
     height,
     background: '#ffffff',
+    visible: true,
   };
 
   const layer: Layer = {
@@ -69,6 +70,7 @@ export function createDefaultDocument(options: CreateDocumentOptions = {}): Docu
     name: 'Layer 1',
     visible: true,
     locked: false,
+    opacity: 1,
     objectIds: [],
   };
 

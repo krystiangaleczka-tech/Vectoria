@@ -2,7 +2,7 @@ import React from 'react';
 import { IconButton, VectoriaIcon } from '@vectoria/ui';
 import { Tooltip } from '@vectoria/ui';
 
-export type ActiveTool = 'select' | 'rectangle' | 'hand' | 'zoom';
+export type ActiveTool = 'select' | 'rectangle' | 'ellipse' | 'line' | 'pen' | 'hand' | 'zoom';
 
 export interface ToolRailProps {
   activeTool: ActiveTool;
@@ -12,8 +12,8 @@ export interface ToolRailProps {
 export const ToolRail: React.FC<ToolRailProps> = ({ activeTool, onSelectTool }) => {
   const groups: readonly ToolGroup[] = [
     { label: 'Selection', tools: [{ id: 'select', label: 'Select Tool', shortcut: 'V', icon: 'select' }, { id: 'direct-select', label: 'Direct Select Tool', shortcut: 'A', icon: 'directSelect', disabled: true }] },
-    { label: 'Shape', tools: [{ id: 'rectangle', label: 'Rectangle Tool', shortcut: 'R', icon: 'rectangle' }, { id: 'ellipse', label: 'Ellipse Tool', shortcut: 'E', icon: 'ellipse', disabled: true }] },
-    { label: 'Draw', tools: [{ id: 'pen', label: 'Pen Tool', shortcut: 'P', icon: 'pen', disabled: true }, { id: 'line', label: 'Line Tool', shortcut: 'L', icon: 'line', disabled: true }, { id: 'text', label: 'Text Tool', shortcut: 'T', icon: 'text', disabled: true }] },
+    { label: 'Shape', tools: [{ id: 'rectangle', label: 'Rectangle Tool', shortcut: 'R', icon: 'rectangle' }, { id: 'ellipse', label: 'Ellipse Tool', shortcut: 'E', icon: 'ellipse' }, { id: 'line', label: 'Line Tool', shortcut: 'L', icon: 'line' }] },
+    { label: 'Draw', tools: [{ id: 'pen', label: 'Pen Tool', shortcut: 'P', icon: 'pen' }, { id: 'text', label: 'Text Tool', shortcut: 'T', icon: 'text', disabled: true }] },
     { label: 'Navigate', tools: [{ id: 'hand', label: 'Hand / Pan Tool', shortcut: 'Space', icon: 'hand' }, { id: 'zoom', label: 'Zoom Tool', shortcut: 'Z', icon: 'zoom' }] },
   ];
 

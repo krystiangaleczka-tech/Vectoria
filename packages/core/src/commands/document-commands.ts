@@ -8,6 +8,7 @@ import type {
   ObjectStyle,
   Transform2D,
   PathNode,
+  ArtboardId,
 } from '../model/types.js';
 
 // ─── CreateObjectsCommand ─────────────────────────────────────────────────────
@@ -519,5 +520,77 @@ export class SetPathGeometryCommand implements Command {
       },
       updatedAt: new Date().toISOString(),
     };
+  }
+}
+
+// ─── Artboard and layer commands ─────────────────────────────────────────────
+
+export class UpdateArtboardCommand implements Command {
+  readonly type = 'UpdateArtboard';
+  readonly description = 'Change artboard';
+  private previous: Partial<Pick<import('../model/types.js').Artboard, 'name' | 'width' | 'height' | 'background' | 'visible'>> | null = null;
+
+  constructor(
+    private readonly artboardId: ArtboardId,
+    private readonly patch: Partial<Pick<import('../model/types.js').Artboard, 'name' | 'width' | 'height' | 'background' | 'visible'>>,
+  ) {}
+
+  execute(doc: DocumentModel): DocumentModel {
+    const artboard = doc.artboards[this.artboardId];
+    if (!artboard) return doc;
+    const width = this.patch.width ?? artboard.width;
+    const height = this.patch.height ?? artboard.height;
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return doc;
+    this.previous = { name: artboard.name, width: artboard.width, height: artboard.height, background: artboard.background, visible: artboard.visible };
+    return { ...doc, artboards: { ...doc.artboards, [this.artboardId]: { ...artboard, ...this.patch, width, height } }, updatedAt: new Date().toISOString() };
+  }
+
+  undo(doc: DocumentModel): DocumentModel {
+    const artboard = doc.artboards[this.artboardId];
+    return this.previous && artboard ? { ...doc, artboards: { ...doc.artboards, [this.artboardId]: { ...artboard, ...this.previous } }, updatedAt: new Date().toISOString() } : doc;
+  }
+}
+
+export class UpdateLayerCommand implements Command {
+  readonly type = 'UpdateLayer';
+  readonly description = 'Change layer';
+  private previous: Partial<Pick<import('../model/types.js').Layer, 'name' | 'visible' | 'locked' | 'opacity'>> | null = null;
+
+  constructor(
+    private readonly layerId: LayerId,
+    private readonly patch: Partial<Pick<import('../model/types.js').Layer, 'name' | 'visible' | 'locked' | 'opacity'>>,
+  ) {}
+
+  execute(doc: DocumentModel): DocumentModel {
+    const layer = doc.layers[this.layerId];
+    if (!layer) return doc;
+    if (this.patch.opacity !== undefined && (!Number.isFinite(this.patch.opacity) || this.patch.opacity < 0 || this.patch.opacity > 1)) return doc;
+    this.previous = { name: layer.name, visible: layer.visible, locked: layer.locked, opacity: layer.opacity };
+    return { ...doc, layers: { ...doc.layers, [this.layerId]: { ...layer, ...this.patch } }, updatedAt: new Date().toISOString() };
+  }
+
+  undo(doc: DocumentModel): DocumentModel {
+    const layer = doc.layers[this.layerId];
+    return this.previous && layer ? { ...doc, layers: { ...doc.layers, [this.layerId]: { ...layer, ...this.previous } }, updatedAt: new Date().toISOString() } : doc;
+  }
+}
+
+export class UpdateObjectCommand implements Command {
+  readonly type = 'UpdateObject';
+  readonly description = 'Change object';
+  private previous: Partial<Pick<SceneObject, 'name' | 'visible' | 'locked'>> | null = null;
+
+  constructor(private readonly objectId: ObjectId, private readonly patch: Partial<Pick<SceneObject, 'name' | 'visible' | 'locked'>>) {}
+
+  execute(doc: DocumentModel): DocumentModel {
+    const object = doc.objects[this.objectId];
+    if (!object) return doc;
+    this.previous = { name: object.name, visible: object.visible, locked: object.locked };
+    return { ...doc, objects: { ...doc.objects, [this.objectId]: { ...object, ...this.patch } }, updatedAt: new Date().toISOString() };
+  }
+
+  undo(doc: DocumentModel): DocumentModel {
+    const object = doc.objects[this.objectId];
+    return this.previous && object ? { ...doc, objects: { ...doc.objects, [this.objectId]: { ...object, ...this.previous } }, updatedAt: new Date().toISOString() } : doc;
   }
 }

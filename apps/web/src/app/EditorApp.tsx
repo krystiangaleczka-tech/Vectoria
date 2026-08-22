@@ -1,15 +1,24 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { generateId } from '@vectoria/shared';
 import type { Vec2 } from '@vectoria/shared';
 import type {
   DocumentModel,
   ObjectId,
   Command,
+  ObjectStyle,
+  SceneObject,
 } from '@vectoria/core';
 import {
   CommandHistory,
+  CreateObjectsCommand,
   TransformObjectsCommand,
   SetRectangleGeometryCommand,
+  SetEllipseGeometryCommand,
   SetObjectStyleCommand,
+  UpdateArtboardCommand,
+  UpdateObjectCommand,
+  createDefaultDocument,
+  getObjectBounds,
 } from '@vectoria/core';
 import { Camera } from '@vectoria/editor-engine';
 import {
@@ -17,6 +26,9 @@ import {
   saveDocument,
   exportArtboardToSvg,
   downloadSvg,
+  rasterizeSvgToPng,
+  downloadBlob,
+  importSvgToDocument,
   type BootstrapState,
 } from '@vectoria/io';
 
@@ -26,6 +38,7 @@ import { CanvasViewport } from '../features/canvas/CanvasViewport.js';
 import { ContextualControlBar } from '../features/panels/ContextualControlBar.js';
 import { RightDock } from '../features/panels/RightDock.js';
 import { StatusBar } from '../features/statusbar/StatusBar.js';
+import { NewDocumentDialog } from '../features/dialogs/NewDocumentDialog.js';
 
 function isMacPlatform(): boolean {
   const platform = (navigator as { userAgentData?: { platform?: string } }).userAgentData?.platform
@@ -58,12 +71,22 @@ export const EditorApp: React.FC = () => {
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error'>('saved');
   const [cursorWorld, setCursorWorld] = useState<Vec2 | null>(null);
   const [zoomPercent, setZoomPercent] = useState(100);
+  const [newDocumentOpen, setNewDocumentOpen] = useState(false);
+  const [showGrid, setShowGrid] = useState(true);
+  const [snapToGrid, setSnapToGrid] = useState(false);
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => localStorage.getItem('vectoria-theme') === 'light' ? 'light' : 'dark');
 
   const history = useMemo(() => new CommandHistory(), []);
   const camera = useMemo(() => new Camera(), []);
   const autosaveTimeoutRef = useRef<number | null>(null);
   const isBootstrappedRef = useRef(false);
   const latestDocRef = useRef<DocumentModel | null>(null);
+  const clipboardRef = useRef<SceneObject[]>([]);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem('vectoria-theme', theme);
+  }, [theme]);
 
   useEffect(() => {
     latestDocRef.current = doc;
@@ -189,6 +212,18 @@ export const EditorApp: React.FC = () => {
     setZoomPercent(camera.zoomPercent);
   }, [camera]);
 
+  const handleFitDrawing = useCallback(() => {
+    if (!doc) return;
+    const bounds = Object.values(doc.objects).filter((object) => object.visible).map(getObjectBounds);
+    if (bounds.length === 0) return handleFitArtboard();
+    const minX = Math.min(...bounds.map((rect) => rect.x));
+    const minY = Math.min(...bounds.map((rect) => rect.y));
+    const maxX = Math.max(...bounds.map((rect) => rect.x + rect.width));
+    const maxY = Math.max(...bounds.map((rect) => rect.y + rect.height));
+    camera.fitRect({ x: minX, y: minY, width: Math.max(1, maxX - minX), height: Math.max(1, maxY - minY) }, { x: Math.max(100, window.innerWidth - 336), y: Math.max(100, window.innerHeight - 140) });
+    setZoomPercent(camera.zoomPercent);
+  }, [camera, doc, handleFitArtboard]);
+
   // Export SVG
   const handleExportSvg = useCallback(() => {
     if (!doc) return;
@@ -199,6 +234,39 @@ export const EditorApp: React.FC = () => {
       console.error('[Vectoria] Export SVG error:', err);
     }
   }, [doc]);
+
+  const handleExportPng = useCallback(async () => {
+    if (!doc) return;
+    const artboard = doc.artboards[doc.activeArtboardId];
+    if (!artboard) return;
+    try {
+      const blob = await rasterizeSvgToPng(exportArtboardToSvg(doc), artboard.width, artboard.height);
+      downloadBlob(blob, `${doc.name.toLowerCase().replace(/\s+/g, '-')}.png`);
+    } catch (err) { console.error('[Vectoria] PNG export error:', err); }
+  }, [doc]);
+
+  const handleCreateDocument = useCallback((options: Parameters<typeof createDefaultDocument>[0]) => {
+    const next = createDefaultDocument(options);
+    history.clear();
+    setDoc(next);
+    setSelectedObjectId(null);
+    setNewDocumentOpen(false);
+    scheduleAutosave(next);
+  }, [history, scheduleAutosave]);
+
+  const handleImportSvg = useCallback(() => {
+    const input = document.createElement('input');
+    input.type = 'file'; input.accept = '.svg,image/svg+xml';
+    input.onchange = () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      void file.text().then((svg) => {
+        const imported = importSvgToDocument(svg, file.name.replace(/\.svg$/i, '') || 'Imported SVG');
+        history.clear(); setDoc(imported); setSelectedObjectId(null); scheduleAutosave(imported);
+      }).catch((error) => console.error('[Vectoria] SVG import error:', error));
+    };
+    input.click();
+  }, [history, scheduleAutosave]);
 
   // Property panel mutation handlers (commands)
   const handleUpdatePosition = useCallback(
@@ -223,9 +291,11 @@ export const EditorApp: React.FC = () => {
 
   const handleUpdateDimensions = useCallback(
     (id: ObjectId, width: number, height: number) => {
-      handleExecuteCommand(new SetRectangleGeometryCommand(id, { width, height }));
+      const object = doc?.objects[id];
+      if (object?.type === 'ellipse') handleExecuteCommand(new SetEllipseGeometryCommand(id, { width, height }));
+      else if (object?.type === 'rectangle') handleExecuteCommand(new SetRectangleGeometryCommand(id, { width, height }));
     },
-    [handleExecuteCommand]
+    [doc, handleExecuteCommand]
   );
 
   const handleUpdateFill = useCallback(
@@ -235,6 +305,27 @@ export const EditorApp: React.FC = () => {
     },
     [handleExecuteCommand]
   );
+
+  const handleUpdateObjectStyle = useCallback((id: ObjectId, patch: Partial<ObjectStyle>) => {
+    handleExecuteCommand(new SetObjectStyleCommand([id], patch));
+  }, [handleExecuteCommand]);
+
+  const handleUpdateRotation = useCallback((id: ObjectId, degrees: number) => {
+    if (!doc || !Number.isFinite(degrees)) return;
+    const object = doc.objects[id];
+    if (!object) return;
+    handleExecuteCommand(new TransformObjectsCommand([id], new Map([[id, { ...object.transform, rotation: degrees * Math.PI / 180 }]])));
+  }, [doc, handleExecuteCommand]);
+
+  const handleUpdateArtboard = useCallback((width: number, height: number) => {
+    if (!doc) return;
+    handleExecuteCommand(new UpdateArtboardCommand(doc.activeArtboardId, { width, height }));
+  }, [doc, handleExecuteCommand]);
+
+  const handleToggleObject = useCallback((id: ObjectId, field: 'visible' | 'locked') => {
+    const object = doc?.objects[id];
+    if (object) handleExecuteCommand(new UpdateObjectCommand(id, { [field]: !object[field] }));
+  }, [doc, handleExecuteCommand]);
 
   // Global Keyboard Shortcuts
   useEffect(() => {
@@ -249,7 +340,28 @@ export const EditorApp: React.FC = () => {
       const isMac = isMacPlatform();
       const cmdKey = isMac ? e.metaKey : e.ctrlKey;
 
-      if (cmdKey && e.key.toLowerCase() === 'z') {
+      if (cmdKey && e.key.toLowerCase() === 'c') {
+        if (selectedObjectId && doc?.objects[selectedObjectId]) clipboardRef.current = [doc.objects[selectedObjectId]!];
+      } else if (cmdKey && e.key.toLowerCase() === 'v') {
+        if (doc && clipboardRef.current.length > 0) {
+          const pasted = clipboardRef.current.map((object) => ({
+            ...structuredClone(object),
+            id: generateId(),
+            name: `${object.name} copy`,
+            layerId: doc.activeLayerId,
+            transform: { ...object.transform, position: { x: object.transform.position.x + 20, y: object.transform.position.y + 20 } },
+          } as SceneObject));
+          handleExecuteCommand(new CreateObjectsCommand(pasted, doc.activeLayerId));
+          setSelectedObjectId(pasted[0]?.id ?? null);
+        }
+      } else if (cmdKey && e.key.toLowerCase() === 'd') {
+        if (doc && selectedObjectId && doc.objects[selectedObjectId]) {
+          const object = doc.objects[selectedObjectId]!;
+          const duplicate = { ...structuredClone(object), id: generateId(), name: `${object.name} copy`, transform: { ...object.transform, position: { x: object.transform.position.x + 20, y: object.transform.position.y + 20 } } } as SceneObject;
+          handleExecuteCommand(new CreateObjectsCommand([duplicate], doc.activeLayerId));
+          setSelectedObjectId(duplicate.id);
+        }
+      } else if (cmdKey && e.key.toLowerCase() === 'z') {
         e.preventDefault();
         if (e.shiftKey) {
           handleRedo();
@@ -268,8 +380,14 @@ export const EditorApp: React.FC = () => {
         } else if (!cmdKey && !e.shiftKey && !e.altKey) {
           if (e.key.toLowerCase() === 'v') {
             setActiveTool('select');
-          } else if (e.key.toLowerCase() === 'r') {
-            setActiveTool('rectangle');
+           } else if (e.key.toLowerCase() === 'r') {
+             setActiveTool('rectangle');
+           } else if (e.key.toLowerCase() === 'e') {
+             setActiveTool('ellipse');
+           } else if (e.key.toLowerCase() === 'l') {
+             setActiveTool('line');
+           } else if (e.key.toLowerCase() === 'p') {
+             setActiveTool('pen');
           } else if (e.key.toLowerCase() === 'h') {
             setActiveTool('hand');
           } else if (e.key.toLowerCase() === 'z') {
@@ -280,7 +398,7 @@ export const EditorApp: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleUndo, handleRedo, handleZoom100, handleFitArtboard]);
+  }, [doc, selectedObjectId, handleExecuteCommand, handleUndo, handleRedo, handleZoom100, handleFitArtboard]);
 
   // Center / Fit artboard on initial load once ready
   useEffect(() => {
@@ -331,6 +449,12 @@ export const EditorApp: React.FC = () => {
         : 'Click object to select · Space+Drag to pan · Wheel to zoom'
       : activeTool === 'rectangle'
       ? 'Drag to draw rectangle · Hold Shift for square'
+      : activeTool === 'ellipse'
+      ? 'Drag to draw ellipse · Hold Shift for circle'
+      : activeTool === 'line'
+      ? 'Drag to draw line · Hold Shift for 45°'
+      : activeTool === 'pen'
+      ? 'Click to add nodes · Enter to finish · Escape to cancel'
       : activeTool === 'zoom'
       ? 'Click to zoom in · Wheel to zoom at cursor'
       : 'Drag to pan view';
@@ -359,7 +483,17 @@ export const EditorApp: React.FC = () => {
         onZoom100={handleZoom100}
         onExportSvg={handleExportSvg}
         rightDockOpen={rightDockOpen}
-        onToggleRightDock={() => setRightDockOpen((open) => !open)}
+         onToggleRightDock={() => setRightDockOpen((open) => !open)}
+         onNewDocument={() => setNewDocumentOpen(true)}
+         onExportPng={handleExportPng}
+         onFitDrawing={handleFitDrawing}
+         onImportSvg={handleImportSvg}
+         showGrid={showGrid}
+         snapToGrid={snapToGrid}
+         onToggleGrid={() => setShowGrid((visible) => !visible)}
+         onToggleSnap={() => setSnapToGrid((enabled) => !enabled)}
+         theme={theme}
+         onToggleTheme={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')}
       />
 
       {bootstrapState.status === 'recovery-error' && (
@@ -397,6 +531,8 @@ export const EditorApp: React.FC = () => {
             onSelectObject={setSelectedObjectId}
             onCursorMove={setCursorWorld}
             onZoomChange={setZoomPercent}
+            showGrid={showGrid}
+            snapToGrid={snapToGrid}
           />
         </div>
 
@@ -407,15 +543,19 @@ export const EditorApp: React.FC = () => {
           onSelectObject={setSelectedObjectId}
           onUpdatePosition={handleUpdatePosition}
           onUpdateDimensions={handleUpdateDimensions}
-          onUpdateFill={handleUpdateFill}
-          open={rightDockOpen}
+           onUpdateFill={handleUpdateFill}
+           onUpdateObjectStyle={handleUpdateObjectStyle}
+           onUpdateRotation={handleUpdateRotation}
+           onUpdateArtboard={handleUpdateArtboard}
+           onToggleObject={handleToggleObject}
+           open={rightDockOpen}
         />
       </div>
 
       {/* Status Bar */}
       <StatusBar
         toolHint={toolHint}
-        activeTool={activeTool === 'select' ? 'Select' : activeTool === 'rectangle' ? 'Rectangle' : activeTool === 'hand' ? 'Hand' : 'Zoom'}
+         activeTool={activeTool === 'select' ? 'Select' : activeTool === 'rectangle' ? 'Rectangle' : activeTool === 'ellipse' ? 'Ellipse' : activeTool === 'line' ? 'Line' : activeTool === 'pen' ? 'Pen' : activeTool === 'hand' ? 'Hand' : 'Zoom'}
         selectedObjectName={selectedObjectId ? doc.objects[selectedObjectId]?.name ?? null : null}
         selectedObjectCount={selectedObjectId ? 1 : 0}
         cursorWorld={cursorWorld}
@@ -423,6 +563,7 @@ export const EditorApp: React.FC = () => {
         saveStatus={saveStatus}
         objectCount={Object.keys(doc.objects).length}
       />
+      {newDocumentOpen && <NewDocumentDialog onClose={() => setNewDocumentOpen(false)} onCreate={handleCreateDocument} />}
     </div>
   );
 };

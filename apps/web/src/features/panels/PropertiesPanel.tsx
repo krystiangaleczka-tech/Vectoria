@@ -1,6 +1,7 @@
 import React from 'react';
-import type { DocumentModel, ObjectId, RectangleObject } from '@vectoria/core';
-import { NumberInput, ColorControl } from '@vectoria/ui';
+import type { DocumentModel, ObjectId, ObjectStyle, SceneObject } from '@vectoria/core';
+import { defaultStroke } from '@vectoria/core';
+import { NumberInput, ColorControl, Button } from '@vectoria/ui';
 
 export interface PropertiesPanelProps {
   document: DocumentModel;
@@ -8,149 +9,66 @@ export interface PropertiesPanelProps {
   onUpdatePosition: (id: ObjectId, x: number, y: number) => void;
   onUpdateDimensions: (id: ObjectId, width: number, height: number) => void;
   onUpdateFill: (id: ObjectId, color: string | null) => void;
+  onUpdateObjectStyle?: (id: ObjectId, patch: Partial<ObjectStyle>) => void;
+  onUpdateRotation?: (id: ObjectId, degrees: number) => void;
+  onUpdateArtboard?: (width: number, height: number) => void;
 }
 
+const dimensions = (object: SceneObject): { width: number; height: number } | null =>
+  object.type === 'rectangle' || object.type === 'ellipse' ? { width: object.width, height: object.height } : null;
+
 export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
-  document,
+  document: doc,
   selectedObjectId,
   onUpdatePosition,
   onUpdateDimensions,
   onUpdateFill,
+  onUpdateObjectStyle,
+  onUpdateRotation,
+  onUpdateArtboard,
 }) => {
-  const selectedObject = selectedObjectId ? document.objects[selectedObjectId] : null;
-  const activeArtboard = document.artboards[document.activeArtboardId];
+  const selected = selectedObjectId ? doc.objects[selectedObjectId] : null;
+  const artboard = doc.artboards[doc.activeArtboardId];
+  const size = selected ? dimensions(selected) : null;
+  const patchStyle = (patch: Partial<ObjectStyle>) => selected && onUpdateObjectStyle?.(selected.id, patch);
 
   return (
-    <aside
-      data-testid="properties-panel"
-      style={{
-        width: '100%',
-        minWidth: 0,
-        backgroundColor: 'var(--color-panel)',
-        borderLeft: 'none',
-        display: 'flex',
-        flexDirection: 'column',
-        zIndex: 5,
-      }}
-    >
-      {/* Panel Header */}
-      <div
-        style={{
-          height: '32px',
-          display: 'flex',
-          alignItems: 'center',
-          padding: '0 12px',
-          borderBottom: '1px solid var(--color-border-subtle)',
-          fontSize: '12px',
-          fontWeight: 600,
-          color: 'var(--color-text-secondary)',
-          textTransform: 'uppercase',
-          letterSpacing: '0.04em',
-        }}
-      >
-        {selectedObject ? 'Object Properties' : 'Artboard Properties'}
-      </div>
-
-      {/* Content */}
-      <div
-        style={{
-          padding: '12px',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '16px',
-          overflowY: 'auto',
-        }}
-      >
-        {selectedObject && selectedObject.type === 'rectangle' ? (
-          <>
-            {/* Transform Section */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-text-muted)' }}>
-                Transform
-              </span>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
-                <NumberInput
-                  data-testid="prop-x"
-                  label="X"
-                  value={selectedObject.transform.position.x}
-                  onChange={(newX) =>
-                    onUpdatePosition(selectedObject.id, newX, selectedObject.transform.position.y)
-                  }
-                />
-                <NumberInput
-                  data-testid="prop-y"
-                  label="Y"
-                  value={selectedObject.transform.position.y}
-                  onChange={(newY) =>
-                    onUpdatePosition(selectedObject.id, selectedObject.transform.position.x, newY)
-                  }
-                />
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
-                <NumberInput
-                  data-testid="prop-w"
-                  label="W"
-                  value={(selectedObject as RectangleObject).width}
-                  min={1}
-                  onChange={(newW) =>
-                    onUpdateDimensions(selectedObject.id, newW, (selectedObject as RectangleObject).height)
-                  }
-                />
-                <NumberInput
-                  data-testid="prop-h"
-                  label="H"
-                  value={(selectedObject as RectangleObject).height}
-                  min={1}
-                  onChange={(newH) =>
-                    onUpdateDimensions(selectedObject.id, (selectedObject as RectangleObject).width, newH)
-                  }
-                />
-              </div>
+    <aside className="properties-panel" data-testid="properties-panel">
+      <div className="panel-section-heading"><span>{selected ? 'Object Properties' : 'Artboard Properties'}</span></div>
+      <div className="dock-panel-content">
+        {selected ? <>
+          <section className="property-section">
+            <div className="panel-section-heading"><span>Transformacja</span></div>
+            <div className="property-grid">
+              <NumberInput data-testid="prop-x" label="X" value={selected.transform.position.x} decimals={2} onChange={(value) => onUpdatePosition(selected.id, value, selected.transform.position.y)} />
+              <NumberInput data-testid="prop-y" label="Y" value={selected.transform.position.y} decimals={2} onChange={(value) => onUpdatePosition(selected.id, selected.transform.position.x, value)} />
+              {size && <>
+                <NumberInput data-testid="prop-w" label="W" min={1} value={size.width} decimals={2} onChange={(value) => onUpdateDimensions(selected.id, value, size.height)} />
+                <NumberInput data-testid="prop-h" label="H" min={1} value={size.height} decimals={2} onChange={(value) => onUpdateDimensions(selected.id, size.width, value)} />
+              </>}
+              <NumberInput data-testid="prop-rotation" label="Rot" value={selected.transform.rotation * 180 / Math.PI} decimals={1} unit="°" onChange={(value) => onUpdateRotation?.(selected.id, value)} />
             </div>
-
-            {/* Appearance Section */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-text-muted)' }}>
-                Appearance
-              </span>
-              <ColorControl
-                label="Fill"
-                color={
-                  selectedObject.style.fill.type === 'solid'
-                    ? selectedObject.style.fill.color
-                    : null
-                }
-                onChange={(color) => onUpdateFill(selectedObject.id, color)}
-              />
+          </section>
+          <section className="property-section">
+            <div className="panel-section-heading"><span>Wygląd</span></div>
+            <ColorControl label="Fill" color={selected.style.fill.type === 'solid' ? selected.style.fill.color : null} onChange={(value) => onUpdateFill(selected.id, value)} />
+            <ColorControl label="Stroke" color={selected.style.stroke?.color ?? null} onChange={(value) => patchStyle({ stroke: value ? { ...(selected.style.stroke ?? defaultStroke), color: value } : null })} />
+            <NumberInput data-testid="prop-stroke-width" label="Stroke" value={selected.style.stroke?.width ?? 0} min={0.1} disabled={!selected.style.stroke} decimals={1} onChange={(value) => selected.style.stroke && patchStyle({ stroke: { ...selected.style.stroke, width: value } })} />
+            <NumberInput data-testid="prop-opacity" label="Opacity" value={selected.style.opacity} min={0} max={1} step={0.05} decimals={2} unit="" onChange={(value) => patchStyle({ opacity: value })} />
+            <div className="property-actions">
+              <Button size="sm" variant="ghost" onClick={() => patchStyle({ fill: { type: 'linear-gradient', start: { x: 0, y: 0 }, end: { x: size?.width ?? 100, y: 0 }, stops: [{ offset: 0, color: '#5caeff', opacity: 1 }, { offset: 1, color: '#8e5cff', opacity: 1 }] } })}>Gradient</Button>
             </div>
-          </>
-        ) : activeArtboard ? (
-          <>
-            {/* Artboard Info */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-text-muted)' }}>
-                Artboard
-              </span>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
-                <NumberInput
-                  label="W"
-                  value={activeArtboard.width}
-                  disabled
-                  onChange={() => {}}
-                />
-                <NumberInput
-                  label="H"
-                  value={activeArtboard.height}
-                  disabled
-                  onChange={() => {}}
-                />
-              </div>
-              <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '4px' }}>
-                Select an object to inspect and edit its properties.
-              </div>
+          </section>
+        </> : artboard ? <>
+          <section className="property-section">
+            <div className="panel-section-heading"><span>Artboard</span></div>
+            <div className="property-grid">
+              <NumberInput data-testid="artboard-width" label="W" min={1} value={artboard.width} decimals={2} onChange={(value) => onUpdateArtboard?.(value, artboard.height)} />
+              <NumberInput data-testid="artboard-height" label="H" min={1} value={artboard.height} decimals={2} onChange={(value) => onUpdateArtboard?.(artboard.width, value)} />
             </div>
-          </>
-        ) : null}
+            <p className="panel-note">Rozmiar artboardu zmienia model świata. Canvas zawsze pozostaje wielkości viewportu.</p>
+          </section>
+        </> : null}
       </div>
     </aside>
   );
