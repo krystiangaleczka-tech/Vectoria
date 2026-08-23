@@ -5,6 +5,27 @@ import { getTransformMatrix, getObjectBounds, rectsIntersect, normalizeCornerRad
 import { mat3TransformPoint } from '@vectoria/shared';
 export interface GridSettings { visible: boolean; size: number; subdivisions: number }
 
+// ─── Theme color cache (avoids per-frame getComputedStyle calls) ─────────────
+
+const themeColorCache = new Map<string, string>();
+let themeCacheGeneration = -1;
+
+function themeColor(varName: string, fallback: string): string {
+  // Invalidate cache when the stylesheet generation changes (theme switch).
+  const root = document.documentElement;
+  const generation = (root as unknown as { __themeGen?: number }).__themeGen ?? 0;
+  if (generation !== themeCacheGeneration) {
+    themeColorCache.clear();
+    themeCacheGeneration = generation;
+  }
+  let value = themeColorCache.get(varName);
+  if (value === undefined) {
+    value = getComputedStyle(root).getPropertyValue(varName).trim() || fallback;
+    themeColorCache.set(varName, value);
+  }
+  return value;
+}
+
 interface Line { start: Vec2; end: Vec2 }
 function getGridLines(rect: { x: number; y: number; width: number; height: number }, settings: GridSettings): { major: Line[]; minor: Line[] } {
   const size = Number.isFinite(settings.size) && settings.size > 0 ? settings.size : 10;
@@ -92,15 +113,13 @@ export function renderBackground(
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
   // Workspace background
-  ctx.fillStyle = getComputedStyle(document.documentElement)
-    .getPropertyValue('--color-workspace').trim() || '#20201e';
+  ctx.fillStyle = themeColor('--color-workspace', '#20201e');
   ctx.fillRect(0, 0, canvasWidth / dpr, canvasHeight / dpr);
 
   // Presentation-only workspace grid. It is drawn before the artboard and is
   // never part of the document scene or SVG export.
   if (options?.showGrid !== false) {
-    const gridColor = getComputedStyle(document.documentElement)
-      .getPropertyValue('--color-workspace-grid').trim() || 'rgba(255, 255, 255, 0.035)';
+    const gridColor = themeColor('--color-workspace-grid', 'rgba(255, 255, 255, 0.035)');
     const visible = camera.getVisibleWorldRect({ x: canvasWidth / dpr, y: canvasHeight / dpr });
     const lines = getGridLines(visible, options?.grid ?? { visible: true, size: 10, subdivisions: 1 });
     const drawLines = (groups: Line[], alpha: number) => {
@@ -141,9 +160,8 @@ export function renderBackground(
     const top = Math.max(0, screenPos.y);
     const right = Math.min(canvasWidth / dpr, screenPos.x + screenW);
     const bottom = Math.min(canvasHeight / dpr, screenPos.y + screenH);
-    const rootStyle = getComputedStyle(document.documentElement);
-    const checkerLight = rootStyle.getPropertyValue('--color-artboard').trim() || '#ffffff';
-    const checkerDark = rootStyle.getPropertyValue('--color-workspace-deep').trim() || '#d8d8d2';
+    const checkerLight = themeColor('--color-artboard', '#ffffff');
+    const checkerDark = themeColor('--color-workspace-deep', '#d8d8d2');
     if (right > left && bottom > top) {
       ctx.fillStyle = checkerLight;
       ctx.fillRect(left, top, right - left, bottom - top);
@@ -165,8 +183,7 @@ export function renderBackground(
   ctx.shadowOffsetY = 0;
 
   // Artboard border
-  ctx.strokeStyle = getComputedStyle(document.documentElement)
-    .getPropertyValue('--color-border-subtle').trim() || '#33332f';
+  ctx.strokeStyle = themeColor('--color-border-subtle', '#33332f');
   ctx.lineWidth = 1;
   ctx.strokeRect(screenPos.x, screenPos.y, screenW, screenH);
 
@@ -493,8 +510,8 @@ export function renderOverlay(
     const end = camera.worldToScreen(options.marquee.end);
     const x = Math.min(start.x, end.x);
     const y = Math.min(start.y, end.y);
-    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-selection-fill').trim() || 'rgba(92, 174, 255, 0.13)';
-    ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-selection').trim() || '#5caeff';
+    ctx.fillStyle = themeColor('--color-selection-fill', 'rgba(92, 174, 255, 0.13)');
+    ctx.strokeStyle = themeColor('--color-selection', '#5caeff');
     ctx.lineWidth = 1;
     ctx.setLineDash([4, 3]);
     ctx.fillRect(x, y, Math.abs(end.x - start.x), Math.abs(end.y - start.y));
@@ -516,8 +533,8 @@ export function renderOverlay(
       const maxY = Math.max(...bounds.map((bound) => bound.y + bound.height));
       const topLeft = camera.worldToScreen({ x: minX, y: minY });
       const bottomRight = camera.worldToScreen({ x: maxX, y: maxY });
-      ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-selection').trim() || '#5caeff';
-      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-selection-fill').trim() || 'rgba(92, 174, 255, 0.13)';
+      ctx.strokeStyle = themeColor('--color-selection', '#5caeff');
+      ctx.fillStyle = themeColor('--color-selection-fill', 'rgba(92, 174, 255, 0.13)');
       ctx.lineWidth = 1.5;
       ctx.fillRect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
       ctx.strokeRect(topLeft.x + 0.5, topLeft.y + 0.5, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
@@ -574,16 +591,14 @@ function renderRectangleSelectionOutline(
   ctx.transform(matrix[0], matrix[1], matrix[3], matrix[4], matrix[6], matrix[7]);
 
   // Selection outline in screen space
-  ctx.strokeStyle = getComputedStyle(document.documentElement)
-    .getPropertyValue('--color-selection').trim() || '#5caeff';
+  ctx.strokeStyle = themeColor('--color-selection', '#5caeff');
   ctx.lineWidth = 1.5 / camera.zoom; // constant screen-space width
   ctx.setLineDash([]);
 
   ctx.strokeRect(0, 0, obj.width, obj.height);
 
   // Selection fill
-  ctx.fillStyle = getComputedStyle(document.documentElement)
-    .getPropertyValue('--color-selection-fill').trim() || 'rgba(92, 174, 255, 0.13)';
+  ctx.fillStyle = themeColor('--color-selection-fill', 'rgba(92, 174, 255, 0.13)');
   ctx.fillRect(0, 0, obj.width, obj.height);
   drawResizeHandles(ctx, camera, [{ x: 0, y: 0 }, { x: obj.width, y: 0 }, { x: obj.width, y: obj.height }, { x: 0, y: obj.height }]);
   drawRotationHandle(ctx, camera, obj.width / 2, 0);
@@ -607,8 +622,7 @@ function renderEllipseSelectionOutline(
   const rx = obj.width / 2;
   const ry = obj.height / 2;
 
-  ctx.strokeStyle = getComputedStyle(document.documentElement)
-    .getPropertyValue('--color-selection').trim() || '#5caeff';
+  ctx.strokeStyle = themeColor('--color-selection', '#5caeff');
   ctx.lineWidth = 1.5 / camera.zoom;
   ctx.setLineDash([]);
 
@@ -634,8 +648,7 @@ function renderLineSelectionOutline(
   ctx.scale(camera.zoom, camera.zoom);
   ctx.transform(matrix[0], matrix[1], matrix[3], matrix[4], matrix[6], matrix[7]);
 
-  ctx.strokeStyle = getComputedStyle(document.documentElement)
-    .getPropertyValue('--color-selection').trim() || '#5caeff';
+  ctx.strokeStyle = themeColor('--color-selection', '#5caeff');
   ctx.lineWidth = 1.5 / camera.zoom;
   ctx.setLineDash([]);
 
@@ -660,8 +673,7 @@ function renderPathSelectionOutline(
   ctx.scale(camera.zoom, camera.zoom);
   ctx.transform(matrix[0], matrix[1], matrix[3], matrix[4], matrix[6], matrix[7]);
 
-  ctx.strokeStyle = getComputedStyle(document.documentElement)
-    .getPropertyValue('--color-selection').trim() || '#5caeff';
+  ctx.strokeStyle = themeColor('--color-selection', '#5caeff');
   ctx.lineWidth = 1.5 / camera.zoom;
   ctx.setLineDash([]);
 
@@ -696,8 +708,8 @@ function renderPathSelectionOutline(
     const size = 7;
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-node').trim() || '#ffffff';
-    ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-selection').trim() || '#5caeff';
+    ctx.fillStyle = themeColor('--color-node', '#ffffff');
+    ctx.strokeStyle = themeColor('--color-selection', '#5caeff');
     ctx.lineWidth = 1;
     ctx.fillRect(point.x - size / 2, point.y - size / 2, size, size);
     ctx.strokeRect(point.x - size / 2, point.y - size / 2, size, size);
@@ -705,7 +717,7 @@ function renderPathSelectionOutline(
   }
 
   // Handles stay in screen space so their 6 px endpoints remain usable at any zoom.
-  const handleColor = getComputedStyle(document.documentElement).getPropertyValue('--color-selection').trim() || '#5caeff';
+  const handleColor = themeColor('--color-selection', '#5caeff');
   for (const node of obj.nodes) {
     const point = camera.worldToScreen(mat3TransformPoint(matrix, node.point));
     for (const handle of [node.inHandle, node.outHandle].filter((value): value is Vec2 => Boolean(value))) {
@@ -720,7 +732,7 @@ function renderPathSelectionOutline(
       ctx.lineTo(endpoint.x, endpoint.y);
       ctx.stroke();
       ctx.globalAlpha = 1;
-      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-node').trim() || '#ffffff';
+      ctx.fillStyle = themeColor('--color-node', '#ffffff');
       ctx.beginPath();
       ctx.arc(endpoint.x, endpoint.y, 3, 0, Math.PI * 2);
       ctx.fill();
@@ -734,8 +746,8 @@ function renderPathSelectionOutline(
 
 function drawResizeHandles(ctx: CanvasRenderingContext2D, camera: Camera, points: readonly { x: number; y: number }[]): void {
   const size = 8 / camera.zoom;
-  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-node').trim() || '#ffffff';
-  ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-selection').trim() || '#5caeff';
+  ctx.fillStyle = themeColor('--color-node', '#ffffff');
+  ctx.strokeStyle = themeColor('--color-selection', '#5caeff');
   ctx.lineWidth = 1 / camera.zoom;
   for (const point of points) {
     ctx.fillRect(point.x - size / 2, point.y - size / 2, size, size);
@@ -745,8 +757,8 @@ function drawResizeHandles(ctx: CanvasRenderingContext2D, camera: Camera, points
 
 function drawRotationHandle(ctx: CanvasRenderingContext2D, camera: Camera, x: number, y: number): void {
   const offset = 20 / camera.zoom;
-  ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-selection').trim() || '#5caeff';
-  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-node').trim() || '#ffffff';
+  ctx.strokeStyle = themeColor('--color-selection', '#5caeff');
+  ctx.fillStyle = themeColor('--color-node', '#ffffff');
   ctx.lineWidth = 1 / camera.zoom;
   ctx.beginPath();
   ctx.moveTo(x, y);
@@ -760,8 +772,8 @@ function drawRotationHandle(ctx: CanvasRenderingContext2D, camera: Camera, x: nu
 
 function drawScreenHandles(ctx: CanvasRenderingContext2D, camera: Camera, points: readonly Vec2[]): void {
   const size = 8;
-  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-node').trim() || '#ffffff';
-  ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-selection').trim() || '#5caeff';
+  ctx.fillStyle = themeColor('--color-node', '#ffffff');
+  ctx.strokeStyle = themeColor('--color-selection', '#5caeff');
   ctx.lineWidth = 1;
   for (const point of points) {
     ctx.fillRect(point.x - size / 2, point.y - size / 2, size, size);
@@ -780,9 +792,9 @@ function renderNodeSelection(ctx: CanvasRenderingContext2D, camera: Camera, doc:
       const point = camera.worldToScreen(mat3TransformPoint(matrix, node.point));
       const selectedNode = selected.has(`${object.id}:${index}`);
       ctx.fillStyle = selectedNode
-        ? getComputedStyle(document.documentElement).getPropertyValue('--color-node-selected').trim() || '#5caeff'
-        : getComputedStyle(document.documentElement).getPropertyValue('--color-node').trim() || '#ffffff';
-      ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-selection').trim() || '#5caeff';
+        ? themeColor('--color-node-selected', '#5caeff')
+        : themeColor('--color-node', '#ffffff');
+      ctx.strokeStyle = themeColor('--color-selection', '#5caeff');
       ctx.lineWidth = 1;
       ctx.fillRect(point.x - 3.5, point.y - 3.5, 7, 7);
       ctx.strokeRect(point.x - 3.5, point.y - 3.5, 7, 7);
@@ -793,7 +805,7 @@ function renderNodeSelection(ctx: CanvasRenderingContext2D, camera: Camera, doc:
            ctx.globalAlpha = 0.7;
            ctx.beginPath(); ctx.moveTo(point.x, point.y); ctx.lineTo(endpoint.x, endpoint.y); ctx.stroke();
            ctx.globalAlpha = 1;
-           ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-node').trim() || '#ffffff';
+           ctx.fillStyle = themeColor('--color-node', '#ffffff');
            ctx.beginPath(); ctx.arc(endpoint.x, endpoint.y, 3, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
          }
        }

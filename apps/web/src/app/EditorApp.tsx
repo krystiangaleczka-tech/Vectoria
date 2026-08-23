@@ -123,6 +123,8 @@ export const EditorApp: React.FC = () => {
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
+    (document.documentElement as unknown as { __themeGen?: number }).__themeGen =
+      ((document.documentElement as unknown as { __themeGen?: number }).__themeGen ?? 0) + 1;
     localStorage.setItem('vectoria-theme', theme);
   }, [theme]);
 
