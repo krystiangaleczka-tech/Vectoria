@@ -130,6 +130,43 @@ test.describe('Vectoria MVP Skeleton', () => {
     await expect.poll(() => yInput.inputValue()).toBe(newY);
   });
 
+  test('pointercancel leaves document and history unchanged', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    const canvas = page.getByTestId('canvas-viewport');
+    const box = await canvas.boundingBox();
+    if (!box) throw new Error('Canvas not found');
+    const center = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+
+    await page.getByRole('button', { name: 'Rectangle Tool' }).click();
+    await page.mouse.move(center.x - 40, center.y - 40);
+    await page.mouse.down();
+    await page.mouse.move(center.x + 40, center.y + 40, { steps: 4 });
+    await page.mouse.up();
+    await page.getByRole('tab', { name: 'Historia' }).click();
+    await expect(page.getByTestId('history-panel')).toContainText('Create rectangle');
+    await page.getByRole('tab', { name: 'Właściwości' }).click();
+
+    await page.getByRole('button', { name: 'Select Tool', exact: true }).click();
+    await page.mouse.click(center.x, center.y);
+    const xInput = page.getByTestId('prop-x').locator('input');
+    const yInput = page.getByTestId('prop-y').locator('input');
+    const initialX = await xInput.inputValue();
+    const initialY = await yInput.inputValue();
+
+    await page.mouse.move(center.x, center.y);
+    await page.mouse.down();
+    await page.mouse.move(center.x + 60, center.y + 60, { steps: 4 });
+    await canvas.dispatchEvent('pointercancel', { bubbles: true, pointerId: 1 });
+    await page.mouse.up();
+
+    expect(await xInput.inputValue()).toBe(initialX);
+    expect(await yInput.inputValue()).toBe(initialY);
+    await page.getByRole('tab', { name: 'Historia' }).click();
+    await expect(page.getByTestId('history-panel').locator('.history-entry-button')).toHaveCount(2);
+  });
+
   test('history panel exposes current cursor and jumps without direct document mutation', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');

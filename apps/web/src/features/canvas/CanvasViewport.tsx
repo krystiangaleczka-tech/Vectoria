@@ -353,7 +353,8 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       return;
     }
 
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    // Pen owns its draft state; pointer capture loss must not cancel completed nodes.
+    if (activeTool !== 'pen') (e.target as HTMLElement).setPointerCapture(e.pointerId);
 
     if (activeTool === 'pen') {
       const result = penToolRef.current!.pointerDown(
@@ -623,7 +624,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     if (drag.type === 'move-object') {
       setDragPreview({});
     }
-    if (drag.type === 'move-node') setPathPreview({});
+    if (drag.type === 'move-node' || drag.type === 'move-handle') setPathPreview({});
     dragSessionRef.current = null;
 
     dragStateRef.current = null;
