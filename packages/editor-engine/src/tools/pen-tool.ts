@@ -75,9 +75,14 @@ export class PenTool {
     const point = this.pendingPoint;
     const handle = this.pendingHandle ? this.constrain(event.worldPoint, event.shiftKey, point) : null;
     const dragged = this.pendingHandle !== null;
+    const isSmooth = dragged && !event.altKey && !this.pendingAlt;
+    const mirroredIn = handle
+      ? { x: 2 * point.x - handle.x, y: 2 * point.y - handle.y }
+      : null;
     this.nodes = [...this.nodes, createPathNode(point, {
-      kind: dragged && !event.altKey && !this.pendingAlt ? 'smooth' : dragged ? 'cusp' : 'corner',
+      kind: isSmooth ? 'smooth' : dragged ? 'cusp' : 'corner',
       outHandle: dragged ? handle : null,
+      inHandle: isSmooth ? mirroredIn : null,
     })];
     this.pendingPoint = null;
     this.pendingHandle = null;

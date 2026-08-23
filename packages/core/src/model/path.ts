@@ -113,10 +113,25 @@ export function applyNodeKind(node: PathNode, kind: PathNode['kind']): PathNode 
 export function updatePathNodeHandle(node: PathNode, side: 'in' | 'out', handle: Vec2 | null): PathNode {
   if (handle !== null && !finite(handle)) return node;
   const next: PathNode = side === 'in' ? { ...node, inHandle: handle } : { ...node, outHandle: handle };
-  if (node.kind !== 'symmetric' || handle === null) return next;
+  if ((node.kind !== 'smooth' && node.kind !== 'symmetric') || handle === null) return next;
 
   const vector = { x: handle.x - node.point.x, y: handle.y - node.point.y };
-  return side === 'in'
-    ? { ...next, outHandle: { x: node.point.x - vector.x, y: node.point.y - vector.y } }
-    : { ...next, inHandle: { x: node.point.x - vector.x, y: node.point.y - vector.y } };
+  const length = Math.hypot(vector.x, vector.y);
+  if (length === 0) return next;
+
+  if (node.kind === 'symmetric') {
+    return side === 'in'
+      ? { ...next, outHandle: { x: node.point.x - vector.x, y: node.point.y - vector.y } }
+      : { ...next, inHandle: { x: node.point.x - vector.x, y: node.point.y - vector.y } };
+  }
+
+  const opposite = side === 'in' ? node.outHandle : node.inHandle;
+  const oppositeLength = opposite
+    ? Math.hypot(opposite.x - node.point.x, opposite.y - node.point.y)
+    : length;
+  const mirrored = {
+    x: node.point.x - (vector.x / length) * oppositeLength,
+    y: node.point.y - (vector.y / length) * oppositeLength,
+  };
+  return side === 'in' ? { ...next, outHandle: mirrored } : { ...next, inHandle: mirrored };
 }

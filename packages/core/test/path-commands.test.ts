@@ -62,6 +62,12 @@ describe('path edit commands', () => {
     expect(updatePathNodeHandle(node, 'out', { x: 25, y: 20 }).inHandle).toEqual({ x: -5, y: 0 });
   });
 
+  it('mirrors smooth handles while preserving opposite handle length', () => {
+    const node = createPathNode({ x: 10, y: 10 }, { kind: 'smooth', outHandle: { x: 20, y: 10 }, inHandle: { x: 5, y: 10 } });
+    expect(updatePathNodeHandle(node, 'out', { x: 10, y: 20 }).inHandle).toEqual({ x: 10, y: 5 });
+    expect(updatePathNodeHandle(node, 'in', { x: 10, y: 0 }).outHandle).toEqual({ x: 10, y: 20 });
+  });
+
   it('reverses node order and swaps handles as one command', () => {
     const history = new CommandHistory();
     let doc = documentWithPath(true);

@@ -17,7 +17,7 @@ describe('PenTool state machine', () => {
     expect(tool.currentState).toBe('idle');
   });
 
-  it('creates smooth node with an outgoing handle after drag', () => {
+  it('creates smooth node with mirrored handles after drag', () => {
     const tool = new PenTool();
     tool.pointerDown(event(20, 20), 12);
     tool.pointerUp(event(20, 20));
@@ -29,6 +29,7 @@ describe('PenTool state machine', () => {
     expect(node.kind).toBe('smooth');
     expect(node.point).toEqual({ x: 100, y: 100 });
     expect(node.outHandle).toEqual({ x: 140, y: 100 });
+    expect(node.inHandle).toEqual({ x: 60, y: 100 });
   });
 
   it('closes only when clicking the first node after three nodes', () => {

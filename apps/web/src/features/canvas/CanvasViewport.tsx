@@ -201,7 +201,17 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         overlayCtx.bezierCurveTo(previous.outHandle?.x ?? previous.point.x, previous.outHandle?.y ?? previous.point.y, node.inHandle?.x ?? node.point.x, node.inHandle?.y ?? node.point.y, node.point.x, node.point.y);
       });
       const rubberBandPoint = pen.cursorPoint ?? pen.pendingPoint;
-      if (rubberBandPoint && pen.nodes.length > 0) overlayCtx.lineTo(rubberBandPoint.x, rubberBandPoint.y);
+      const previous = pen.nodes.at(-1);
+      if (rubberBandPoint && previous) {
+        overlayCtx.bezierCurveTo(
+          previous.outHandle?.x ?? previous.point.x,
+          previous.outHandle?.y ?? previous.point.y,
+          rubberBandPoint.x,
+          rubberBandPoint.y,
+          rubberBandPoint.x,
+          rubberBandPoint.y,
+        );
+      }
       overlayCtx.stroke();
       for (const node of pen.nodes) {
         overlayCtx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-node').trim();
