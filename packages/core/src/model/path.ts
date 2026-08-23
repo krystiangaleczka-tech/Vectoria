@@ -17,9 +17,15 @@ export function createPathNode(point: Vec2, options: Partial<Omit<PathNode, 'poi
 
 export function isValidPathGeometry(nodes: readonly PathNode[], closed: boolean): boolean {
   if (nodes.length < (closed ? 3 : 2)) return false;
+  if (nodes.some((node) => node.id !== undefined && node.id.trim() === '')) return false;
   const ids = nodes.map((node) => node.id).filter((id): id is string => Boolean(id));
   if (new Set(ids).size !== ids.length) return false;
-  return nodes.every((node) => finite(node.point) && finiteOrNull(node.inHandle) && finiteOrNull(node.outHandle));
+  return nodes.every((node) => (
+    finite(node.point)
+    && finiteOrNull(node.inHandle)
+    && finiteOrNull(node.outHandle)
+    && ['corner', 'cusp', 'smooth', 'symmetric', 'auto'].includes(node.kind)
+  ));
 }
 
 export function getCubicSegment(nodes: readonly PathNode[], index: number, closed = false): CubicSegment | null {
@@ -67,14 +73,50 @@ export function reversePathNodes(nodes: readonly PathNode[]): PathNode[] {
 }
 
 export function applyNodeKind(node: PathNode, kind: PathNode['kind']): PathNode {
-  if (kind === 'corner' || kind === 'cusp') return { ...node, kind };
+  if (kind === 'corner' || kind === 'cusp' || kind === 'auto') return { ...node, kind };
+
   const handle = node.outHandle ?? node.inHandle;
   if (!handle) return { ...node, kind };
+
   const vector = { x: handle.x - node.point.x, y: handle.y - node.point.y };
   const length = Math.hypot(vector.x, vector.y);
   if (length === 0) return { ...node, kind };
-  const opposite = { x: node.point.x - vector.x, y: node.point.y - vector.y };
-  if (kind === 'symmetric') return { ...node, kind, inHandle: opposite, outHandle: handle };
-  if (kind === 'smooth') return { ...node, kind, inHandle: node.inHandle ?? opposite, outHandle: node.outHandle ?? handle };
-  return { ...node, kind, inHandle: node.inHandle ?? opposite, outHandle: node.outHandle ?? handle };
+
+  const oppositeDirection = { x: node.point.x - vector.x, y: node.point.y - vector.y };
+  if (kind === 'symmetric') {
+    return node.outHandle
+      ? { ...node, kind, inHandle: oppositeDirection, outHandle: handle }
+      : { ...node, kind, inHandle: handle, outHandle: oppositeDirection };
+  }
+
+  // Smooth handles share a tangent but retain independent handle lengths.
+  const incomingLength = node.inHandle
+    ? Math.hypot(node.inHandle.x - node.point.x, node.inHandle.y - node.point.y)
+    : length;
+  const outgoingLength = node.outHandle
+    ? Math.hypot(node.outHandle.x - node.point.x, node.outHandle.y - node.point.y)
+    : length;
+  const incoming = {
+    x: node.point.x - (vector.x / length) * incomingLength,
+    y: node.point.y - (vector.y / length) * incomingLength,
+  };
+  const outgoing = {
+    x: node.point.x + (vector.x / length) * outgoingLength,
+    y: node.point.y + (vector.y / length) * outgoingLength,
+  };
+  return node.outHandle
+    ? { ...node, kind, inHandle: incoming, outHandle: node.outHandle }
+    : { ...node, kind, inHandle: node.inHandle, outHandle: outgoing };
+}
+
+/** Move one handle while preserving node semantics for smooth/symmetric nodes. */
+export function updatePathNodeHandle(node: PathNode, side: 'in' | 'out', handle: Vec2 | null): PathNode {
+  if (handle !== null && !finite(handle)) return node;
+  const next: PathNode = side === 'in' ? { ...node, inHandle: handle } : { ...node, outHandle: handle };
+  if (node.kind !== 'symmetric' || handle === null) return next;
+
+  const vector = { x: handle.x - node.point.x, y: handle.y - node.point.y };
+  return side === 'in'
+    ? { ...next, outHandle: { x: node.point.x - vector.x, y: node.point.y - vector.y } }
+    : { ...next, inHandle: { x: node.point.x - vector.x, y: node.point.y - vector.y } };
 }

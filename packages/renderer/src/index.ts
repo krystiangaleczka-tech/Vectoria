@@ -412,7 +412,19 @@ function renderPath(
     const cp2 = node.inHandle ?? node.point;
     ctx.bezierCurveTo(cp1.x, cp1.y, cp2.x, cp2.y, node.point.x, node.point.y);
   });
-  if (obj.closed) ctx.closePath();
+  if (obj.closed && obj.nodes.length > 1) {
+    const last = obj.nodes[obj.nodes.length - 1]!;
+    const first = obj.nodes[0]!;
+    ctx.bezierCurveTo(
+      last.outHandle?.x ?? last.point.x,
+      last.outHandle?.y ?? last.point.y,
+      first.inHandle?.x ?? first.point.x,
+      first.inHandle?.y ?? first.point.y,
+      first.point.x,
+      first.point.y,
+    );
+    ctx.closePath();
+  }
 
   if (obj.style.fill.type !== 'none' && obj.closed) {
     ctx.fillStyle = resolveFill(ctx, obj.style.fill);
@@ -664,7 +676,19 @@ function renderPathSelectionOutline(
     const cp2 = node.inHandle ?? node.point;
     ctx.bezierCurveTo(cp1.x, cp1.y, cp2.x, cp2.y, node.point.x, node.point.y);
   });
-  if (obj.closed) ctx.closePath();
+  if (obj.closed && obj.nodes.length > 1) {
+    const last = obj.nodes[obj.nodes.length - 1]!;
+    const first = obj.nodes[0]!;
+    ctx.bezierCurveTo(
+      last.outHandle?.x ?? last.point.x,
+      last.outHandle?.y ?? last.point.y,
+      first.inHandle?.x ?? first.point.x,
+      first.inHandle?.y ?? first.point.y,
+      first.point.x,
+      first.point.y,
+    );
+    ctx.closePath();
+  }
   ctx.stroke();
 
   for (const node of obj.nodes) {
@@ -678,6 +702,31 @@ function renderPathSelectionOutline(
     ctx.fillRect(point.x - size / 2, point.y - size / 2, size, size);
     ctx.strokeRect(point.x - size / 2, point.y - size / 2, size, size);
     ctx.restore();
+  }
+
+  // Handles stay in screen space so their 6 px endpoints remain usable at any zoom.
+  const handleColor = getComputedStyle(document.documentElement).getPropertyValue('--color-selection').trim() || '#5caeff';
+  for (const node of obj.nodes) {
+    const point = camera.worldToScreen(mat3TransformPoint(matrix, node.point));
+    for (const handle of [node.inHandle, node.outHandle].filter((value): value is Vec2 => Boolean(value))) {
+      const endpoint = camera.worldToScreen(mat3TransformPoint(matrix, handle));
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.strokeStyle = handleColor;
+      ctx.lineWidth = 1;
+      ctx.globalAlpha = 0.7;
+      ctx.beginPath();
+      ctx.moveTo(point.x, point.y);
+      ctx.lineTo(endpoint.x, endpoint.y);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-node').trim() || '#ffffff';
+      ctx.beginPath();
+      ctx.arc(endpoint.x, endpoint.y, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 
   ctx.restore();

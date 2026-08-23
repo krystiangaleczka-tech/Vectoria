@@ -24,8 +24,10 @@ import {
   defaultStroke,
   defaultCornerRadii,
   getTransformMatrix,
+  getInverseTransformMatrix,
   normalizeShapeDrag,
   isValidShapeGeometry,
+  updatePathNodeHandle,
 } from '@vectoria/core';
 import { Camera, DragSession, SelectTool, DirectSelectTool, PenTool, snapToGrid as snapPointToGrid, type GridSettings } from '@vectoria/editor-engine';
 import { mat3TransformPoint } from '@vectoria/shared';
@@ -59,7 +61,7 @@ export interface CanvasViewportProps {
 }
 
 interface DragState {
-  type: 'pan' | 'create-shape' | 'move-object' | 'move-node' | 'resize-object' | 'rotate-object' | 'marquee';
+  type: 'pan' | 'create-shape' | 'move-object' | 'move-node' | 'move-handle' | 'resize-object' | 'rotate-object' | 'marquee';
   shape?: 'rectangle' | 'ellipse' | 'line';
   startScreen: Vec2;
   startWorld: Vec2;
@@ -72,6 +74,7 @@ interface DragState {
   pivotWorld?: Vec2;
   initialTransform?: import('@vectoria/core').Transform2D;
   nodeIndex?: number;
+  handleSide?: 'in' | 'out';
   initialNodes?: readonly import('@vectoria/core').PathNode[];
 }
 
@@ -354,7 +357,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
 
     if (activeTool === 'pen') {
       const result = penToolRef.current!.pointerDown(
-        { screenPoint: screenPos, worldPoint: worldPos },
+        { screenPoint: screenPos, worldPoint: worldPos, shiftKey: e.shiftKey, altKey: e.altKey },
         camera.screenToWorldDistance(12),
       );
       if (result?.type === 'commit') commitPen(result.nodes, result.closed);
@@ -369,6 +372,19 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         pointerId: e.pointerId,
       };
     } else if (activeTool === 'direct-select') {
+      const handleHit = directSelect.hitHandle(doc, worldPos, camera.zoom, selectedObjectId ?? undefined);
+      if (handleHit?.part?.endsWith('handle')) {
+        const object = doc.objects[handleHit.objectId];
+        const side = handleHit.part === 'in-handle' ? 'in' : 'out';
+        if (object?.type === 'path') {
+          onSelectSelection?.({ objectIds: [object.id], nodeIds: [`${object.id}:${handleHit.nodeIndex}`], mode: 'node' });
+          dragStateRef.current = {
+            type: 'move-handle', startScreen: screenPos, startWorld: worldPos, currentWorld: worldPos,
+            pointerId: e.pointerId, objectIds: [object.id], nodeIndex: handleHit.nodeIndex, handleSide: side, initialNodes: object.nodes,
+          };
+        }
+        return;
+      }
       const nodeHit = directSelect.hitNode(doc, worldPos, camera.zoom);
       const nextSelection = directSelect.select(selection, nodeHit, e.shiftKey);
       onSelectSelection?.(nextSelection);
@@ -442,7 +458,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     const drag = dragStateRef.current;
     if (!drag) {
       if (activeTool === 'pen') {
-        penToolRef.current?.pointerMove({ screenPoint: screenPos, worldPoint: worldPos });
+        penToolRef.current?.pointerMove({ screenPoint: screenPos, worldPoint: worldPos, shiftKey: e.shiftKey, altKey: e.altKey });
         setPenVersion((version) => version + 1);
       }
       return;
@@ -462,15 +478,23 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       const geometry = drag.shape ? normalizeShapeDrag(drag.shape, drag.startWorld, worldPos, { shift: e.shiftKey }) : null;
       if (geometry) drag.currentWorld = geometry.type === 'line' ? geometry.end : { x: geometry.x + (worldPos.x >= drag.startWorld.x ? geometry.width : 0), y: geometry.y + (worldPos.y >= drag.startWorld.y ? geometry.height : 0) };
        renderLoopRef.current?.invalidate();
-    } else if (drag.type === 'move-node' && drag.objectIds?.[0] && drag.initialNodes) {
+    } else if ((drag.type === 'move-node' || drag.type === 'move-handle') && drag.objectIds?.[0] && drag.initialNodes) {
       const objectId = drag.objectIds[0];
-      const delta = { x: worldPos.x - drag.startWorld.x, y: worldPos.y - drag.startWorld.y };
-      const nodes = drag.initialNodes.map((node, index) => index === drag.nodeIndex ? {
-        ...node,
-        point: { x: node.point.x + delta.x, y: node.point.y + delta.y },
-        inHandle: node.inHandle ? { x: node.inHandle.x + delta.x, y: node.inHandle.y + delta.y } : null,
-        outHandle: node.outHandle ? { x: node.outHandle.x + delta.x, y: node.outHandle.y + delta.y } : null,
-      } : node);
+      const object = doc.objects[objectId];
+      const inverse = object?.type === 'path' ? getInverseTransformMatrix(object.transform) : null;
+      const localPoint = inverse ? mat3TransformPoint(inverse, worldPos) : worldPos;
+      const localStart = inverse ? mat3TransformPoint(inverse, drag.startWorld) : drag.startWorld;
+      const delta = { x: localPoint.x - localStart.x, y: localPoint.y - localStart.y };
+      const nodes = drag.initialNodes.map((node, index) => {
+        if (index !== drag.nodeIndex) return node;
+        if (drag.type === 'move-handle' && drag.handleSide) return updatePathNodeHandle(node, drag.handleSide, localPoint);
+        return {
+          ...node,
+          point: { x: node.point.x + delta.x, y: node.point.y + delta.y },
+          inHandle: node.inHandle ? { x: node.inHandle.x + delta.x, y: node.inHandle.y + delta.y } : null,
+          outHandle: node.outHandle ? { x: node.outHandle.x + delta.x, y: node.outHandle.y + delta.y } : null,
+        };
+      });
       setPathPreview({ [objectId]: nodes });
     } else if (drag.type === 'move-object') {
       drag.currentWorld = worldPos;
@@ -501,7 +525,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   const finishInteraction = (e: React.PointerEvent) => {
     if (!dragStateRef.current && activeTool === 'pen') {
       const screenPoint = getPointerScreen(e);
-      const result = penToolRef.current?.pointerUp({ screenPoint, worldPoint: snapWorldPoint(camera.screenToWorld(screenPoint)) });
+      const result = penToolRef.current?.pointerUp({ screenPoint, worldPoint: snapWorldPoint(camera.screenToWorld(screenPoint)), shiftKey: e.shiftKey, altKey: e.altKey });
       if (result?.type === 'commit') commitPen(result.nodes, result.closed);
       setPenVersion((version) => version + 1);
       return;
@@ -561,7 +585,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         });
         if (moved) onExecuteCommand(new TransformObjectsCommand([...transforms.keys()], transforms));
       }
-    } else if (drag.type === 'move-node' && drag.objectIds?.[0] && drag.nodeIndex !== undefined) {
+    } else if ((drag.type === 'move-node' || drag.type === 'move-handle') && drag.objectIds?.[0] && drag.nodeIndex !== undefined) {
       const objectId = drag.objectIds[0];
       const nodes = pathPreview[objectId];
       if (nodes) onExecuteCommand(new SetPathGeometryCommand(objectId, { nodes }));
@@ -588,7 +612,13 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
 
   const cancelInteraction = () => {
     const drag = dragStateRef.current;
-    if (!drag) return;
+    if (!drag) {
+      if (activeTool === 'pen') {
+        penToolRef.current?.cancel();
+        setPenVersion((version) => version + 1);
+      }
+      return;
+    }
 
     if (drag.type === 'move-object') {
       setDragPreview({});

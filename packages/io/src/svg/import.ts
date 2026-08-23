@@ -19,23 +19,76 @@ const stroke = (element: Element) => {
 
 const styleFor = (element: Element) => ({ ...defaultObjectStyle, fill: fill(element), stroke: stroke(element), opacity: Math.max(0, Math.min(1, number(element, 'opacity', 1))) });
 
-function parsePathData(data: string): PathNode[] {
-  const tokens = data.match(/[MLZ]|-?\d*\.?\d+(?:e[-+]?\d+)?/gi) ?? [];
+export function parsePathData(data: string): PathNode[] {
+  const tokens = data.match(/[MLCZHVmlczhv]|[-+]?\d*\.?\d+(?:e[-+]?\d+)?/g) ?? [];
   const nodes: PathNode[] = [];
+  const closes = /z\s*$/i.test(data);
   let index = 0;
   let command = '';
+  let current = { x: 0, y: 0 };
+  let start = { x: 0, y: 0 };
+  const isCommand = (token: string): boolean => /^[MLCZHVmlczhv]$/.test(token);
+  const readNumber = (): number | null => {
+    const token = tokens[index];
+    if (!token || isCommand(token)) return null;
+    index += 1;
+    const value = Number(token);
+    return Number.isFinite(value) ? value : null;
+  };
+  const point = (x: number, y: number, relative: boolean): { x: number; y: number } => relative ? { x: current.x + x, y: current.y + y } : { x, y };
+
   while (index < tokens.length) {
-    if (/^[MLZ]$/i.test(tokens[index]!)) {
-      command = tokens[index]!.toUpperCase();
-      index += 1;
+    if (isCommand(tokens[index]!)) command = tokens[index++]!;
+    if (!command) { index += 1; continue; }
+    const relative = command === command.toLowerCase();
+    const upper = command.toUpperCase();
+    if (upper === 'Z') {
+      current = start;
+      command = '';
+      continue;
     }
-    if (command === 'Z') break;
-    if ((command === 'M' || command === 'L') && index + 1 < tokens.length) {
-      const x = Number(tokens[index++]);
-      const y = Number(tokens[index++]);
-      if (Number.isFinite(x) && Number.isFinite(y)) nodes.push({ point: { x, y }, inHandle: null, outHandle: null, kind: 'corner' });
-    } else index += 1;
-    if (command === 'M') command = 'L';
+    if (upper === 'M' || upper === 'L') {
+      const x = readNumber();
+      const y = readNumber();
+      if (x === null || y === null) { command = ''; continue; }
+      const next = point(x, y, relative);
+      nodes.push({ point: next, inHandle: null, outHandle: null, kind: 'corner' });
+      current = next;
+      if (upper === 'M') { start = next; command = relative ? 'l' : 'L'; }
+      continue;
+    }
+    if (upper === 'H' || upper === 'V') {
+      const value = readNumber();
+      if (value === null) { command = ''; continue; }
+      current = upper === 'H'
+        ? { x: relative ? current.x + value : value, y: current.y }
+        : { x: current.x, y: relative ? current.y + value : value };
+      nodes.push({ point: current, inHandle: null, outHandle: null, kind: 'corner' });
+      continue;
+    }
+    if (upper === 'C') {
+      const values = Array.from({ length: 6 }, readNumber);
+      if (values.some((value): value is null => value === null) || nodes.length === 0) { command = ''; continue; }
+      const x1 = values[0]!;
+      const y1 = values[1]!;
+      const x2 = values[2]!;
+      const y2 = values[3]!;
+      const x = values[4]!;
+      const y = values[5]!;
+      const control1 = point(x1, y1, relative);
+      const control2 = point(x2, y2, relative);
+      const next = point(x, y, relative);
+      const previous = nodes[nodes.length - 1]!;
+      nodes[nodes.length - 1] = { ...previous, outHandle: control1 };
+      if (closes && next.x === start.x && next.y === start.y) {
+        nodes[0] = { ...nodes[0]!, inHandle: control2 };
+      } else {
+        nodes.push({ point: next, inHandle: control2, outHandle: null, kind: 'smooth' });
+      }
+      current = next;
+      continue;
+    }
+    command = '';
   }
   return nodes;
 }

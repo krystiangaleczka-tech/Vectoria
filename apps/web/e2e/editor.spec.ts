@@ -300,4 +300,47 @@ test.describe('Vectoria MVP Skeleton', () => {
     await page.getByRole('tab', { name: 'Historia' }).click();
     await expect(page.getByTestId('history-panel')).toContainText('Create path');
   });
+
+  test('Direct Select edits cubic handles without mutating during drag', async ({ page }) => {
+    page.on('console', (message) => console.log(`[browser:${message.type()}] ${message.text()}`));
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    const canvas = page.getByTestId('canvas-viewport');
+    const box = await canvas.boundingBox();
+    if (!box) throw new Error('Canvas not found');
+    const center = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    const points = [
+      { x: center.x - 100, y: center.y - 30 },
+      { x: center.x, y: center.y - 90 },
+      { x: center.x + 100, y: center.y - 20 },
+    ];
+
+    await page.getByRole('button', { name: 'Pen Tool' }).click();
+    await page.mouse.click(points[0]!.x, points[0]!.y);
+    await page.mouse.move(points[1]!.x, points[1]!.y);
+    await page.mouse.down();
+    await page.mouse.move(points[1]!.x + 35, points[1]!.y + 20, { steps: 4 });
+    await page.mouse.up();
+    await page.mouse.click(points[2]!.x, points[2]!.y);
+    await page.keyboard.press('Enter');
+    await expect(page.getByTestId('statusbar')).toContainText('1 object');
+
+    await page.getByRole('tab', { name: 'Warstwy' }).click();
+    await page.getByRole('button', { name: /Zaznacz Path/ }).click();
+    await page.getByRole('tab', { name: 'Właściwości' }).click();
+    await page.getByRole('button', { name: 'Direct Select Tool' }).click();
+    await page.mouse.click(points[1]!.x, points[1]!.y);
+    const outX = page.getByTestId('prop-handle-out-x').locator('input');
+    await expect(outX).toBeEnabled();
+    const initialX = Number(await outX.inputValue());
+
+    await page.mouse.move(points[1]!.x + 35, points[1]!.y + 20);
+    await page.mouse.down();
+    await page.mouse.move(points[1]!.x + 65, points[1]!.y + 40, { steps: 4 });
+    expect(Number(await outX.inputValue())).toBe(initialX);
+    await page.mouse.up();
+
+    await expect.poll(async () => Number(await outX.inputValue())).toBeGreaterThan(initialX);
+  });
 });

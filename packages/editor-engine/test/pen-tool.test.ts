@@ -49,4 +49,25 @@ describe('PenTool state machine', () => {
     expect(tool.keyDown('Escape')).toEqual({ type: 'cancel' });
     expect(tool.preview.nodes).toHaveLength(0);
   });
+
+  it('constrains the next point to 45-degree increments with Shift', () => {
+    const tool = new PenTool();
+    tool.pointerDown(event(0, 0), 12);
+    tool.pointerUp(event(0, 0));
+    tool.pointerDown({ ...event(100, 20), shiftKey: true }, 12);
+    tool.pointerUp({ ...event(100, 20), shiftKey: true });
+
+    expect(tool.preview.nodes[1]!.point.y).toBeCloseTo(0);
+  });
+
+  it('creates a cusp node when Alt is held during a handle drag', () => {
+    const tool = new PenTool();
+    tool.pointerDown(event(0, 0), 12);
+    tool.pointerUp(event(0, 0));
+    tool.pointerDown(event(100, 100), 12);
+    tool.pointerMove({ ...event(140, 100), altKey: true });
+    tool.pointerUp({ ...event(140, 100), altKey: true });
+
+    expect(tool.preview.nodes[1]!.kind).toBe('cusp');
+  });
 });

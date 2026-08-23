@@ -158,15 +158,15 @@ Wymóg stopniowego rozszerzania artboardu o 10% wynika bezpośrednio z potrzeby 
 
 ## EPIC-02: Historia i zapisywanie
 
-- [ ] **HIST-001** Zaimplementować command pattern dla operacji dokumentu
-- [ ] **HIST-002** Dodać Undo
-- [ ] **HIST-003** Dodać Redo
-- [ ] **HIST-004** Grupować serię zmian drag jako pojedynczy wpis historii
-- [ ] **HIST-005** Dodać panel historii
-- [ ] **HIST-006** Umożliwić powrót do wybranego kroku historii
-- [ ] **HIST-007** Dodać autosave lokalny w IndexedDB
+- [x] **HIST-001** Zaimplementować command pattern dla operacji dokumentu
+- [x] **HIST-002** Dodać Undo
+- [x] **HIST-003** Dodać Redo
+- [x] **HIST-004** Grupować serię zmian drag jako pojedynczy wpis historii
+- [x] **HIST-005** Dodać panel historii
+- [x] **HIST-006** Umożliwić powrót do wybranego kroku historii
+- [x] **HIST-007** Dodać autosave lokalny w IndexedDB
 - [ ] **HIST-008** Dodać odzyskiwanie dokumentu po crashu lub zamknięciu karty
-- [ ] **HIST-009** Dodać status autosave
+- [x] **HIST-009** Dodać status autosave
 - [ ] **HIST-010** Dodać ręczne zapisywanie wersji dokumentu
 - [ ] **HIST-011** Dodać listę wersji dokumentu
 - [ ] **HIST-012** Dodać przywracanie starszej wersji
@@ -270,9 +270,9 @@ Wymóg stopniowego rozszerzania artboardu o 10% wynika bezpośrednio z potrzeby 
 - [x] **PATH-025** Dodawać i usuwać punkty z Pen Tool bez przełączania narzędzia
 - [x] **PATH-026** Odwracać kierunek ścieżki
 - [x] **PATH-027** Zamieniać shape na curves
-- [ ] **PATH-028** Zamieniać stroke na path
-- [ ] **PATH-029** Dodać precyzyjny podgląd uchwytów i tangent lines
-- [ ] **PATH-030** Dodać skróty modyfikatorów dla Pen Tool
+- [x] **PATH-028** Zamieniać stroke na path
+- [x] **PATH-029** Dodać precyzyjny podgląd uchwytów i tangent lines
+- [x] **PATH-030** Dodać skróty modyfikatorów dla Pen Tool
 - [x] **PATH-031** Dodać testy geometrii, continuity i edge cases Pen Tool
 
 ## EPIC-06: Rysowanie swobodne i cięcie

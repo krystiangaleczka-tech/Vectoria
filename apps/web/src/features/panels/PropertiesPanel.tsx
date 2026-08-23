@@ -8,6 +8,18 @@ import { convertUnit } from '@vectoria/shared';
 import type { DocumentUnit } from '@vectoria/core';
 import type { GridSettings } from '@vectoria/editor-engine';
 
+export type PathAction =
+  | { type: 'stroke-to-path'; objectId: ObjectId }
+  | { type: 'reverse'; objectId: ObjectId }
+  | { type: 'add-node'; objectId: ObjectId; segmentIndex: number }
+  | { type: 'remove-node'; objectId: ObjectId; nodeIndex: number }
+  | { type: 'convert-segment'; objectId: ObjectId; segmentIndex: number; to: 'line' | 'curve' }
+  | { type: 'split'; objectId: ObjectId; nodeIndex: number }
+  | { type: 'merge-nodes'; objectId: ObjectId; firstIndex: number; secondIndex: number }
+  | { type: 'connect-handles'; objectId: ObjectId; nodeIndex: number }
+  | { type: 'disconnect-handles'; objectId: ObjectId; nodeIndex: number }
+  | { type: 'join'; objectIds: readonly [ObjectId, ObjectId] };
+
 export interface PropertiesPanelProps {
   document: DocumentModel;
   selectedObjectId: ObjectId | null;
@@ -27,6 +39,7 @@ export interface PropertiesPanelProps {
   onUpdatePathNode?: (id: ObjectId, index: number, patch: Partial<Omit<PathNode, 'id'>>) => void;
   onUpdatePathNodeKind?: (id: ObjectId, index: number, kind: PathNode['kind']) => void;
   onUpdatePathClosed?: (id: ObjectId, closed: boolean) => void;
+  onPathAction?: (action: PathAction) => void;
 }
 
 const dimensions = (object: SceneObject): { width: number; height: number } | null =>
@@ -51,6 +64,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   onUpdatePathNode,
   onUpdatePathNodeKind,
   onUpdatePathClosed,
+  onPathAction,
 }) => {
   const selected = selectedObjectId ? doc.objects[selectedObjectId] : null;
   const artboard = doc.artboards[doc.activeArtboardId];
@@ -61,6 +75,9 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     ? Math.max(0, selected.nodes.findIndex((_, index) => selection.nodeIds.includes(`${selected.id}:${index}`)))
     : -1;
   const selectedPathNode = selected?.type === 'path' ? selected.nodes[selectedPathNodeIndex] : null;
+  const selectedPathNodeIndices = selected?.type === 'path'
+    ? selection.nodeIds.filter((id) => id.startsWith(`${selected.id}:`)).map((id) => Number(id.slice(selected.id.length + 1))).filter((index) => Number.isInteger(index) && index >= 0 && index < selected.nodes.length)
+    : [];
 
   return (
     <aside className="properties-panel" data-testid="properties-panel">
@@ -97,21 +114,37 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
            {selected.type === 'path' && selectedPathNode && <section className="property-section" aria-label="Path node properties">
              <div className="panel-section-heading"><span>Node</span><span className="panel-count">{selectedPathNodeIndex + 1}/{selected.nodes.length}</span></div>
              <label className="dialog-label">Type<select value={selectedPathNode.kind} disabled={selected.locked} onChange={(event) => onUpdatePathNodeKind?.(selected.id, selectedPathNodeIndex, event.target.value as PathNode['kind'])}><option value="corner">Corner</option><option value="cusp">Cusp</option><option value="smooth">Smooth</option><option value="symmetric">Symmetric</option><option value="auto">Auto smooth</option></select></label>
-             <div className="property-grid">
-               <NumberInput data-testid="prop-handle-out-x" label="Out X" disabled={selected.locked || !selectedPathNode.outHandle} value={selectedPathNode.outHandle?.x ?? 0} decimals={2} onChange={(value) => selectedPathNode.outHandle && onUpdatePathNode?.(selected.id, selectedPathNodeIndex, { outHandle: { ...selectedPathNode.outHandle, x: value } })} />
-               <NumberInput data-testid="prop-handle-out-y" label="Out Y" disabled={selected.locked || !selectedPathNode.outHandle} value={selectedPathNode.outHandle?.y ?? 0} decimals={2} onChange={(value) => selectedPathNode.outHandle && onUpdatePathNode?.(selected.id, selectedPathNodeIndex, { outHandle: { ...selectedPathNode.outHandle, y: value } })} />
-             </div>
-             <label className="dialog-label">Path<select value={selected.closed ? 'closed' : 'open'} disabled={selected.locked} onChange={(event) => onUpdatePathClosed?.(selected.id, event.target.value === 'closed')}><option value="open">Open</option><option value="closed">Closed</option></select></label>
-           </section>}
+              <div className="property-grid">
+                <NumberInput data-testid="prop-handle-in-x" label="In X" disabled={selected.locked || !selectedPathNode.inHandle} value={selectedPathNode.inHandle?.x ?? 0} decimals={2} onChange={(value) => selectedPathNode.inHandle && onUpdatePathNode?.(selected.id, selectedPathNodeIndex, { inHandle: { ...selectedPathNode.inHandle, x: value } })} />
+                <NumberInput data-testid="prop-handle-in-y" label="In Y" disabled={selected.locked || !selectedPathNode.inHandle} value={selectedPathNode.inHandle?.y ?? 0} decimals={2} onChange={(value) => selectedPathNode.inHandle && onUpdatePathNode?.(selected.id, selectedPathNodeIndex, { inHandle: { ...selectedPathNode.inHandle, y: value } })} />
+                <NumberInput data-testid="prop-handle-out-x" label="Out X" disabled={selected.locked || !selectedPathNode.outHandle} value={selectedPathNode.outHandle?.x ?? 0} decimals={2} onChange={(value) => selectedPathNode.outHandle && onUpdatePathNode?.(selected.id, selectedPathNodeIndex, { outHandle: { ...selectedPathNode.outHandle, x: value } })} />
+                <NumberInput data-testid="prop-handle-out-y" label="Out Y" disabled={selected.locked || !selectedPathNode.outHandle} value={selectedPathNode.outHandle?.y ?? 0} decimals={2} onChange={(value) => selectedPathNode.outHandle && onUpdatePathNode?.(selected.id, selectedPathNodeIndex, { outHandle: { ...selectedPathNode.outHandle, y: value } })} />
+              </div>
+              <label className="dialog-label">Path<select value={selected.closed ? 'closed' : 'open'} disabled={selected.locked} onChange={(event) => onUpdatePathClosed?.(selected.id, event.target.value === 'closed')}><option value="open">Open</option><option value="closed">Closed</option></select></label>
+              <div className="property-actions path-actions">
+                <Button size="sm" variant="ghost" disabled={selected.locked || selected.nodes.length <= (selected.closed ? 3 : 2)} onClick={() => onPathAction?.({ type: 'remove-node', objectId: selected.id, nodeIndex: selectedPathNodeIndex })}>Remove node</Button>
+                <Button size="sm" variant="ghost" disabled={selected.locked} onClick={() => onPathAction?.({ type: 'reverse', objectId: selected.id })}>Reverse</Button>
+                {selectedPathNodeIndex < selected.nodes.length - (selected.closed ? 0 : 1) && <>
+                  <Button size="sm" variant="ghost" disabled={selected.locked} onClick={() => onPathAction?.({ type: 'add-node', objectId: selected.id, segmentIndex: selectedPathNodeIndex })}>Add node</Button>
+                  <Button size="sm" variant="ghost" disabled={selected.locked} onClick={() => onPathAction?.({ type: 'convert-segment', objectId: selected.id, segmentIndex: selectedPathNodeIndex, to: selected.nodes[selectedPathNodeIndex]?.outHandle || selected.nodes[(selectedPathNodeIndex + 1) % selected.nodes.length]?.inHandle ? 'line' : 'curve' })}>{selected.nodes[selectedPathNodeIndex]?.outHandle || selected.nodes[(selectedPathNodeIndex + 1) % selected.nodes.length]?.inHandle ? 'Make line' : 'Make curve'}</Button>
+                </>}
+                {selectedPathNodeIndex > 0 && selectedPathNodeIndex < selected.nodes.length - 1 && !selected.closed && <Button size="sm" variant="ghost" disabled={selected.locked} onClick={() => onPathAction?.({ type: 'split', objectId: selected.id, nodeIndex: selectedPathNodeIndex })}>Split path</Button>}
+                {selectedPathNodeIndices.length >= 2 && <Button size="sm" variant="ghost" disabled={selected.locked || selected.nodes.length <= (selected.closed ? 3 : 2)} onClick={() => onPathAction?.({ type: 'merge-nodes', objectId: selected.id, firstIndex: selectedPathNodeIndices[0]!, secondIndex: selectedPathNodeIndices[1]! })}>Merge nodes</Button>}
+                <Button size="sm" variant="ghost" disabled={selected.locked || (!selectedPathNode.inHandle && !selectedPathNode.outHandle)} onClick={() => onPathAction?.({ type: 'disconnect-handles', objectId: selected.id, nodeIndex: selectedPathNodeIndex })}>Disconnect</Button>
+                <Button size="sm" variant="ghost" disabled={selected.locked || (!selectedPathNode.inHandle && !selectedPathNode.outHandle)} onClick={() => onPathAction?.({ type: 'connect-handles', objectId: selected.id, nodeIndex: selectedPathNodeIndex })}>Connect</Button>
+                {selectedObjectIds.length === 2 && selectedObjectIds.every((id) => doc.objects[id]?.type === 'path' && !(doc.objects[id] as Extract<SceneObject, { type: 'path' }>).closed) && <Button size="sm" variant="ghost" onClick={() => onPathAction?.({ type: 'join', objectIds: selectedObjectIds as readonly [ObjectId, ObjectId] })}>Join paths</Button>}
+              </div>
+            </section>}
           <section className="property-section">
             <div className="panel-section-heading"><span>Wygląd</span></div>
              <ColorControl label="Fill" disabled={selected.locked} color={selected.style.fill.type === 'solid' ? selected.style.fill.color : null} onChange={(value) => onUpdateFill(selected.id, value)} />
              <ColorControl label="Stroke" disabled={selected.locked} color={selected.style.stroke?.color ?? null} onChange={(value) => patchStyle({ stroke: value ? { ...(selected.style.stroke ?? defaultStroke), color: value } : null })} />
              <NumberInput data-testid="prop-stroke-width" label="Stroke" value={selected.style.stroke?.width ?? 0} min={0.1} disabled={selected.locked || !selected.style.stroke} decimals={1} onChange={(value) => selected.style.stroke && patchStyle({ stroke: { ...selected.style.stroke, width: value } })} />
              <NumberInput data-testid="prop-opacity" label="Opacity" value={selected.style.opacity} min={0} max={1} step={0.05} disabled={selected.locked} decimals={2} unit="" onChange={(value) => patchStyle({ opacity: value })} />
-            <div className="property-actions">
-               <Button size="sm" variant="ghost" disabled={selected.locked} onClick={() => patchStyle({ fill: { type: 'linear-gradient', start: { x: 0, y: 0 }, end: { x: size?.width ?? 100, y: 0 }, stops: [{ offset: 0, color: '#5caeff', opacity: 1 }, { offset: 1, color: '#8e5cff', opacity: 1 }] } })}>Gradient</Button>
-            </div>
+             <div className="property-actions">
+                <Button size="sm" variant="ghost" disabled={selected.locked} onClick={() => patchStyle({ fill: { type: 'linear-gradient', start: { x: 0, y: 0 }, end: { x: size?.width ?? 100, y: 0 }, stops: [{ offset: 0, color: '#5caeff', opacity: 1 }, { offset: 1, color: '#8e5cff', opacity: 1 }] } })}>Gradient</Button>
+                {selected.style.stroke && <Button size="sm" variant="ghost" disabled={selected.locked} onClick={() => onPathAction?.({ type: 'stroke-to-path', objectId: selected.id })}>Stroke to path</Button>}
+             </div>
           </section>
         </> : artboard ? <>
           <section className="property-section">

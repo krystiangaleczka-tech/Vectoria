@@ -31,6 +31,7 @@ export {
   DisconnectPathNodeHandlesCommand,
   ConnectPathNodeHandlesCommand,
   ConvertObjectToPathCommand,
+  ConvertStrokeToPathCommand,
   UpdateArtboardCommand,
   SetDocumentUnitCommand,
   SelectArtboardCommand,

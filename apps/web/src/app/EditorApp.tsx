@@ -30,6 +30,16 @@ import {
   UpdatePathNodeCommand,
   SetPathNodeKindCommand,
   SetPathGeometryCommand,
+  AddPathNodeCommand,
+  RemovePathNodeCommand,
+  ReversePathCommand,
+  ConvertPathSegmentCommand,
+  SplitPathCommand,
+  MergePathNodesCommand,
+  JoinOpenPathsCommand,
+  ConnectPathNodeHandlesCommand,
+  DisconnectPathNodeHandlesCommand,
+  ConvertStrokeToPathCommand,
   createDefaultDocument,
   getObjectBounds,
 } from '@vectoria/core';
@@ -53,6 +63,7 @@ import { RightDock } from '../features/panels/RightDock.js';
 import { StatusBar } from '../features/statusbar/StatusBar.js';
 import { NewDocumentDialog } from '../features/dialogs/NewDocumentDialog.js';
 import type { DockPanel } from '../features/panels/RightDock.js';
+import type { PathAction } from '../features/panels/PropertiesPanel.js';
 
 function isMacPlatform(): boolean {
   const platform = (navigator as { userAgentData?: { platform?: string } }).userAgentData?.platform
@@ -443,6 +454,45 @@ export const EditorApp: React.FC = () => {
     handleExecuteCommand(new SetPathGeometryCommand(id, { closed }));
   }, [handleExecuteCommand]);
 
+  const handlePathAction = useCallback((action: PathAction) => {
+    switch (action.type) {
+      case 'stroke-to-path':
+        handleExecuteCommand(new ConvertStrokeToPathCommand(action.objectId));
+        break;
+      case 'reverse':
+        handleExecuteCommand(new ReversePathCommand(action.objectId));
+        break;
+      case 'add-node':
+        handleExecuteCommand(new AddPathNodeCommand(action.objectId, action.segmentIndex));
+        break;
+      case 'remove-node':
+        handleExecuteCommand(new RemovePathNodeCommand(action.objectId, action.nodeIndex));
+        setSelection(emptySelection());
+        break;
+      case 'convert-segment':
+        handleExecuteCommand(new ConvertPathSegmentCommand(action.objectId, action.segmentIndex, action.to));
+        break;
+      case 'split':
+        handleExecuteCommand(new SplitPathCommand(action.objectId, action.nodeIndex));
+        setSelection(emptySelection());
+        break;
+      case 'merge-nodes':
+        handleExecuteCommand(new MergePathNodesCommand(action.objectId, action.firstIndex, action.secondIndex));
+        setSelection(emptySelection());
+        break;
+      case 'connect-handles':
+        if (doc) handleExecuteCommand(new ConnectPathNodeHandlesCommand(action.objectId, action.nodeIndex, doc));
+        break;
+      case 'disconnect-handles':
+        handleExecuteCommand(new DisconnectPathNodeHandlesCommand(action.objectId, action.nodeIndex));
+        break;
+      case 'join':
+        handleExecuteCommand(new JoinOpenPathsCommand(action.objectIds[0], action.objectIds[1]));
+        setSelection(emptySelection());
+        break;
+    }
+  }, [doc, handleExecuteCommand]);
+
   const handleSelectArtboard = useCallback((id: string) => {
     handleExecuteCommand(new SelectArtboardCommand(id));
     setSelection(emptySelection());
@@ -718,8 +768,9 @@ export const EditorApp: React.FC = () => {
              selection={selection}
              onUpdatePathNode={handleUpdatePathNode}
              onUpdatePathNodeKind={handleUpdatePathNodeKind}
-             onUpdatePathClosed={handleUpdatePathClosed}
-             open={rightDockOpen}
+              onUpdatePathClosed={handleUpdatePathClosed}
+              onPathAction={handlePathAction}
+              open={rightDockOpen}
         />
       </div>
 

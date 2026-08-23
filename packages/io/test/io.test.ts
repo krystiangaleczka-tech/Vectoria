@@ -3,6 +3,7 @@ import {
   parseAndMigrateDocument,
   serializeDocument,
   exportArtboardToSvg,
+  parsePathData,
   escapeXml,
 } from '../src/index.js';
 import {
@@ -260,8 +261,13 @@ describe('IO - DTO Validation and SVG Export', () => {
 
     const svg = exportArtboardToSvg(docWithPath);
     expect(svg).toContain('<path');
-    expect(svg).toContain('d="M 0 0 C 50 0, 50 100, 100 100 C 100 100, 150 0, 200 0 Z"');
+    expect(svg).toContain('d="M 0 0 C 50 0, 50 100, 100 100 C 100 100, 150 0, 200 0 C 200 0, 0 0, 0 0 Z"');
     expect(svg).toContain('fill="#00ff00"');
+
+    const importedNodes = parsePathData('M 0 0 C 50 0, 50 100, 100 100 C 100 100, 150 0, 200 0 C 200 0, 0 0, 0 0 Z');
+    expect(importedNodes).toHaveLength(3);
+    expect(importedNodes[0]?.outHandle).toEqual({ x: 50, y: 0 });
+    expect(importedNodes[0]?.inHandle).toEqual({ x: 0, y: 0 });
   });
 });
 

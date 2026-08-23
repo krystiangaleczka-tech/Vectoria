@@ -15,6 +15,7 @@ import type {
   GridSettings,
   SnapSettings,
   CornerRadii,
+  StrokeStyle,
 } from '../model/types.js';
 import { isValidTransform } from '../model/transform.js';
 import { getObjectBounds } from '../model/bounds.js';
@@ -46,6 +47,9 @@ export class CreateObjectsCommand implements Command {
     const newObjectIds = [...layer.objectIds];
 
     for (const obj of this.objects) {
+      if (obj.layerId !== this.targetLayerId || newObjects[obj.id] || newObjectIds.includes(obj.id)) return doc;
+      if (!isValidTransform(obj.transform)) return doc;
+      if (obj.type === 'path' && !isValidPathGeometry(obj.nodes, obj.closed)) return doc;
       newObjects[obj.id] = obj;
       newObjectIds.push(obj.id);
     }
@@ -320,7 +324,11 @@ export class DuplicateObjectsCommand implements Command {
       if (!source || source.locked || !layer || layer.locked) continue;
       const id = generateId();
       this.createdIds.push(id);
-      objects[id] = { ...structuredClone(source), id, name: `${source.name} copy`, transform: { ...source.transform, position: { x: source.transform.position.x + this.offset.x, y: source.transform.position.y + this.offset.y } } };
+      const cloned = structuredClone(source);
+      const duplicated = cloned.type === 'path'
+        ? { ...cloned, nodes: cloned.nodes.map((node) => ({ ...node, id: generateId() })) }
+        : cloned;
+      objects[id] = { ...duplicated, id, name: `${source.name} copy`, transform: { ...source.transform, position: { x: source.transform.position.x + this.offset.x, y: source.transform.position.y + this.offset.y } } };
       layers[source.layerId] = { ...layer, objectIds: [...layers[source.layerId]!.objectIds, id] };
     }
     if (this.createdIds.length === 0) return doc;
@@ -771,6 +779,7 @@ export class AddPathNodeCommand implements Command {
   readonly type = 'AddPathNode';
   readonly description = 'Add path node';
   private previous: readonly PathNode[] | null = null;
+  private inserted: PathNode | null = null;
 
   constructor(private readonly objectId: ObjectId, private readonly segmentIndex: number, private readonly t = 0.5) {}
 
@@ -781,7 +790,8 @@ export class AddPathNodeCommand implements Command {
     if (!segment) return doc;
     const split = splitCubic(segment, this.t);
     const nextIndex = this.segmentIndex + 1 < object.nodes.length ? this.segmentIndex + 1 : 0;
-    const inserted = createPathNode(split.left.end, { inHandle: split.left.control2, outHandle: split.right.control1, kind: 'smooth' });
+    const inserted = this.inserted ?? createPathNode(split.left.end, { inHandle: split.left.control2, outHandle: split.right.control1, kind: 'smooth' });
+    this.inserted = inserted;
     let nodes = [...object.nodes];
     const previousIndex = this.segmentIndex;
     nodes = nodes.map((node, index) => index === previousIndex ? { ...node, outHandle: split.left.control1 } : index === nextIndex ? { ...node, inHandle: split.right.control2 } : node);
@@ -951,8 +961,31 @@ export class JoinOpenPathsCommand implements Command {
     this.first = first;
     this.second = second;
     this.secondIndex = layer.objectIds.indexOf(second.id);
-    const sameEnd = first.nodes.at(-1)?.point.x === second.nodes[0]?.point.x && first.nodes.at(-1)?.point.y === second.nodes[0]?.point.y;
-    const nodes = sameEnd ? [...first.nodes, ...second.nodes.slice(1)] : [...first.nodes, ...second.nodes];
+    const firstCandidates = [first.nodes, reversePathNodes(first.nodes)];
+    const secondCandidates = [second.nodes, reversePathNodes(second.nodes)];
+    let best: { first: readonly PathNode[]; second: readonly PathNode[]; distance: number } | null = null;
+    for (const firstNodes of firstCandidates) {
+      for (const secondNodes of secondCandidates) {
+        const firstEnd = firstNodes.at(-1)!.point;
+        const secondStart = secondNodes[0]!.point;
+        const distance = Math.hypot(firstEnd.x - secondStart.x, firstEnd.y - secondStart.y);
+        if (!best || distance < best.distance) best = { first: firstNodes, second: secondNodes, distance };
+      }
+    }
+    if (!best) return doc;
+    const sameEnd = best.distance <= 1e-6;
+    const usedNodeIds = new Set(best.first.map((node) => node.id).filter((id): id is string => Boolean(id)));
+    const secondNodes = best.second.map((node, index) => {
+      if (sameEnd && index === 0) return node;
+      if (!node.id || !usedNodeIds.has(node.id)) {
+        if (node.id) usedNodeIds.add(node.id);
+        return node;
+      }
+      const next = { ...node, id: generateId() };
+      usedNodeIds.add(next.id!);
+      return next;
+    });
+    const nodes = sameEnd ? [...best.first, ...secondNodes.slice(1)] : [...best.first, ...secondNodes];
     if (!isValidPathGeometry(nodes, false)) return doc;
     const objects = { ...doc.objects, [first.id]: { ...first, nodes } };
     delete objects[second.id];
@@ -1016,6 +1049,86 @@ export class ConvertObjectToPathCommand implements Command {
   undo(doc: DocumentModel): DocumentModel {
     return this.previous ? { ...doc, objects: { ...doc.objects, [this.previous.id]: this.previous }, updatedAt: new Date().toISOString() } : doc;
   }
+}
+
+export class ConvertStrokeToPathCommand implements Command {
+  readonly type = 'ConvertStrokeToPath';
+  readonly description = 'Convert stroke to path';
+  private previous: SceneObject | null = null;
+
+  constructor(private readonly objectId: ObjectId) {}
+
+  execute(doc: DocumentModel): DocumentModel {
+    const object = doc.objects[this.objectId];
+    if (!object || object.locked || !object.style.stroke) return doc;
+    const centerline = object.type === 'path'
+      ? samplePath(object.nodes, object.closed)
+      : object.type === 'line'
+        ? [{ x: 0, y: 0 }, object.endPoint]
+        : object.type === 'rectangle'
+          ? [{ x: 0, y: 0 }, { x: object.width, y: 0 }, { x: object.width, y: object.height }, { x: 0, y: object.height }]
+          : samplePath(ellipsePathNodes(object.width, object.height), true);
+    if (!centerline || centerline.length < 2 || object.style.stroke.width <= 0) return doc;
+    const outline = strokeOutline(centerline, object.style.stroke.width / 2, object.style.stroke.lineCap, object.type === 'path' && object.closed);
+    if (outline.length < 3) return doc;
+    const path: import('../model/types.js').PathObject = {
+      ...object,
+      type: 'path',
+      nodes: outline.map((point) => createPathNode(point)),
+      closed: true,
+      style: { ...object.style, fill: object.style.fill.type === 'none' ? { type: 'solid', color: object.style.stroke!.color } : object.style.fill, stroke: null },
+    };
+    if (!isValidPathGeometry(path.nodes, true)) return doc;
+    this.previous = object;
+    return { ...doc, objects: { ...doc.objects, [object.id]: path }, updatedAt: new Date().toISOString() };
+  }
+
+  undo(doc: DocumentModel): DocumentModel {
+    return this.previous ? { ...doc, objects: { ...doc.objects, [this.previous.id]: this.previous }, updatedAt: new Date().toISOString() } : doc;
+  }
+}
+
+function samplePath(nodes: readonly PathNode[], closed: boolean): Vec2[] {
+  const points: Vec2[] = [];
+  const segmentCount = closed ? nodes.length : nodes.length - 1;
+  for (let i = 0; i < segmentCount; i += 1) {
+    const segment = getCubicSegment(nodes, i, closed);
+    if (!segment) continue;
+    for (let step = i === 0 ? 0 : 1; step <= 8; step += 1) {
+      const t = step / 8;
+      const mt = 1 - t;
+      points.push({
+        x: mt ** 3 * segment.start.x + 3 * mt ** 2 * t * segment.control1.x + 3 * mt * t ** 2 * segment.control2.x + t ** 3 * segment.end.x,
+        y: mt ** 3 * segment.start.y + 3 * mt ** 2 * t * segment.control1.y + 3 * mt * t ** 2 * segment.control2.y + t ** 3 * segment.end.y,
+      });
+    }
+  }
+  return points;
+}
+
+function strokeOutline(points: readonly Vec2[], radius: number, cap: StrokeStyle['lineCap'], closed = false): Vec2[] {
+  const left: Vec2[] = [];
+  const right: Vec2[] = [];
+  for (let i = 0; i < points.length; i += 1) {
+    const previous = points[Math.max(0, i - 1)]!;
+    const next = points[Math.min(points.length - 1, i + 1)]!;
+    const dx = next.x - previous.x;
+    const dy = next.y - previous.y;
+    const length = Math.hypot(dx, dy) || 1;
+    const normal = { x: -dy / length * radius, y: dx / length * radius };
+    left.push({ x: points[i]!.x + normal.x, y: points[i]!.y + normal.y });
+    right.push({ x: points[i]!.x - normal.x, y: points[i]!.y - normal.y });
+  }
+  if (!closed && cap === 'square') {
+    const extend = (point: Vec2, toward: Vec2) => { const length = Math.hypot(toward.x, toward.y) || 1; return { x: point.x + toward.x / length * radius, y: point.y + toward.y / length * radius }; };
+    const startDirection = { x: points[0]!.x - points[1]!.x, y: points[0]!.y - points[1]!.y };
+    const endDirection = { x: points.at(-1)!.x - points.at(-2)!.x, y: points.at(-1)!.y - points.at(-2)!.y };
+    left[0] = extend(left[0]!, startDirection);
+    right[0] = extend(right[0]!, startDirection);
+    left[left.length - 1] = extend(left.at(-1)!, endDirection);
+    right[right.length - 1] = extend(right.at(-1)!, endDirection);
+  }
+  return [...left, ...right.reverse()];
 }
 
 function ellipsePathNodes(width: number, height: number): PathNode[] {

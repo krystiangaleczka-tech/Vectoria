@@ -226,6 +226,9 @@ export function validateInvariants(doc: DocumentModel): InvariantViolation[] {
             break;
           }
         }
+        if (Math.abs(transform.scale.x) < 1e-6 || Math.abs(transform.scale.y) < 1e-6) {
+          violations.push({ code: 'ZERO_SCALE', message: `Object '${objectId}' has a degenerate transform scale.` });
+        }
       }
     }
   }

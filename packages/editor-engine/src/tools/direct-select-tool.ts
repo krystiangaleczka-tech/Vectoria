@@ -8,6 +8,7 @@ export interface NodeHit {
   readonly objectId: string;
   readonly nodeIndex: number;
   readonly distancePx: number;
+  readonly part?: 'node' | 'in-handle' | 'out-handle';
 }
 
 /** Node-mode selection policy for path objects. Node IDs use stable object:index keys. */
@@ -27,7 +28,26 @@ export class DirectSelectTool {
         const node = object.nodes[nodeIndex]!;
         const point = mat3TransformPoint(matrix, node.point);
         const distancePx = Math.hypot(worldPoint.x - point.x, worldPoint.y - point.y) * zoom;
-        if (distancePx <= tolerancePx && (!best || distancePx < best.distancePx)) best = { objectId: object.id, nodeIndex, distancePx };
+        if (distancePx <= tolerancePx && (!best || distancePx < best.distancePx)) best = { objectId: object.id, nodeIndex, distancePx, part: 'node' };
+      }
+    }
+    return best;
+  }
+
+  /** Find a node handle in screen-space. Nodes take precedence over handles. */
+  hitHandle(doc: DocumentModel, worldPoint: Vec2, zoom: number, objectId?: string, tolerancePx = 8): NodeHit | null {
+    let best: NodeHit | null = null;
+    for (const object of Object.values(doc.objects)) {
+      if (object.type !== 'path' || object.id !== (objectId ?? object.id) || !object.visible || object.locked) continue;
+      const matrix = getTransformMatrix(object.transform);
+      for (let nodeIndex = 0; nodeIndex < object.nodes.length; nodeIndex += 1) {
+        const node = object.nodes[nodeIndex]!;
+        for (const [part, handle] of [['in-handle', node.inHandle], ['out-handle', node.outHandle] ] as const) {
+          if (!handle) continue;
+          const point = mat3TransformPoint(matrix, handle);
+          const distancePx = Math.hypot(worldPoint.x - point.x, worldPoint.y - point.y) * zoom;
+          if (distancePx <= tolerancePx && (!best || distancePx < best.distancePx)) best = { objectId: object.id, nodeIndex, distancePx, part };
+        }
       }
     }
     return best;

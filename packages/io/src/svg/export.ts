@@ -175,13 +175,19 @@ function renderPathToSvg(obj: PathObject, gradientMap: Map<LinearGradientFill, s
   const matrix = getTransformMatrix(obj.transform);
   const transformAttr = `matrix(${matrix[0]} ${matrix[1]} ${matrix[3]} ${matrix[4]} ${matrix[6]} ${matrix[7]})`;
 
-  const d = obj.nodes.map((node, i) => {
+  const segments = obj.nodes.map((node, i) => {
     if (i === 0) return `M ${node.point.x} ${node.point.y}`;
     const prev = obj.nodes[i - 1]!;
     const cp1 = prev.outHandle ?? prev.point;
     const cp2 = node.inHandle ?? node.point;
     return `C ${cp1.x} ${cp1.y}, ${cp2.x} ${cp2.y}, ${node.point.x} ${node.point.y}`;
-  }).join(' ') + (obj.closed ? ' Z' : '');
+  });
+  if (obj.closed && obj.nodes.length > 1) {
+    const last = obj.nodes[obj.nodes.length - 1]!;
+    const first = obj.nodes[0]!;
+    segments.push(`C ${last.outHandle?.x ?? last.point.x} ${last.outHandle?.y ?? last.point.y}, ${first.inHandle?.x ?? first.point.x} ${first.inHandle?.y ?? first.point.y}, ${first.point.x} ${first.point.y}`);
+  }
+  const d = segments.join(' ') + (obj.closed ? ' Z' : '');
 
   const fillAttr = obj.closed ? resolveFillAttr(obj.style.fill, gradientMap) : 'fill="none"';
   const strokeAttr = obj.style.stroke ? buildStrokeAttr(obj.style.stroke) : '';
