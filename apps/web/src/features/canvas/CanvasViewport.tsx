@@ -203,13 +203,14 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       const rubberBandPoint = pen.cursorPoint ?? pen.pendingPoint;
       const previous = pen.nodes.at(-1);
       if (rubberBandPoint && previous) {
+        const endpoint = pen.pendingPoint ?? rubberBandPoint;
         overlayCtx.bezierCurveTo(
           previous.outHandle?.x ?? previous.point.x,
           previous.outHandle?.y ?? previous.point.y,
-          rubberBandPoint.x,
-          rubberBandPoint.y,
-          rubberBandPoint.x,
-          rubberBandPoint.y,
+          pen.pendingPoint ? (pen.pendingInHandle?.x ?? endpoint.x) : endpoint.x,
+          pen.pendingPoint ? (pen.pendingInHandle?.y ?? endpoint.y) : endpoint.y,
+          endpoint.x,
+          endpoint.y,
         );
       }
       overlayCtx.stroke();
@@ -279,10 +280,6 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   useEffect(() => {
     renderLoopRef.current?.invalidate();
   }, [doc, selectedIds, dragPreview, pathPreview, selection, activeTool, penVersion]);
-
-  useEffect(() => {
-    if (activeTool !== 'pen') penToolRef.current?.cancel();
-  }, [activeTool]);
 
   // Canvas resize handler
   const handleResize = useCallback(() => {
@@ -654,6 +651,13 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     onSelectObject(newId);
     setPenVersion((version) => version + 1);
   }, [doc, onExecuteCommand, onSelectObject]);
+
+  useEffect(() => {
+    if (activeTool === 'pen') return;
+    const result = penToolRef.current?.keyDown('Escape');
+    if (result?.type === 'commit') commitPen(result.nodes, result.closed);
+    else if (result?.type === 'cancel') setPenVersion((version) => version + 1);
+  }, [activeTool, commitPen]);
 
   // Keyboard shortcuts (Space, Delete, Escape)
   useEffect(() => {

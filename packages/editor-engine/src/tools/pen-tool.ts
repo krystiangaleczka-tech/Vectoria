@@ -21,6 +21,7 @@ export interface PenToolPreview {
   readonly cursorPoint: Vec2 | null;
   readonly pendingPoint: Vec2 | null;
   readonly pendingHandle: Vec2 | null;
+  readonly pendingInHandle: Vec2 | null;
 }
 
 /**
@@ -35,6 +36,7 @@ export class PenTool {
   private cursorPoint: Vec2 | null = null;
   private pendingPoint: Vec2 | null = null;
   private pendingHandle: Vec2 | null = null;
+  private pendingInHandle: Vec2 | null = null;
   private pendingAlt = false;
 
   get currentState(): PenToolState {
@@ -42,7 +44,13 @@ export class PenTool {
   }
 
   get preview(): PenToolPreview {
-    return { nodes: this.nodes, cursorPoint: this.cursorPoint, pendingPoint: this.pendingPoint, pendingHandle: this.pendingHandle };
+    return {
+      nodes: this.nodes,
+      cursorPoint: this.cursorPoint,
+      pendingPoint: this.pendingPoint,
+      pendingHandle: this.pendingHandle,
+      pendingInHandle: this.pendingInHandle,
+    };
   }
 
   /** Start a node gesture or close draft when pointer targets its first node. */
@@ -55,6 +63,7 @@ export class PenTool {
     this.state = 'creating-path';
     this.pendingPoint = this.constrain(event.worldPoint, event.shiftKey, anchor);
     this.pendingHandle = null;
+    this.pendingInHandle = null;
     this.pendingAlt = Boolean(event.altKey);
     return null;
   }
@@ -65,7 +74,12 @@ export class PenTool {
     this.cursorPoint = this.constrain(event.worldPoint, event.shiftKey, anchor);
     if (!this.pendingPoint) return null;
     const point = this.constrain(event.worldPoint, event.shiftKey, this.pendingPoint);
-    if (this.distance(point, this.pendingPoint) > 3) this.pendingHandle = point;
+    if (this.distance(point, this.pendingPoint) > 3) {
+      this.pendingHandle = point;
+      this.pendingInHandle = this.pendingAlt
+        ? null
+        : { x: 2 * this.pendingPoint.x - point.x, y: 2 * this.pendingPoint.y - point.y };
+    }
     return { type: 'draft', nodes: this.nodes };
   }
 
@@ -86,6 +100,7 @@ export class PenTool {
     })];
     this.pendingPoint = null;
     this.pendingHandle = null;
+    this.pendingInHandle = null;
     this.pendingAlt = false;
     this.cursorPoint = event.worldPoint;
     return { type: 'draft', nodes: this.nodes };
@@ -93,7 +108,7 @@ export class PenTool {
 
   keyDown(key: string): PenToolResult | null {
     if (key === 'Enter') return this.nodes.length >= 2 ? this.commit(false) : this.cancel();
-    if (key === 'Escape') return this.cancel();
+    if (key === 'Escape') return this.nodes.length >= 2 ? this.commit(false) : this.cancel();
     if ((key === 'Backspace' || key === 'Delete') && this.pendingPoint === null && this.nodes.length > 0) {
       this.nodes = this.nodes.slice(0, -1);
       if (this.nodes.length === 0) return this.cancel();
@@ -107,6 +122,7 @@ export class PenTool {
     this.nodes = [];
     this.pendingPoint = null;
     this.pendingHandle = null;
+    this.pendingInHandle = null;
     this.pendingAlt = false;
     this.cursorPoint = null;
     return { type: 'cancel' };
@@ -118,6 +134,7 @@ export class PenTool {
     this.nodes = [];
     this.pendingPoint = null;
     this.pendingHandle = null;
+    this.pendingInHandle = null;
     this.cursorPoint = null;
     return result;
   }

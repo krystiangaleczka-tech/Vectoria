@@ -665,6 +665,7 @@ function renderPathSelectionOutline(
   camera: Camera,
   obj: PathObject,
 ): void {
+  const dpr = window.devicePixelRatio || 1;
   const matrix = getTransformMatrix(obj.transform);
 
   ctx.save();
@@ -707,7 +708,7 @@ function renderPathSelectionOutline(
     const point = camera.worldToScreen(mat3TransformPoint(matrix, node.point));
     const size = 7;
     ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.fillStyle = themeColor('--color-node', '#ffffff');
     ctx.strokeStyle = themeColor('--color-selection', '#5caeff');
     ctx.lineWidth = 1;
@@ -723,7 +724,7 @@ function renderPathSelectionOutline(
     for (const handle of [node.inHandle, node.outHandle].filter((value): value is Vec2 => Boolean(value))) {
       const endpoint = camera.worldToScreen(mat3TransformPoint(matrix, handle));
       ctx.save();
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.strokeStyle = handleColor;
       ctx.lineWidth = 1;
       ctx.globalAlpha = 0.7;

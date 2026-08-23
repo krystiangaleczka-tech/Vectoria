@@ -649,8 +649,8 @@ export const EditorApp: React.FC = () => {
       ? 'Drag to draw ellipse · Hold Shift for circle'
       : activeTool === 'line'
       ? 'Drag to draw line · Hold Shift for 45°'
-      : activeTool === 'pen'
-      ? 'Click to add nodes · Enter to finish · Escape to cancel'
+       : activeTool === 'pen'
+       ? 'Click to add nodes · Enter/Escape to finish'
       : activeTool === 'zoom'
       ? 'Click to zoom in · Wheel to zoom at cursor'
       : 'Drag to pan view';

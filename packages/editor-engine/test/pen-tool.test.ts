@@ -32,6 +32,29 @@ describe('PenTool state machine', () => {
     expect(node.inHandle).toEqual({ x: 60, y: 100 });
   });
 
+  it('previews the curve while dragging a pending smooth node', () => {
+    const tool = new PenTool();
+    tool.pointerDown(event(20, 20), 12);
+    tool.pointerUp(event(20, 20));
+    tool.pointerDown(event(100, 100), 12);
+    tool.pointerMove(event(140, 100));
+
+    expect(tool.preview.pendingPoint).toEqual({ x: 100, y: 100 });
+    expect(tool.preview.pendingHandle).toEqual({ x: 140, y: 100 });
+    expect(tool.preview.pendingInHandle).toEqual({ x: 60, y: 100 });
+  });
+
+  it('commits an open path on Escape after at least two nodes', () => {
+    const tool = new PenTool();
+    tool.pointerDown(event(0, 0), 12);
+    tool.pointerUp(event(0, 0));
+    tool.pointerDown(event(100, 0), 12);
+    tool.pointerUp(event(100, 0));
+
+    expect(tool.keyDown('Escape')).toMatchObject({ type: 'commit', closed: false });
+    expect(tool.preview.nodes).toHaveLength(0);
+  });
+
   it('closes only when clicking the first node after three nodes', () => {
     const tool = new PenTool();
     for (const point of [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }]) {
