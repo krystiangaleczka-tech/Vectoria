@@ -88,6 +88,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
     ? Math.max(0, selected.nodes.findIndex((_, index) => selection.nodeIds.includes(`${selected.id}:${index}`)))
     : -1;
   const selectedPathNode = selected?.type === 'path' ? selected.nodes[selectedPathNodeIndex] : null;
+  const gradient = selected && (selected.style.fill.type === 'linear-gradient' || selected.style.fill.type === 'radial-gradient' || selected.style.fill.type === 'angular-gradient') ? selected.style.fill : null;
   const selectedPathNodeIndices = selected?.type === 'path'
     ? selection.nodeIds.filter((id) => id.startsWith(`${selected.id}:`)).map((id) => Number(id.slice(selected.id.length + 1))).filter((index) => Number.isInteger(index) && index >= 0 && index < selected.nodes.length)
     : [];
@@ -158,7 +159,9 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             </section>}
           <section className="property-section">
             <div className="panel-section-heading"><span>Wygląd</span></div>
-             <ColorControl label="Fill" disabled={selected.locked} color={selected.style.fill.type === 'solid' ? selected.style.fill.color : null} onChange={(value) => onUpdateFill(selected.id, value)} />
+              <ColorControl label="Fill" disabled={selected.locked} color={selected.style.fill.type === 'solid' ? selected.style.fill.color : null} onChange={(value) => onUpdateFill(selected.id, value)} />
+              <div className="style-swatch-grid" aria-label="Document palette">{(doc.palettes?.[0]?.colors ?? []).map((color) => <button key={color.id} type="button" className="style-swatch" title={color.name} aria-label={`Set fill ${color.name}`} disabled={selected.locked} style={{ background: color.color }} onClick={() => patchStyle({ fill: { type: 'solid', color: color.color } })} />)}</div>
+              {gradient && <section className="gradient-editor" aria-label="Gradient editor"><div className="panel-section-heading"><span>Gradient stops</span><span className="panel-count">{gradient.stops.length}</span></div>{gradient.stops.map((stop, index) => <div className="gradient-stop" key={stop.id ?? index}><ColorControl label={`Stop ${index + 1}`} disabled={selected.locked} color={stop.color} onChange={(value) => value && patchStyle({ fill: { ...gradient, stops: gradient.stops.map((candidate, candidateIndex) => candidateIndex === index ? { ...candidate, color: value } : candidate) } })} /><NumberInput label="Offset" min={0} max={1} step={0.05} decimals={2} disabled={selected.locked} value={stop.offset} onChange={(value) => patchStyle({ fill: { ...gradient, stops: gradient.stops.map((candidate, candidateIndex) => candidateIndex === index ? { ...candidate, offset: value } : candidate) } })} /><NumberInput label="Alpha" min={0} max={1} step={0.05} decimals={2} disabled={selected.locked} value={stop.opacity} onChange={(value) => patchStyle({ fill: { ...gradient, stops: gradient.stops.map((candidate, candidateIndex) => candidateIndex === index ? { ...candidate, opacity: value } : candidate) } })} /></div>)}</section>}
               <ColorControl label="Stroke" disabled={selected.locked} color={selected.style.stroke?.color ?? null} onChange={(value) => patchStyle({ stroke: value ? { ...(selected.style.stroke ?? defaultStroke), color: value } : null })} />
               <NumberInput data-testid="prop-stroke-width" label="Stroke" value={selected.style.stroke?.width ?? 0} min={0.1} disabled={selected.locked || !selected.style.stroke} decimals={1} onChange={(value) => selected.style.stroke && patchStyle({ stroke: { ...selected.style.stroke, width: value } })} />
               {selected.style.stroke && <>
@@ -169,8 +172,11 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               </>}
               <NumberInput data-testid="prop-opacity" label="Opacity" value={selected.style.opacity} min={0} max={1} step={0.05} disabled={selected.locked} decimals={2} unit="" onChange={(value) => patchStyle({ opacity: value })} />
               <label className="dialog-label">Blend<select data-testid="prop-blend-mode" value={selected.style.blendMode ?? 'normal'} disabled={selected.locked} onChange={(event) => patchStyle({ blendMode: event.target.value as BlendMode })}><option value="normal">Normal</option><option value="multiply">Multiply</option><option value="screen">Screen</option><option value="overlay">Overlay</option></select></label>
-             <div className="property-actions">
-                <Button size="sm" variant="ghost" disabled={selected.locked} onClick={() => patchStyle({ fill: { type: 'linear-gradient', start: { x: 0, y: 0 }, end: { x: size?.width ?? 100, y: 0 }, stops: [{ offset: 0, color: '#5caeff', opacity: 1 }, { offset: 1, color: '#8e5cff', opacity: 1 }] } })}>Gradient</Button>
+              <div className="property-actions">
+                 <Button size="sm" variant="ghost" disabled={selected.locked} onClick={() => patchStyle({ fill: { type: 'linear-gradient', start: { x: 0, y: 0 }, end: { x: size?.width ?? 100, y: 0 }, stops: [{ offset: 0, color: '#5caeff', opacity: 1 }, { offset: 1, color: '#8e5cff', opacity: 1 }] } })}>Gradient</Button>
+                 <Button size="sm" variant="ghost" disabled={selected.locked} onClick={() => patchStyle({ fill: { type: 'radial-gradient', center: { x: (size?.width ?? 100) / 2, y: (size?.height ?? 100) / 2 }, radius: Math.max(size?.width ?? 100, size?.height ?? 100) / 2, stops: [{ offset: 0, color: '#ffffff', opacity: 1 }, { offset: 1, color: '#5caeff', opacity: 1 }] } })}>Radial</Button>
+                 <Button size="sm" variant="ghost" disabled={selected.locked} onClick={() => patchStyle({ fill: { type: 'angular-gradient', center: { x: (size?.width ?? 100) / 2, y: (size?.height ?? 100) / 2 }, angle: 0, stops: [{ offset: 0, color: '#5caeff', opacity: 1 }, { offset: 1, color: '#8e5cff', opacity: 1 }] } })}>Angular</Button>
+                 <Button size="sm" variant="ghost" disabled={selected.locked} onClick={() => patchStyle({ fill: { type: 'pattern', kind: 'grid', foreground: '#5caeff', background: '#ffffff', size: 12 } })}>Pattern</Button>
                 {selected.style.stroke && <Button size="sm" variant="ghost" disabled={selected.locked} onClick={() => onPathAction?.({ type: 'stroke-to-path', objectId: selected.id })}>Stroke to path</Button>}
              </div>
           </section>

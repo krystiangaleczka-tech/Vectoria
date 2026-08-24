@@ -54,8 +54,37 @@ Style colors use one shared parser and canonical HEX output. Style changes valid
 
 ## Limitations
 
-This dump covers MVP style slice. Radial/angular gradients, patterns, palettes, global colors, eyedropper, paint bucket and additional blend modes remain staged backlog items.
+This implementation now covers radial/angular gradients, pattern fills, document palette swatches, global-color propagation command, object-style commands, gradient stop editor, eyedropper and paint bucket. User palette file import, saved-palette management UI and advanced pattern asset sources remain staged subfeatures.
 
 ## Next Safe Step
 
-Implement gradient editor and radial gradient contract in a separate command/test slice after confirming renderer and SVG semantics.
+Add dedicated user/saved palette management and import UX, then add visual regression fixtures for angular gradient fidelity across Canvas and SVG.
+
+## Addendum
+
+- Added radial, angular and pattern fill contracts with validation, persistence and SVG export/import support.
+- Added Canvas radial/conic/pattern rendering with safe fallbacks for browsers without conic gradients.
+- Added `ApplyStyleCommand`, `ApplySavedObjectStyleCommand`, `SaveObjectStyleCommand`, `UpsertPaletteCommand`, `UpdateGlobalColorCommand` and `ApplyPaletteColorCommand`.
+- Added Eyedropper and Paint Bucket tools with keyboard shortcuts `I` and `G`.
+- Added document palette swatches and editable gradient stops in Appearance.
+- Final validation after addendum: typecheck, lint, 153 unit tests, 11 E2E tests and build passed.
+
+## Final Changes Per File
+
+- `apps/web/src/app/EditorApp.tsx`: added `I` and `G` shortcuts for style tools.
+- `apps/web/src/app/editor.css`: added palette swatch and gradient editor tokens/layout.
+- `apps/web/src/features/canvas/CanvasViewport.tsx`: applied eyedropper and paint bucket commands on canvas hits.
+- `apps/web/src/features/panels/PropertiesPanel.tsx`: added palette swatches, gradient stop editor and advanced fill/stroke controls.
+- `apps/web/src/features/toolbar/ToolRail.tsx`: added Eyedropper and Paint Bucket tools.
+- `packages/core/src/commands/index.ts`: exported style command APIs.
+- `packages/core/src/commands/style-commands.ts`: added style paste, palette, global-color and saved-style commands.
+- `packages/core/src/model/factory.ts`: added default document palette and style collections.
+- `packages/core/src/model/invariants.ts`: validated advanced gradients, patterns and blend modes.
+- `packages/core/src/model/types.ts`: added radial/angular/pattern fills, palettes, saved styles and blend mode.
+- `packages/core/test/epic-09-style.test.ts`: covered advanced fills, normalization and undo/redo.
+- `packages/io/src/schema/document-v1.ts`: added schemas and migration defaults for advanced styles and palettes.
+- `packages/io/src/svg/export.ts`: exported radial/angular/pattern definitions and blend modes.
+- `packages/io/src/svg/import.ts`: imported radial gradients and patterns from SVG definitions.
+- `packages/io/test/io.test.ts`: covered radial and pattern SVG export.
+- `packages/renderer/src/index.ts`: rendered radial/conic/pattern fills and Canvas blend modes.
+- `packages/ui/src/icons/VectoriaIcon.tsx`: added eyedropper and bucket icons.

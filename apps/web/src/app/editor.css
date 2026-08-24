@@ -80,6 +80,12 @@ input { user-select: text; -webkit-user-select: text; }
 .property-section { display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px; }
 .property-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .property-actions { display: flex; gap: 6px; }
+.style-swatch-grid { display: flex; flex-wrap: wrap; gap: 5px; }
+.style-swatch { width: 22px; height: 22px; border: 1px solid var(--color-border-default); border-radius: var(--radius-xs); cursor: pointer; }
+.style-swatch:hover, .style-swatch:focus-visible { outline: 2px solid var(--color-border-focus); outline-offset: 1px; }
+.gradient-editor { display: flex; flex-direction: column; gap: 8px; padding: 9px; border: 1px solid var(--color-border-subtle); border-radius: var(--radius-sm); background: var(--color-panel-raised); }
+.gradient-stop { display: flex; flex-direction: column; gap: 5px; padding-bottom: 7px; border-bottom: 1px solid var(--color-border-subtle); }
+.gradient-stop:last-child { padding-bottom: 0; border-bottom: 0; }
 .path-actions { flex-wrap: wrap; }
 .geometry-properties { border-top: 1px solid var(--color-border-subtle); padding-top: 12px; }
 .geometry-action-group, .geometry-operation-card { display: flex; flex-direction: column; gap: 6px; }

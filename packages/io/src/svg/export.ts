@@ -1,4 +1,4 @@
-import type { DocumentModel, SceneObject, RectangleObject, EllipseObject, LineObject, PathObject, StrokeStyle, FillStyle, LinearGradientFill } from '@vectoria/core';
+import type { DocumentModel, SceneObject, RectangleObject, EllipseObject, LineObject, PathObject, StrokeStyle, FillStyle, LinearGradientFill, RadialGradientFill, PatternFill } from '@vectoria/core';
 import { getTransformMatrix, normalizeCornerRadii } from '@vectoria/core';
 
 export function escapeXml(unsafe: string): string {
@@ -23,7 +23,7 @@ export function exportArtboardToSvg(doc: DocumentModel, artboardId?: string): st
 
   // Collect all gradient fills for <defs>
   const gradientDefs: string[] = [];
-  const gradientMap = new Map<LinearGradientFill, string>();
+  const gradientMap = new Map<FillStyle, string>();
   let gradientCounter = 0;
 
   const elements: string[] = [];
@@ -38,12 +38,12 @@ export function exportArtboardToSvg(doc: DocumentModel, artboardId?: string): st
       if (!obj || !obj.visible) continue;
 
       // Register gradient if needed
-      if (obj.style.fill.type === 'linear-gradient') {
+      if (obj.style.fill.type === 'linear-gradient' || obj.style.fill.type === 'radial-gradient' || obj.style.fill.type === 'angular-gradient' || obj.style.fill.type === 'pattern') {
         const fill = obj.style.fill;
         if (!gradientMap.has(fill)) {
           const gradId = `grad-${gradientCounter++}`;
           gradientMap.set(fill, gradId);
-          gradientDefs.push(buildLinearGradientDef(gradId, fill));
+          gradientDefs.push(fill.type === 'linear-gradient' ? buildLinearGradientDef(gradId, fill) : fill.type === 'radial-gradient' ? buildRadialGradientDef(gradId, fill) : fill.type === 'angular-gradient' ? buildAngularGradientDef(gradId, fill) : buildPatternDef(gradId, fill));
         }
       }
 
@@ -95,10 +95,30 @@ function buildLinearGradientDef(id: string, fill: LinearGradientFill): string {
   return `<linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="${fill.start.x}" y1="${fill.start.y}" x2="${fill.end.x}" y2="${fill.end.y}">\n${stops}\n    </linearGradient>`;
 }
 
+function buildRadialGradientDef(id: string, fill: RadialGradientFill): string {
+  const stops = fill.stops.map((stop) => `<stop offset="${stop.offset}" stop-color="${escapeXml(stop.color)}" stop-opacity="${stop.opacity}" />`).join('');
+  return `<radialGradient id="${id}" gradientUnits="userSpaceOnUse" cx="${fill.center.x}" cy="${fill.center.y}" r="${fill.radius}">${stops}</radialGradient>`;
+}
+
+function buildAngularGradientDef(id: string, fill: Extract<FillStyle, { type: 'angular-gradient' }>): string {
+  const stops = fill.stops.map((stop) => `<stop offset="${stop.offset}" stop-color="${escapeXml(stop.color)}" stop-opacity="${stop.opacity}" />`).join('');
+  return `<linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="${fill.center.x}" y1="${fill.center.y}" x2="${fill.center.x + Math.cos(fill.angle)}" y2="${fill.center.y + Math.sin(fill.angle)}">${stops}</linearGradient>`;
+}
+
+function buildPatternDef(id: string, fill: PatternFill): string {
+  const size = Math.max(2, fill.size);
+  const mark = fill.kind === 'dots' ? `<circle cx="${size / 2}" cy="${size / 2}" r="${size / 6}" fill="${escapeXml(fill.foreground)}" />` : fill.kind === 'grid' ? `<path d="M 0 0 H ${size} V ${size} H 0 Z" fill="none" stroke="${escapeXml(fill.foreground)}" />` : `<path d="M 0 ${size} L ${size} 0" stroke="${escapeXml(fill.foreground)}" />`;
+  return `<pattern id="${id}" width="${size}" height="${size}" patternUnits="userSpaceOnUse"><rect width="100%" height="100%" fill="${escapeXml(fill.background)}" />${mark}</pattern>`;
+}
+
 /** Resolve fill to SVG fill attribute value. */
-function resolveFillAttr(fill: FillStyle, gradientMap: Map<LinearGradientFill, string>): string {
+function resolveFillAttr(fill: FillStyle, gradientMap: Map<FillStyle, string>): string {
   if (fill.type === 'solid') return `fill="${escapeXml(fill.color)}"`;
   if (fill.type === 'linear-gradient') {
+    const id = gradientMap.get(fill);
+    return id ? `fill="url(#${id})"` : 'fill="none"';
+  }
+  if (fill.type === 'radial-gradient' || fill.type === 'angular-gradient' || fill.type === 'pattern') {
     const id = gradientMap.get(fill);
     return id ? `fill="url(#${id})"` : 'fill="none"';
   }
@@ -107,7 +127,7 @@ function resolveFillAttr(fill: FillStyle, gradientMap: Map<LinearGradientFill, s
 
 function renderSceneObjectToSvg(
   obj: SceneObject,
-  gradientMap: Map<LinearGradientFill, string>,
+  gradientMap: Map<FillStyle, string>,
 ): string | null {
   switch (obj.type) {
     case 'rectangle':
@@ -123,7 +143,7 @@ function renderSceneObjectToSvg(
   }
 }
 
-function renderRectangleToSvg(obj: RectangleObject, gradientMap: Map<LinearGradientFill, string>): string {
+function renderRectangleToSvg(obj: RectangleObject, gradientMap: Map<FillStyle, string>): string {
   const matrix = getTransformMatrix(obj.transform);
   const transformAttr = `matrix(${matrix[0]} ${matrix[1]} ${matrix[3]} ${matrix[4]} ${matrix[6]} ${matrix[7]})`;
 
@@ -147,7 +167,7 @@ function roundedRectanglePath(width: number, height: number, radii: { topLeft: n
   return `M ${topLeft} 0 H ${width - topRight} A ${topRight} ${topRight} 0 0 1 ${width} ${topRight} V ${height - bottomRight} A ${bottomRight} ${bottomRight} 0 0 1 ${width - bottomRight} ${height} H ${bottomLeft} A ${bottomLeft} ${bottomLeft} 0 0 1 0 ${height - bottomLeft} V ${topLeft} A ${topLeft} ${topLeft} 0 0 1 ${topLeft} 0 Z`;
 }
 
-function renderEllipseToSvg(obj: EllipseObject, gradientMap: Map<LinearGradientFill, string>): string {
+function renderEllipseToSvg(obj: EllipseObject, gradientMap: Map<FillStyle, string>): string {
   const matrix = getTransformMatrix(obj.transform);
   const transformAttr = `matrix(${matrix[0]} ${matrix[1]} ${matrix[3]} ${matrix[4]} ${matrix[6]} ${matrix[7]})`;
   const rx = obj.width / 2;
@@ -160,7 +180,7 @@ function renderEllipseToSvg(obj: EllipseObject, gradientMap: Map<LinearGradientF
   return `<ellipse cx="${rx}" cy="${ry}" rx="${rx}" ry="${ry}" transform="${transformAttr}" ${fillAttr}${strokeAttr}${opacityAttr}${blendAttr(obj.style.blendMode)} />`;
 }
 
-function renderLineToSvg(obj: LineObject, _gradientMap: Map<LinearGradientFill, string>): string {
+function renderLineToSvg(obj: LineObject, _gradientMap: Map<FillStyle, string>): string {
   const matrix = getTransformMatrix(obj.transform);
   const transformAttr = `matrix(${matrix[0]} ${matrix[1]} ${matrix[3]} ${matrix[4]} ${matrix[6]} ${matrix[7]})`;
 
@@ -171,7 +191,7 @@ function renderLineToSvg(obj: LineObject, _gradientMap: Map<LinearGradientFill, 
   return `<line x1="0" y1="0" x2="${obj.endPoint.x}" y2="${obj.endPoint.y}" transform="${transformAttr}" ${fillAttr}${strokeAttr}${opacityAttr}${blendAttr(obj.style.blendMode)} />`;
 }
 
-function renderPathToSvg(obj: PathObject, gradientMap: Map<LinearGradientFill, string>): string {
+function renderPathToSvg(obj: PathObject, gradientMap: Map<FillStyle, string>): string {
   const matrix = getTransformMatrix(obj.transform);
   const transformAttr = `matrix(${matrix[0]} ${matrix[1]} ${matrix[3]} ${matrix[4]} ${matrix[6]} ${matrix[7]})`;
 

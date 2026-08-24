@@ -6,9 +6,12 @@ const number = (element: Element, name: string, fallback = 0) => {
   return Number.isFinite(value) ? value : fallback;
 };
 
-const fill = (element: Element) => {
+const fill = (element: Element, definitions: ReadonlyMap<string, import('@vectoria/core').FillStyle>) => {
   const value = element.getAttribute('fill');
-  return value === 'none' ? { type: 'none' as const } : { type: 'solid' as const, color: value || '#cccccc' };
+  if (value === 'none') return { type: 'none' as const };
+  const reference = value?.match(/^url\(#(.+)\)$/)?.[1];
+  const definition = reference ? definitions.get(reference) : undefined;
+  return definition ?? { type: 'solid' as const, color: value || '#cccccc' };
 };
 
 const stroke = (element: Element) => {
@@ -17,7 +20,7 @@ const stroke = (element: Element) => {
   return { ...defaultStroke, color, width: Math.max(0.01, number(element, 'stroke-width', 1)) };
 };
 
-const styleFor = (element: Element) => ({ ...defaultObjectStyle, fill: fill(element), stroke: stroke(element), opacity: Math.max(0, Math.min(1, number(element, 'opacity', 1))) });
+const styleFor = (element: Element, definitions: ReadonlyMap<string, import('@vectoria/core').FillStyle>) => ({ ...defaultObjectStyle, fill: fill(element, definitions), stroke: stroke(element), opacity: Math.max(0, Math.min(1, number(element, 'opacity', 1))) });
 
 export function parsePathData(data: string): PathNode[] {
   const tokens = data.match(/[MLCZHVmlczhv]|[-+]?\d*\.?\d+(?:e[-+]?\d+)?/g) ?? [];
@@ -105,15 +108,29 @@ export function importSvgToDocument(svgText: string, name = 'Imported SVG'): Doc
   const layerId = doc.activeLayerId;
   const objects: Record<string, SceneObject> = {};
   const objectIds: string[] = [];
-  const elements = Array.from(root.querySelectorAll('rect, ellipse, line, path'));
+  const definitions = new Map<string, import('@vectoria/core').FillStyle>();
+  for (const gradient of Array.from(root.querySelectorAll('linearGradient, radialGradient'))) {
+    const stops = Array.from(gradient.querySelectorAll('stop')).map((stop) => ({ id: generateId(), offset: Math.max(0, Math.min(1, Number.parseFloat(stop.getAttribute('offset') ?? '0'))), color: stop.getAttribute('stop-color') ?? '#000000', opacity: Math.max(0, Math.min(1, number(stop, 'stop-opacity', 1))) }));
+    if (stops.length < 2) continue;
+    const id = gradient.getAttribute('id');
+    if (!id) continue;
+    definitions.set(id, gradient.nodeName.toLowerCase() === 'radialgradient' ? { type: 'radial-gradient', center: { x: number(gradient, 'cx'), y: number(gradient, 'cy') }, radius: Math.max(0.01, number(gradient, 'r', 1)), stops } : { type: 'linear-gradient', start: { x: number(gradient, 'x1'), y: number(gradient, 'y1') }, end: { x: number(gradient, 'x2', 1), y: number(gradient, 'y2') }, stops });
+  }
+  for (const pattern of Array.from(root.querySelectorAll('pattern'))) {
+    const id = pattern.getAttribute('id');
+    const background = pattern.querySelector('rect')?.getAttribute('fill');
+    const foreground = pattern.querySelector('circle')?.getAttribute('fill') ?? pattern.querySelector('path')?.getAttribute('stroke');
+    if (id && background && foreground) definitions.set(id, { type: 'pattern', kind: pattern.querySelector('circle') ? 'dots' : pattern.querySelector('path')?.getAttribute('d')?.includes('H') ? 'grid' : 'hatch', foreground, background, size: Math.max(2, number(pattern, 'width', 12)) });
+  }
+  const elements = Array.from(root.querySelectorAll('rect, ellipse, line, path')).filter((element) => !element.closest('defs'));
   for (const element of elements) {
     const id = generateId();
-    const base = { id, name: element.getAttribute('id') || `${element.nodeName} ${objectIds.length + 1}`, layerId, visible: true, locked: false, style: styleFor(element) };
+    const base = { id, name: element.getAttribute('id') || `${element.nodeName} ${objectIds.length + 1}`, layerId, visible: true, locked: false, style: styleFor(element, definitions) };
     const tag = element.nodeName.toLowerCase();
     let object: SceneObject | null = null;
     if (tag === 'rect') object = { ...base, type: 'rectangle', transform: createTransform({ x: number(element, 'x'), y: number(element, 'y') }), width: Math.max(0.01, number(element, 'width', 1)), height: Math.max(0.01, number(element, 'height', 1)), cornerRadius: Math.max(0, number(element, 'rx')) };
     if (tag === 'ellipse') object = { ...base, type: 'ellipse', transform: createTransform({ x: number(element, 'cx') - number(element, 'rx', 1), y: number(element, 'cy') - number(element, 'ry', 1) }), width: Math.max(0.01, number(element, 'rx', 1) * 2), height: Math.max(0.01, number(element, 'ry', 1) * 2) };
-    if (tag === 'line') object = { ...base, type: 'line', transform: createTransform({ x: number(element, 'x1'), y: number(element, 'y1') }), endPoint: { x: number(element, 'x2') - number(element, 'x1'), y: number(element, 'y2') - number(element, 'y1') }, style: { ...styleFor(element), fill: { type: 'none' }, stroke: stroke(element) ?? defaultStroke } };
+    if (tag === 'line') object = { ...base, type: 'line', transform: createTransform({ x: number(element, 'x1'), y: number(element, 'y1') }), endPoint: { x: number(element, 'x2') - number(element, 'x1'), y: number(element, 'y2') - number(element, 'y1') }, style: { ...styleFor(element, definitions), fill: { type: 'none' }, stroke: stroke(element) ?? defaultStroke } };
     if (tag === 'path') { const data = element.getAttribute('d') || ''; const nodes = parsePathData(data).map((node, index) => ({ ...node, id: `${id}-node-${index + 1}` })); if (nodes.length >= 2) object = { ...base, type: 'path', transform: createTransform({ x: 0, y: 0 }), nodes, closed: /z\s*$/i.test(data) }; }
     if (object) {
       objects[id] = object;

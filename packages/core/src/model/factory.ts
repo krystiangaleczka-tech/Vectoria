@@ -56,6 +56,7 @@ export function createDefaultDocument(options: CreateDocumentOptions = {}): Docu
   const docId = generateId();
   const artboardId = generateId();
   const layerId = generateId();
+  const paletteId = generateId();
   const now = new Date().toISOString();
 
   const artboard: Artboard = {
@@ -94,6 +95,13 @@ export function createDefaultDocument(options: CreateDocumentOptions = {}): Docu
     guides: [],
     grid: { visible: true, size: 10, subdivisions: 1 },
     snap: { enabled: false, tolerancePx: 8, sources: { grid: true, guide: true, node: true, edge: true, center: true, intersection: true, pixel: false } },
+    palettes: [{ id: paletteId, name: 'Document colors', scope: 'document', colors: [
+      { id: generateId(), name: 'Ink', color: '#1b1b19' },
+      { id: generateId(), name: 'Paper', color: '#ffffff' },
+      { id: generateId(), name: 'Accent', color: '#5caeff' },
+      { id: generateId(), name: 'Warning', color: '#f0bd58' },
+    ] }],
+    objectStyles: [],
     createdAt: now,
     updatedAt: now,
   };

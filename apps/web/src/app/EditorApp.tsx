@@ -715,7 +715,11 @@ export const EditorApp: React.FC = () => {
            } else if (e.key.toLowerCase() === 'c') {
              setActiveTool('scissors');
            } else if (e.key.toLowerCase() === 'w') {
-             setActiveTool('width');
+               setActiveTool('width');
+            } else if (e.key.toLowerCase() === 'i') {
+              setActiveTool('eyedropper');
+            } else if (e.key.toLowerCase() === 'g') {
+              setActiveTool('bucket');
            } else if (e.key.toLowerCase() === 'h') {
             setActiveTool('hand');
           } else if (e.key.toLowerCase() === 'z') {

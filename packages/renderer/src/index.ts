@@ -1,6 +1,6 @@
 import type { Camera } from '@vectoria/editor-engine';
 import type { Vec2 } from '@vectoria/shared';
-import type { DocumentModel, Artboard, RectangleObject, EllipseObject, LineObject, PathObject, ObjectId, Transform2D, LinearGradientFill, GeometryPreview, SceneObject } from '@vectoria/core';
+import type { DocumentModel, Artboard, RectangleObject, EllipseObject, LineObject, PathObject, ObjectId, Transform2D, LinearGradientFill, RadialGradientFill, AngularGradientFill, PatternFill, GeometryPreview, SceneObject } from '@vectoria/core';
 import { getTransformMatrix, getObjectBounds, rectsIntersect, normalizeCornerRadii, flattenPath, widthAtT } from '@vectoria/core';
 import { mat3TransformPoint } from '@vectoria/shared';
 export interface GridSettings { visible: boolean; size: number; subdivisions: number }
@@ -286,13 +286,51 @@ function buildLinearGradient(
   return grad;
 }
 
+function buildRadialGradient(ctx: CanvasRenderingContext2D, fill: RadialGradientFill): CanvasGradient {
+  const gradient = ctx.createRadialGradient(fill.center.x, fill.center.y, 0, fill.center.x, fill.center.y, fill.radius);
+  for (const stop of fill.stops) gradient.addColorStop(stop.offset, `rgba(${parseInt(stop.color.slice(1, 3), 16)}, ${parseInt(stop.color.slice(3, 5), 16)}, ${parseInt(stop.color.slice(5, 7), 16)}, ${stop.opacity})`);
+  return gradient;
+}
+
+function buildAngularGradient(ctx: CanvasRenderingContext2D, fill: AngularGradientFill): CanvasGradient | string {
+  const context = ctx as unknown as { createConicGradient?: (angle: number, x: number, y: number) => CanvasGradient };
+  const gradient = context.createConicGradient?.(fill.angle, fill.center.x, fill.center.y);
+  if (!gradient) return fill.stops[0]?.color ?? 'transparent';
+  for (const stop of fill.stops) gradient.addColorStop(stop.offset, `rgba(${parseInt(stop.color.slice(1, 3), 16)}, ${parseInt(stop.color.slice(3, 5), 16)}, ${parseInt(stop.color.slice(5, 7), 16)}, ${stop.opacity})`);
+  return gradient;
+}
+
+function buildPattern(ctx: CanvasRenderingContext2D, fill: PatternFill): CanvasPattern | string {
+  const size = Math.max(2, fill.size);
+  const tile = document.createElement('canvas'); tile.width = size; tile.height = size;
+  const tileCtx = tile.getContext('2d');
+  if (!tileCtx) return fill.background;
+  tileCtx.fillStyle = fill.background; tileCtx.fillRect(0, 0, size, size); tileCtx.strokeStyle = fill.foreground; tileCtx.fillStyle = fill.foreground; tileCtx.lineWidth = Math.max(1, size / 8);
+  if (fill.kind === 'dots') {
+    tileCtx.beginPath();
+    tileCtx.arc(size / 2, size / 2, size / 6, 0, Math.PI * 2);
+    tileCtx.fill();
+  }
+  if (fill.kind === 'grid') tileCtx.strokeRect(0, 0, size, size);
+  if (fill.kind === 'hatch') {
+    tileCtx.beginPath();
+    tileCtx.moveTo(0, size);
+    tileCtx.lineTo(size, 0);
+    tileCtx.stroke();
+  }
+  return ctx.createPattern(tile, 'repeat') ?? fill.background;
+}
+
 /** Resolve fill style to a Canvas fill style (color string or gradient). */
 function resolveFill(
   ctx: CanvasRenderingContext2D,
   fill: import('@vectoria/core').FillStyle,
-): string | CanvasGradient {
+): string | CanvasGradient | CanvasPattern {
   if (fill.type === 'solid') return fill.color;
   if (fill.type === 'linear-gradient') return buildLinearGradient(ctx, fill);
+  if (fill.type === 'radial-gradient') return buildRadialGradient(ctx, fill);
+  if (fill.type === 'angular-gradient') return buildAngularGradient(ctx, fill);
+  if (fill.type === 'pattern') return buildPattern(ctx, fill);
   return 'transparent'; // 'none'
 }
 

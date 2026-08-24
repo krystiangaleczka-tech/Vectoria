@@ -34,7 +34,9 @@ export type VectoriaIconName =
   | 'menu'
   | 'grid'
   | 'more'
-  | 'sliders';
+  | 'sliders'
+  | 'eyedropper'
+  | 'bucket';
 
 export interface VectoriaIconProps {
   name: VectoriaIconName;
@@ -342,6 +344,11 @@ export const VectoriaIcon: React.FC<VectoriaIconProps> = ({
           <line x1="4" y1="18" x2="20" y2="18" /><circle cx="11" cy="18" r="2" fill="currentColor" />
         </svg>
       );
+
+    case 'eyedropper':
+      return <svg {...iconProps}><path d="m14 4 6 6M12 6 4 14l6 6 8-8M4 20l-2 2" /></svg>;
+    case 'bucket':
+      return <svg {...iconProps}><path d="m5 4 15 15M4 8l7-4 9 9-4 7H7L3 16z" /><path d="M16 18h5" /></svg>;
 
     default:
       return null;

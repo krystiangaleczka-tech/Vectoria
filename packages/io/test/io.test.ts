@@ -319,4 +319,13 @@ describe('SVG Export — Gradient', () => {
     expect(svg).toContain('stop-opacity="0.5"');
     expect(svg).toContain('fill="url(#grad-');
   });
+
+  it('exports radial and pattern fills', () => {
+    const doc = createDefaultDocument({ width: 200, height: 200 });
+    const rect: RectangleObject = { type: 'rectangle', id: 'advanced-fill', name: 'Advanced fill', layerId: doc.activeLayerId, visible: true, locked: false, transform: createTransform({ x: 0, y: 0 }), style: { fill: { type: 'radial-gradient', center: { x: 50, y: 50 }, radius: 50, stops: [{ offset: 0, color: '#ffffff', opacity: 1 }, { offset: 1, color: '#000000', opacity: 1 }] }, stroke: null, opacity: 1 }, width: 100, height: 100, cornerRadius: 0 };
+    const withRect = { ...doc, objects: { [rect.id]: rect }, layers: { ...doc.layers, [doc.activeLayerId]: { ...doc.layers[doc.activeLayerId]!, objectIds: [rect.id] } } };
+    expect(exportArtboardToSvg(withRect)).toContain('<radialGradient');
+    const patternDoc = { ...withRect, objects: { [rect.id]: { ...rect, style: { ...rect.style, fill: { type: 'pattern' as const, kind: 'grid' as const, foreground: '#000000', background: '#ffffff', size: 8 } } } } };
+    expect(exportArtboardToSvg(patternDoc)).toContain('<pattern');
+  });
 });

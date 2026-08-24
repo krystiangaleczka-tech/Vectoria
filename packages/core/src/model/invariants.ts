@@ -154,8 +154,8 @@ export function validateInvariants(doc: DocumentModel): InvariantViolation[] {
         }
 
         // ── Gradient validation ─────────────────────────────────────────────
-        if (obj.style.fill.type === 'linear-gradient') {
-          const { stops, start, end } = obj.style.fill;
+        if (obj.style.fill.type === 'linear-gradient' || obj.style.fill.type === 'radial-gradient' || obj.style.fill.type === 'angular-gradient') {
+          const { stops } = obj.style.fill;
           if (stops.length < 2) {
             violations.push({ code: 'INVALID_GRADIENT_STOPS', message: `Object '${objectId}' gradient needs >= 2 stops.` });
           }
@@ -167,9 +167,13 @@ export function validateInvariants(doc: DocumentModel): InvariantViolation[] {
               violations.push({ code: 'INVALID_GRADIENT_STOP_OPACITY', message: `Object '${objectId}' gradient stop opacity out of range or non-finite.` });
             }
           }
-          if (!Number.isFinite(start.x) || !Number.isFinite(start.y) || !Number.isFinite(end.x) || !Number.isFinite(end.y)) {
-            violations.push({ code: 'NON_FINITE_GRADIENT_POINT', message: `Object '${objectId}' gradient has non-finite points.` });
-          }
+          const points = obj.style.fill.type === 'linear-gradient' ? [obj.style.fill.start, obj.style.fill.end] : [obj.style.fill.center];
+          if (points.some((point) => !Number.isFinite(point.x) || !Number.isFinite(point.y))) violations.push({ code: 'NON_FINITE_GRADIENT_POINT', message: `Object '${objectId}' gradient has non-finite points.` });
+          if (obj.style.fill.type === 'linear-gradient' && (obj.style.fill.start.x === obj.style.fill.end.x && obj.style.fill.start.y === obj.style.fill.end.y)) violations.push({ code: 'DEGENERATE_GRADIENT', message: `Object '${objectId}' gradient endpoints must differ.` });
+          if (obj.style.fill.type === 'radial-gradient' && (!Number.isFinite(obj.style.fill.radius) || obj.style.fill.radius <= 0)) violations.push({ code: 'INVALID_GRADIENT_RADIUS', message: `Object '${objectId}' radial gradient radius must be positive.` });
+        }
+        if (obj.style.fill.type === 'pattern' && (!Number.isFinite(obj.style.fill.size) || obj.style.fill.size <= 0)) {
+          violations.push({ code: 'INVALID_PATTERN_SIZE', message: `Object '${objectId}' pattern size must be positive.` });
         }
 
         // ── Type-specific geometry validation ──────────────────────────────

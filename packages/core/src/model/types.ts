@@ -50,6 +50,7 @@ export interface NoFill {
 }
 
 export interface LinearGradientStop {
+  readonly id?: string;
   readonly offset: number;
   readonly color: string;
   readonly opacity: number;
@@ -62,7 +63,29 @@ export interface LinearGradientFill {
   readonly stops: readonly LinearGradientStop[];
 }
 
-export type FillStyle = SolidFill | NoFill | LinearGradientFill;
+export interface RadialGradientFill {
+  readonly type: 'radial-gradient';
+  readonly center: Vec2;
+  readonly radius: number;
+  readonly stops: readonly LinearGradientStop[];
+}
+
+export interface AngularGradientFill {
+  readonly type: 'angular-gradient';
+  readonly center: Vec2;
+  readonly angle: number;
+  readonly stops: readonly LinearGradientStop[];
+}
+
+export interface PatternFill {
+  readonly type: 'pattern';
+  readonly kind: 'dots' | 'grid' | 'hatch';
+  readonly foreground: string;
+  readonly background: string;
+  readonly size: number;
+}
+
+export type FillStyle = SolidFill | NoFill | LinearGradientFill | RadialGradientFill | AngularGradientFill | PatternFill;
 
 export interface StrokeStyle {
   readonly color: string;
@@ -84,6 +107,25 @@ export interface ObjectStyle {
 }
 
 export type BlendMode = 'normal' | 'multiply' | 'screen' | 'overlay';
+
+export interface PaletteColor {
+  readonly id: string;
+  readonly name: string;
+  readonly color: string;
+}
+
+export interface ColorPalette {
+  readonly id: string;
+  readonly name: string;
+  readonly colors: readonly PaletteColor[];
+  readonly scope: 'document' | 'user' | 'saved';
+}
+
+export interface SavedObjectStyle {
+  readonly id: string;
+  readonly name: string;
+  readonly style: ObjectStyle;
+}
 
 export interface CornerRadii {
   readonly topLeft: number;
@@ -227,6 +269,8 @@ export interface DocumentModel {
   readonly guides: readonly Guide[];
   readonly grid: GridSettings;
   readonly snap: SnapSettings;
+  readonly palettes?: readonly ColorPalette[];
+  readonly objectStyles?: readonly SavedObjectStyle[];
 
   readonly createdAt: string;
   readonly updatedAt: string;

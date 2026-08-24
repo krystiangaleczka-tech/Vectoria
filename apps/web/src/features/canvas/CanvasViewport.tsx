@@ -40,6 +40,8 @@ import {
   splitPathByPolyline,
   flattenPath,
   nearestPointOnPolyline,
+  SetObjectStyleCommand,
+  ApplyStyleCommand,
 } from '@vectoria/core';
 import { Camera, DragSession, SelectTool, DirectSelectTool, PenTool, PencilTool, BrushTool, SmoothTool, CornerTool, EraserTool, KnifeTool, ScissorsTool, WidthTool, snapToGrid as snapPointToGrid, type GridSettings } from '@vectoria/editor-engine';
 import { mat3TransformPoint } from '@vectoria/shared';
@@ -416,6 +418,16 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
 
     if (activeTool === 'zoom') {
       camera.zoomAtPoint(1.25, screenPos);
+      return;
+    }
+
+    if (activeTool === 'eyedropper' || activeTool === 'bucket') {
+      const hit = selectTool.pick({ document: doc, selection, screenPoint: screenPos, worldPoint: worldPos, zoom: camera.zoom }).hit;
+      const source = hit ? doc.objects[hit.objectId] : undefined;
+      if (source && selectedObjectIds?.length) {
+        const ids = selectedObjectIds;
+        onExecuteCommand(activeTool === 'eyedropper' ? new ApplyStyleCommand(ids, source.style) : new SetObjectStyleCommand(ids, { fill: source.style.fill }));
+      }
       return;
     }
 
