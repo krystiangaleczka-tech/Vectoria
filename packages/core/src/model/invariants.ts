@@ -207,6 +207,16 @@ export function validateInvariants(doc: DocumentModel): InvariantViolation[] {
               break;
             }
           }
+          if (obj.widthProfile) {
+            let previousT = -Infinity;
+            for (const point of obj.widthProfile) {
+              if (!Number.isFinite(point.t) || point.t < 0 || point.t > 1 || !Number.isFinite(point.width) || point.width <= 0 || point.t < previousT) {
+                violations.push({ code: 'INVALID_WIDTH_PROFILE', message: `Object '${objectId}' has an invalid local stroke width profile.` });
+                break;
+              }
+              previousT = point.t;
+            }
+          }
         }
 
         // All numbers must be finite

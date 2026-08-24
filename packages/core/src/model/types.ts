@@ -133,6 +133,13 @@ export interface PathObject extends SceneObjectBase {
   readonly type: 'path';
   readonly nodes: readonly PathNode[];
   readonly closed: boolean;
+  /** Optional normalized width profile for pressure-sensitive brush strokes. */
+  readonly widthProfile?: readonly WidthPoint[];
+}
+
+export interface WidthPoint {
+  readonly t: number;
+  readonly width: number;
 }
 
 export type SceneObject = RectangleObject | EllipseObject | LineObject | PathObject;
