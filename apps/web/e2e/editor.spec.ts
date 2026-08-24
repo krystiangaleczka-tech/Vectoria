@@ -380,4 +380,59 @@ test.describe('Vectoria MVP Skeleton', () => {
 
     await expect.poll(async () => Number(await outX.inputValue())).toBeGreaterThan(initialX);
   });
+
+  test('Pencil and Brush commit one path command with accessible controls', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    const canvas = page.getByTestId('canvas-viewport');
+    const box = await canvas.boundingBox();
+    if (!box) throw new Error('Canvas not found');
+    const start = { x: box.x + 220, y: box.y + 220 };
+
+    await page.getByRole('button', { name: 'Pencil Tool' }).click();
+    await expect(page.getByTestId('drawing-smoothing')).toBeVisible();
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    await page.mouse.move(start.x + 80, start.y + 30, { steps: 5 });
+    await page.mouse.move(start.x + 150, start.y - 10, { steps: 5 });
+    await page.mouse.up();
+    await expect(page.getByTestId('statusbar')).toContainText('1 object');
+
+    await page.getByRole('button', { name: 'Brush Tool' }).click();
+    await expect(page.getByTestId('drawing-width')).toBeVisible();
+    await expect(page.getByRole('checkbox', { name: 'Pressure' })).toBeVisible();
+    await page.getByLabel('Brush cap').selectOption('square');
+    await page.mouse.move(start.x + 20, start.y + 100);
+    await page.mouse.down();
+    await page.mouse.move(start.x + 130, start.y + 120, { steps: 5 });
+    await page.mouse.up();
+    await expect(page.getByTestId('statusbar')).toContainText('2 objects');
+    await page.getByRole('tab', { name: 'Historia' }).click();
+    await expect(page.getByTestId('history-panel')).toContainText('Create brush stroke');
+  });
+
+  test('Convert to curves previews, confirms, and creates one undoable command', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    const canvas = page.getByTestId('canvas-viewport');
+    const box = await canvas.boundingBox();
+    if (!box) throw new Error('Canvas not found');
+    const center = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+
+    await page.getByRole('button', { name: 'Rectangle Tool' }).click();
+    await page.mouse.move(center.x - 40, center.y - 40);
+    await page.mouse.down();
+    await page.mouse.move(center.x + 40, center.y + 40, { steps: 4 });
+    await page.mouse.up();
+    await page.getByRole('button', { name: 'Select Tool', exact: true }).click();
+    await page.mouse.click(center.x, center.y);
+
+    await page.getByRole('button', { name: 'Obiekt' }).click();
+    await page.getByRole('menuitem', { name: 'Convert to curves' }).click();
+    await expect(page.getByRole('dialog', { name: 'Convert to curves?' })).toBeVisible();
+    await page.getByRole('dialog').getByRole('button', { name: 'Convert to curves' }).click();
+    await expect(page.getByTestId('history-panel')).toBeHidden();
+    await page.getByRole('tab', { name: 'Historia' }).click();
+    await expect(page.getByTestId('history-panel')).toContainText('Convert to curves');
+  });
 });

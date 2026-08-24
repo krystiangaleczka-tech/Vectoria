@@ -2,6 +2,7 @@ import React from 'react';
 import { AppMenuBar } from './AppMenuBar.js';
 import { DocumentTabs } from './DocumentTabs.js';
 import type { DockPanel } from '../panels/RightDock.js';
+import type { ObjectId } from '@vectoria/core';
 
 export interface TopBarProps {
   documentName: string;
@@ -28,6 +29,9 @@ export interface TopBarProps {
   onToggleTheme: () => void;
   onRetrySave: () => void;
   onShowPanel: (panel: DockPanel) => void;
+  selectedObjectIds: readonly ObjectId[];
+  onConvertToCurves: (objectIds: readonly ObjectId[]) => void;
+  onOpenCleanup: () => void;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -55,6 +59,9 @@ export const TopBar: React.FC<TopBarProps> = ({
   onToggleTheme,
   onRetrySave,
   onShowPanel,
+  selectedObjectIds,
+  onConvertToCurves,
+  onOpenCleanup,
 }) => {
   return (
     <header
@@ -92,6 +99,9 @@ export const TopBar: React.FC<TopBarProps> = ({
         onToggleTheme={onToggleTheme}
         onRetrySave={onRetrySave}
         onShowPanel={onShowPanel}
+        selectedObjectIds={selectedObjectIds}
+        onConvertToCurves={onConvertToCurves}
+        onOpenCleanup={onOpenCleanup}
       />
       <DocumentTabs documentName={documentName} dirty={saveStatus !== 'saved-locally'} />
     </header>

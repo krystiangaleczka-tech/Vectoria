@@ -5,6 +5,16 @@ import { ColorControl, NumberInput } from '@vectoria/ui';
 import { convertUnit } from '@vectoria/shared';
 import type { ActiveTool } from '../toolbar/ToolRail.js';
 
+export interface FreehandSettings {
+  smoothing: number;
+  accuracy: number;
+  width: number;
+  pressure: boolean;
+  cap: 'butt' | 'round' | 'square';
+  join: 'miter' | 'round' | 'bevel';
+  eraserRadius: number;
+}
+
 export interface ContextualControlBarProps {
   document: DocumentModel;
   activeTool: ActiveTool;
@@ -13,6 +23,8 @@ export interface ContextualControlBarProps {
   onUpdateDimensions: (id: ObjectId, width: number, height: number) => void;
   onUpdateLineEndpoint?: (id: ObjectId, endPoint: Vec2) => void;
   onUpdateFill: (id: ObjectId, color: string | null) => void;
+  freehandSettings?: FreehandSettings;
+  onFreehandSettingsChange?: (settings: FreehandSettings) => void;
 }
 
 export const ContextualControlBar: React.FC<ContextualControlBarProps> = ({
@@ -23,6 +35,8 @@ export const ContextualControlBar: React.FC<ContextualControlBarProps> = ({
   onUpdateDimensions,
   onUpdateLineEndpoint,
   onUpdateFill,
+  freehandSettings,
+  onFreehandSettingsChange,
 }) => {
   const selected = selectedObjectId ? doc.objects[selectedObjectId] : null;
   const rectangle = selected?.type === 'rectangle' ? selected as RectangleObject : null;
@@ -30,10 +44,12 @@ export const ContextualControlBar: React.FC<ContextualControlBarProps> = ({
   const line = selected?.type === 'line' ? selected as LineObject : null;
   const selectedShape = rectangle ?? ellipse;
   const selectedFillColor = selectedShape?.style.fill.type === 'solid' ? selectedShape.style.fill.color : null;
+  const drawing = freehandSettings;
+  const updateDrawing = (patch: Partial<FreehandSettings>) => drawing && onFreehandSettingsChange?.({ ...drawing, ...patch });
 
   return (
     <section className="contextual-control-bar" data-testid="contextual-control-bar" aria-label="Kontrolki kontekstowe">
-      <span className="contextual-label">{rectangle ? 'Prostokąt' : ellipse ? 'Elipsa' : line ? 'Linia' : activeTool === 'select' ? 'Zaznaczenie' : activeTool === 'direct-select' ? 'Węzły' : activeTool === 'rectangle' ? 'Prostokąt' : activeTool === 'ellipse' ? 'Elipsa' : activeTool === 'line' ? 'Linia' : activeTool === 'zoom' ? 'Zoom' : 'Nawigacja'}</span>
+       <span className="contextual-label">{rectangle ? 'Prostokąt' : ellipse ? 'Elipsa' : line ? 'Linia' : activeTool === 'select' ? 'Zaznaczenie' : activeTool === 'direct-select' ? 'Węzły' : activeTool === 'rectangle' ? 'Prostokąt' : activeTool === 'ellipse' ? 'Elipsa' : activeTool === 'line' ? 'Linia' : activeTool === 'pencil' ? 'Pencil' : activeTool === 'brush' ? 'Brush' : activeTool === 'smooth' ? 'Smooth' : activeTool === 'corner' ? 'Corner Tool' : activeTool === 'eraser' ? 'Eraser' : activeTool === 'knife' ? 'Knife' : activeTool === 'scissors' ? 'Scissors' : activeTool === 'width' ? 'Width' : activeTool === 'zoom' ? 'Zoom' : 'Nawigacja'}</span>
       {rectangle || ellipse ? (
         <>
           <div className="contextual-field-group" aria-label="Transformacja">
@@ -49,7 +65,16 @@ export const ContextualControlBar: React.FC<ContextualControlBarProps> = ({
           <NumberInput data-testid="contextual-end-x" label="End X" value={convertUnit(line.endPoint.x, 'px', doc.unit)} unit={doc.unit} onChange={(value) => onUpdateLineEndpoint?.(line.id, { x: convertUnit(value, doc.unit, 'px'), y: line.endPoint.y })} />
           <NumberInput data-testid="contextual-end-y" label="End Y" value={convertUnit(line.endPoint.y, 'px', doc.unit)} unit={doc.unit} onChange={(value) => onUpdateLineEndpoint?.(line.id, { x: line.endPoint.x, y: convertUnit(value, doc.unit, 'px') })} />
         </div>
-      ) : (
+       ) : drawing && (activeTool === 'pencil' || activeTool === 'brush' || activeTool === 'smooth' || activeTool === 'eraser') ? (
+         <div className="contextual-field-group" aria-label="Ustawienia rysowania">
+           {(activeTool === 'pencil' || activeTool === 'brush' || activeTool === 'smooth') && <NumberInput data-testid="drawing-smoothing" label="Smooth" min={0} max={100} value={drawing.smoothing} unit="%" onChange={(value) => updateDrawing({ smoothing: value })} />}
+           {(activeTool === 'pencil' || activeTool === 'brush') && <NumberInput data-testid="drawing-width" label="Width" min={0.1} value={drawing.width} unit="px" decimals={1} onChange={(value) => updateDrawing({ width: value })} />}
+           {activeTool === 'eraser' && <NumberInput data-testid="eraser-radius" label="Radius" min={1} value={drawing.eraserRadius} unit="px" decimals={0} onChange={(value) => updateDrawing({ eraserRadius: value })} />}
+           {(activeTool === 'brush') && <label className="contextual-toggle"><input type="checkbox" checked={drawing.pressure} onChange={(event) => updateDrawing({ pressure: event.target.checked })} /> Pressure</label>}
+           {(activeTool === 'brush') && <label className="contextual-select-label">Cap<select className="contextual-select" aria-label="Brush cap" value={drawing.cap} onChange={(event) => updateDrawing({ cap: event.target.value as FreehandSettings['cap'] })}><option value="butt">Butt</option><option value="round">Round</option><option value="square">Square</option></select></label>}
+           {(activeTool === 'brush') && <label className="contextual-select-label">Join<select className="contextual-select" aria-label="Brush join" value={drawing.join} onChange={(event) => updateDrawing({ join: event.target.value as FreehandSettings['join'] })}><option value="miter">Miter</option><option value="round">Round</option><option value="bevel">Bevel</option></select></label>}
+         </div>
+       ) : (
         <span className="contextual-hint">{activeTool === 'select' ? 'Wybierz obiekt, aby edytować właściwości' : activeTool === 'direct-select' ? 'Wybierz węzeł ścieżki' : activeTool === 'rectangle' ? 'Przeciągnij na obszarze roboczym, aby narysować' : 'Przeciągnij, aby nawigować po obszarze roboczym'}</span>
       )}
     </section>

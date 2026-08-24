@@ -40,6 +40,9 @@
 .contextual-control-bar [data-testid^='contextual-'] label { display: none; }
 .contextual-control-bar [data-testid^='contextual-'] input { height: 24px; }
 .contextual-hint { color: var(--color-text-muted); font-size: 11px; }
+.contextual-toggle { display: inline-flex; align-items: center; gap: 5px; color: var(--color-text-secondary); font-size: 11px; }
+.contextual-select-label { display: inline-flex; align-items: center; gap: 5px; color: var(--color-text-muted); font-size: 10px; }
+.contextual-select { height: 24px; padding: 0 5px; border: 1px solid var(--color-border-subtle); border-radius: var(--radius-sm); background: var(--color-input); color: var(--color-text-primary); font-size: 10px; }
 
 .editor-main-area { position: relative; display: flex; flex: 1; min-height: 0; overflow: hidden; }
 .tool-group { display: flex; flex-direction: column; align-items: center; gap: 3px; }
@@ -78,6 +81,20 @@ input { user-select: text; -webkit-user-select: text; }
 .property-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .property-actions { display: flex; gap: 6px; }
 .path-actions { flex-wrap: wrap; }
+.geometry-properties { border-top: 1px solid var(--color-border-subtle); padding-top: 12px; }
+.geometry-action-group, .geometry-operation-card { display: flex; flex-direction: column; gap: 6px; }
+.geometry-operation-card { padding: 9px; border: 1px solid var(--color-border-subtle); border-radius: var(--radius-sm); background: var(--color-panel-raised); }
+.geometry-operation-title { color: var(--color-text-secondary); font-size: 11px; font-weight: 600; }
+.geometry-preview-status { display: flex; flex-direction: column; gap: 5px; padding: 9px; border: 1px solid var(--color-accent); border-radius: var(--radius-sm); background: var(--color-accent-subtle); color: var(--color-text-secondary); font-size: 10px; line-height: 1.4; }
+.geometry-preview-status strong { color: var(--color-accent); }
+.geometry-preview-status.has-warning { border-color: var(--color-warning); background: var(--color-warning-subtle); }.geometry-preview-status.has-warning strong { color: var(--color-warning); }
+.cleanup-list { display: flex; flex-direction: column; gap: 3px; }
+.cleanup-row { display: grid; grid-template-columns: 16px 18px minmax(0, 1fr); align-items: start; gap: 6px; padding: 8px 6px; border: 1px solid transparent; border-radius: var(--radius-sm); color: var(--color-text-secondary); cursor: pointer; font-size: 11px; }
+.cleanup-row:hover, .cleanup-row.is-selected { border-color: var(--color-border-subtle); background: var(--color-selection-surface); }.cleanup-row:focus-within { outline: 2px solid var(--color-border-focus); outline-offset: 1px; }
+.cleanup-row input { margin-top: 2px; accent-color: var(--color-accent); }.cleanup-row strong, .cleanup-row small { display: block; }.cleanup-row small { margin-top: 2px; color: var(--color-text-muted); font-size: 10px; line-height: 1.35; }.cleanup-severity { display: inline-grid; width: 16px; height: 16px; place-items: center; border: 1px solid var(--color-warning); border-radius: 50%; color: var(--color-warning); font: 10px var(--font-mono); }
+.cleanup-actions { margin-top: 8px; }
+.geometry-confirm-dialog { width: min(480px, calc(100vw - 32px)); padding: 24px; border: 1px solid var(--color-border-default); border-radius: var(--radius-lg); background: var(--color-panel-raised); box-shadow: var(--shadow-dialog); color: var(--color-text-primary); }
+.geometry-confirm-dialog h2 { margin: 5px 0 8px; font-size: 18px; }.geometry-confirm-summary { margin-top: 16px; padding: 9px 10px; border: 1px solid var(--color-warning); border-radius: var(--radius-sm); background: var(--color-warning-subtle); color: var(--color-text-secondary); font-size: 11px; }
 .property-lock-message { padding: 8px 10px; border: 1px solid var(--color-warning); border-radius: var(--radius-sm); background: var(--color-warning-subtle); color: var(--color-text-secondary); font-size: 10px; line-height: 1.4; }
 .dialog-backdrop { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; background: rgba(0, 0, 0, .48); }
 .new-document-dialog { width: min(600px, calc(100vw - 32px)); max-height: min(760px, calc(100vh - 32px)); overflow: auto; padding: 24px; border: 1px solid var(--color-border-default); border-radius: var(--radius-lg); background: var(--color-panel-raised); box-shadow: var(--shadow-dialog); color: var(--color-text-primary); }
@@ -99,4 +116,8 @@ input { user-select: text; -webkit-user-select: text; }
 @media (max-width: 640px) {
   .app-global-actions .vectoria-button:not([data-testid='export-svg-button']), .zoom-readout { display: none; }.contextual-control-bar { gap: 6px; padding: 0 8px; }.contextual-field-group { gap: 3px; }.contextual-control-bar [data-testid^='contextual-'] { width: 54px; }.right-dock { width: min(280px, 88vw); }.status-selection, .ruler { display: none; }
   .dialog-presets { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
 }

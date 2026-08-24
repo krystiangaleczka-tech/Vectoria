@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
-import type { DocumentModel, ObjectId, ObjectStyle, DocumentUnit, HistoryEntry, PathNode, SelectionState } from '@vectoria/core';
+import type { DocumentModel, ObjectId, ObjectStyle, DocumentUnit, HistoryEntry, PathNode, SelectionState, GeometryPreview, CleanupPlan } from '@vectoria/core';
 import { VectoriaIcon } from '@vectoria/ui';
 import { HistoryPanel } from './HistoryPanel.js';
 import { LayersPanel } from './LayersPanel.js';
 import { PropertiesPanel, type PathAction } from './PropertiesPanel.js';
 import { ArtboardsPanel } from './ArtboardsPanel.js';
 import type { GridSettings } from '@vectoria/editor-engine';
+import { CleanupPanel } from '../cleanup/CleanupPanel.js';
+import type { GeometryAction } from '../properties/GeometryProperties.js';
 
-export type DockPanel = 'properties' | 'layers' | 'artboards' | 'history';
+export type DockPanel = 'properties' | 'layers' | 'artboards' | 'history' | 'cleanup';
 
 export interface RightDockProps {
   document: DocumentModel;
@@ -34,6 +36,15 @@ export interface RightDockProps {
   onUpdatePathNodeKind?: (id: ObjectId, index: number, kind: PathNode['kind']) => void;
   onUpdatePathClosed?: (id: ObjectId, closed: boolean) => void;
   onPathAction?: (action: PathAction) => void;
+  geometryPreview?: GeometryPreview | null;
+  onGeometryAction?: (action: GeometryAction) => void;
+  onApplyGeometryPreview?: () => void;
+  onCancelGeometryPreview?: () => void;
+  onOpenCleanup?: () => void;
+  cleanupPlan?: CleanupPlan;
+  onCleanupSelectionChange?: (findingIds: readonly string[]) => void;
+  onApplyCleanup?: () => void;
+  onCancelCleanup?: () => void;
   onToggleObject?: (id: ObjectId, field: 'visible' | 'locked') => void;
   onSelectArtboard?: (id: string) => void;
   onCreateArtboard?: () => void;
@@ -49,9 +60,10 @@ const panels: readonly { id: DockPanel; label: string; icon: React.ComponentProp
   { id: 'layers', label: 'Warstwy', icon: 'layers' },
   { id: 'artboards', label: 'Artboardy', icon: 'grid' },
   { id: 'history', label: 'Historia', icon: 'history' },
+  { id: 'cleanup', label: 'Clean Up', icon: 'check' as React.ComponentProps<typeof VectoriaIcon>['name'] },
 ];
 
-export const RightDock: React.FC<RightDockProps> = ({ document: doc, selectedObjectId, selectedObjectIds = [], history, historyCursor, onHistoryJump, onSelectObject, onSelectObjects, onUpdatePosition, onUpdateDimensions, onUpdateLineEndpoint, onUpdateCornerRadius, onUpdateFill, onUpdateObjectStyle, onUpdateRotation, onUpdateArtboard, onUpdateUnit, gridSettings, onUpdateGridSettings, selection, onUpdatePathNode, onUpdatePathNodeKind, onUpdatePathClosed, onPathAction, onToggleObject, onSelectArtboard, onCreateArtboard, onDuplicateArtboard, onDeleteArtboard, activePanel: requestedPanel, onPanelChange, open }) => {
+export const RightDock: React.FC<RightDockProps> = ({ document: doc, selectedObjectId, selectedObjectIds = [], history, historyCursor, onHistoryJump, onSelectObject, onSelectObjects, onUpdatePosition, onUpdateDimensions, onUpdateLineEndpoint, onUpdateCornerRadius, onUpdateFill, onUpdateObjectStyle, onUpdateRotation, onUpdateArtboard, onUpdateUnit, gridSettings, onUpdateGridSettings, selection, onUpdatePathNode, onUpdatePathNodeKind, onUpdatePathClosed, onPathAction, geometryPreview, onGeometryAction, onApplyGeometryPreview, onCancelGeometryPreview, onOpenCleanup, cleanupPlan, onCleanupSelectionChange, onApplyCleanup, onCancelCleanup, onToggleObject, onSelectArtboard, onCreateArtboard, onDuplicateArtboard, onDeleteArtboard, activePanel: requestedPanel, onPanelChange, open }) => {
   const [localActivePanel, setLocalActivePanel] = useState<DockPanel>('properties');
   const activePanel = requestedPanel ?? localActivePanel;
   const activeIndex = panels.findIndex((panel) => panel.id === activePanel);
@@ -63,7 +75,7 @@ export const RightDock: React.FC<RightDockProps> = ({ document: doc, selectedObj
   const moveTab = (direction: number) => {
     const next = (activeIndex + direction + panels.length) % panels.length;
     const nextPanel = panels[next];
-    if (nextPanel) selectPanel(nextPanel.id);
+     if (nextPanel) selectPanel(nextPanel.id);
   };
 
   return (
@@ -72,10 +84,11 @@ export const RightDock: React.FC<RightDockProps> = ({ document: doc, selectedObj
          {panels.map((panel) => <button key={panel.id} type="button" role="tab" id={`tab-${panel.id}`} className={`dock-tab ${activePanel === panel.id ? 'is-active' : ''}`} aria-selected={activePanel === panel.id} aria-controls={`panel-${panel.id}`} tabIndex={activePanel === panel.id ? 0 : -1} onClick={() => selectPanel(panel.id)} onKeyDown={(event) => { if (event.key === 'ArrowRight') moveTab(1); if (event.key === 'ArrowLeft') moveTab(-1); if (event.key === 'Home') selectPanel('properties'); if (event.key === 'End') selectPanel('history'); }}><VectoriaIcon name={panel.icon} size={15} /><span>{panel.label}</span></button>)}
       </div>
       <div id={`panel-${activePanel}`} role="tabpanel" aria-labelledby={`tab-${activePanel}`} className="dock-panel">
-          {activePanel === 'properties' && <PropertiesPanel document={doc} selectedObjectId={selectedObjectId} selectedObjectIds={selectedObjectIds} selection={selection} onUpdatePosition={onUpdatePosition} onUpdateDimensions={onUpdateDimensions} onUpdateLineEndpoint={onUpdateLineEndpoint} onUpdateCornerRadius={onUpdateCornerRadius} onUpdateFill={onUpdateFill} onUpdateObjectStyle={onUpdateObjectStyle} onUpdateRotation={onUpdateRotation} onUpdateArtboard={onUpdateArtboard} onUpdateUnit={onUpdateUnit} gridSettings={gridSettings} onUpdateGridSettings={onUpdateGridSettings} onUpdatePathNode={onUpdatePathNode} onUpdatePathNodeKind={onUpdatePathNodeKind} onUpdatePathClosed={onUpdatePathClosed} onPathAction={onPathAction} />}
+          {activePanel === 'properties' && <PropertiesPanel document={doc} selectedObjectId={selectedObjectId} selectedObjectIds={selectedObjectIds} selection={selection} onUpdatePosition={onUpdatePosition} onUpdateDimensions={onUpdateDimensions} onUpdateLineEndpoint={onUpdateLineEndpoint} onUpdateCornerRadius={onUpdateCornerRadius} onUpdateFill={onUpdateFill} onUpdateObjectStyle={onUpdateObjectStyle} onUpdateRotation={onUpdateRotation} onUpdateArtboard={onUpdateArtboard} onUpdateUnit={onUpdateUnit} gridSettings={gridSettings} onUpdateGridSettings={onUpdateGridSettings} onUpdatePathNode={onUpdatePathNode} onUpdatePathNodeKind={onUpdatePathNodeKind} onUpdatePathClosed={onUpdatePathClosed} onPathAction={onPathAction} geometryPreview={geometryPreview} onGeometryAction={onGeometryAction} onApplyGeometryPreview={onApplyGeometryPreview} onCancelGeometryPreview={onCancelGeometryPreview} onOpenCleanup={onOpenCleanup} />}
          {activePanel === 'layers' && <LayersPanel document={doc} selectedObjectId={selectedObjectId} selectedObjectIds={selectedObjectIds} onSelectObject={onSelectObject} onSelectObjects={onSelectObjects} onToggleObject={onToggleObject} />}
          {activePanel === 'artboards' && onSelectArtboard && onCreateArtboard && onDuplicateArtboard && onDeleteArtboard && <ArtboardsPanel document={doc} onSelect={onSelectArtboard} onCreate={onCreateArtboard} onDuplicate={onDuplicateArtboard} onDelete={onDeleteArtboard} />}
-          {activePanel === 'history' && <HistoryPanel entries={history} cursor={historyCursor} onJump={onHistoryJump} />}
+           {activePanel === 'history' && <HistoryPanel entries={history} cursor={historyCursor} onJump={onHistoryJump} />}
+           {activePanel === 'cleanup' && cleanupPlan && <CleanupPanel plan={cleanupPlan} onChangeSelection={onCleanupSelectionChange ?? (() => undefined)} onApply={onApplyCleanup ?? (() => undefined)} onCancel={onCancelCleanup ?? (() => undefined)} />}
       </div>
     </aside>
   );

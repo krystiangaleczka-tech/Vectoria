@@ -10,9 +10,11 @@ import type {
   PathObject,
   Command,
   SelectionState,
+  GeometryPreview,
 } from '@vectoria/core';
 import {
   CreateObjectsCommand,
+  CreateFreehandPathCommand,
   TransformObjectsCommand,
   SetRectangleGeometryCommand,
   SetEllipseGeometryCommand,
@@ -28,8 +30,18 @@ import {
   normalizeShapeDrag,
   isValidShapeGeometry,
   updatePathNodeHandle,
+  createFreehandPath,
+  KnifePathCommand,
+  EraserPathCommand,
+  ScissorsPathCommand,
+  SetPathWidthCommand,
+  type FreehandSample,
+  erasePath,
+  splitPathByPolyline,
+  flattenPath,
+  nearestPointOnPolyline,
 } from '@vectoria/core';
-import { Camera, DragSession, SelectTool, DirectSelectTool, PenTool, snapToGrid as snapPointToGrid, type GridSettings } from '@vectoria/editor-engine';
+import { Camera, DragSession, SelectTool, DirectSelectTool, PenTool, PencilTool, BrushTool, SmoothTool, CornerTool, EraserTool, KnifeTool, ScissorsTool, WidthTool, snapToGrid as snapPointToGrid, type GridSettings } from '@vectoria/editor-engine';
 import { mat3TransformPoint } from '@vectoria/shared';
 import {
   RenderLoop,
@@ -37,8 +49,10 @@ import {
   renderBackground,
   renderScene,
   renderOverlay,
+  renderFreehandOverlay,
 } from '@vectoria/renderer';
 import type { ActiveTool } from '../toolbar/ToolRail.js';
+import type { FreehandSettings } from '../panels/ContextualControlBar.js';
 import { PerformanceHud } from './PerformanceHud.js';
 import { getObjectBounds, rectsIntersect } from '@vectoria/core';
 
@@ -58,6 +72,8 @@ export interface CanvasViewportProps {
   showGrid?: boolean;
   snapToGrid?: boolean;
   gridSettings?: GridSettings;
+  freehandSettings?: FreehandSettings;
+  geometryPreview?: GeometryPreview | null;
 }
 
 interface DragState {
@@ -93,6 +109,8 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   showGrid = true,
   snapToGrid = false,
   gridSettings = { visible: true, size: 10, subdivisions: 1 },
+  freehandSettings = { smoothing: 20, accuracy: 75, width: 4, pressure: true, cap: 'round', join: 'round', eraserRadius: 12 },
+  geometryPreview = null,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const bgCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -106,9 +124,32 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   const [isSpacePressed, setIsSpacePressed] = React.useState(false);
   const [dragPreview, setDragPreview] = React.useState<Record<string, import('@vectoria/core').Transform2D>>({});
   const [pathPreview, setPathPreview] = React.useState<Record<string, readonly import('@vectoria/core').PathNode[]>>({});
+  const [cornerPreview, setCornerPreview] = React.useState<import('@vectoria/core').GeometryPreview | null>(null);
   const penToolRef = useRef<PenTool | null>(null);
   if (!penToolRef.current) penToolRef.current = new PenTool();
   const [penVersion, setPenVersion] = React.useState(0);
+  const pencilToolRef = useRef<PencilTool | null>(null);
+  const brushToolRef = useRef<BrushTool | null>(null);
+  const eraserToolRef = useRef<EraserTool | null>(null);
+  const knifeToolRef = useRef<KnifeTool | null>(null);
+  const scissorsToolRef = useRef<ScissorsTool | null>(null);
+  const widthToolRef = useRef<WidthTool | null>(null);
+  const smoothToolRef = useRef<SmoothTool | null>(null);
+  const cornerToolRef = useRef<CornerTool | null>(null);
+  if (!pencilToolRef.current) pencilToolRef.current = new PencilTool();
+  if (!brushToolRef.current) brushToolRef.current = new BrushTool();
+  if (!eraserToolRef.current) eraserToolRef.current = new EraserTool();
+  if (!knifeToolRef.current) knifeToolRef.current = new KnifeTool();
+  if (!scissorsToolRef.current) scissorsToolRef.current = new ScissorsTool();
+  if (!widthToolRef.current) widthToolRef.current = new WidthTool();
+  if (!smoothToolRef.current) smoothToolRef.current = new SmoothTool();
+  if (!cornerToolRef.current) cornerToolRef.current = new CornerTool();
+  const freehandOperationRef = useRef<'pencil' | 'brush' | 'smooth' | 'eraser' | 'knife' | 'scissors' | 'width' | null>(null);
+  const widthStartScreenRef = useRef<Vec2 | null>(null);
+  const smoothStartScreenRef = useRef<Vec2 | null>(null);
+  const cornerStartScreenRef = useRef<Vec2 | null>(null);
+  const freehandCursorRef = useRef<Vec2 | null>(null);
+  const [freehandVersion, setFreehandVersion] = React.useState(0);
 
   // Selected IDs as Set for renderer
   const selectedIds = React.useMemo(() => new Set(selectedObjectIds), [selectedObjectIds]);
@@ -141,6 +182,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         : undefined,
       nodeSelectionIds: selection.nodeIds,
       pathPreviews: new Map(Object.entries(pathPreview) as [ObjectId, readonly import('@vectoria/core').PathNode[]][]),
+      geometryPreview: geometryPreview ?? cornerPreview ?? undefined,
       marquee: dragStateRef.current?.type === 'marquee' ? {
         start: dragStateRef.current.startWorld,
         end: dragStateRef.current.currentWorld,
@@ -248,8 +290,25 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       }
       overlayCtx.restore();
     }
+    const freehandTool = freehandOperationRef.current;
+    const samples = activeTool === 'pencil' ? pencilToolRef.current?.preview : activeTool === 'brush' ? brushToolRef.current?.preview : undefined;
+    const eraserPreview = activeTool === 'eraser' && freehandCursorRef.current && eraserToolRef.current ? { point: freehandCursorRef.current, radiusPx: eraserToolRef.current.radiusPx } : undefined;
+    const cutPreview = activeTool === 'knife' ? knifeToolRef.current?.preview.points : undefined;
+    const widthPreview = activeTool === 'width' && selectedObjectId && doc.objects[selectedObjectId]?.type === 'path'
+      ? widthToolRef.current?.preview.map((point) => ({ point: pointOnPath(doc.objects[selectedObjectId] as PathObject, point.t), width: point.width }))
+      : undefined;
+    if (freehandTool || samples?.length || eraserPreview || cutPreview?.length || widthPreview?.length) {
+      renderFreehandOverlay(overlayCtx, camera, overlayCanvas.width, overlayCanvas.height, {
+        points: samples?.map((sample) => sample.point),
+        strokeWidth: activeTool === 'brush' ? freehandSettings.width : Math.max(1, freehandSettings.width / 2),
+        cutLine: cutPreview,
+        eraserCursor: eraserPreview,
+        widthPoints: widthPreview,
+      });
+    }
     void penVersion;
-  }, [doc, camera, selectedIds, dragPreview, pathPreview, activeTool, penVersion, showGrid, gridSettings, selection]);
+    void freehandVersion;
+  }, [doc, camera, selectedIds, dragPreview, pathPreview, geometryPreview, cornerPreview, activeTool, penVersion, freehandVersion, freehandSettings, showGrid, gridSettings, selection, selectedObjectId]);
 
   // Initialize render loop
   useEffect(() => {
@@ -360,6 +419,60 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       return;
     }
 
+    if (activeTool === 'pencil' || activeTool === 'brush' || activeTool === 'eraser' || activeTool === 'knife') {
+      try { (e.target as HTMLElement).setPointerCapture(e.pointerId); } catch { /* synthetic or already-captured pointer */ }
+      freehandOperationRef.current = activeTool;
+      if (activeTool === 'pencil') pencilToolRef.current?.pointerDown({ screenPoint: screenPos, worldPoint: worldPos, pressure: freehandSettings.pressure ? e.pressure : 1, time: e.timeStamp });
+      if (activeTool === 'brush') brushToolRef.current?.pointerDown({ screenPoint: screenPos, worldPoint: worldPos, pressure: freehandSettings.pressure ? e.pressure : 1, time: e.timeStamp });
+      if (activeTool === 'eraser') { eraserToolRef.current!.radiusPx = freehandSettings.eraserRadius; eraserToolRef.current?.pointerDown(worldPos); }
+      if (activeTool === 'knife') knifeToolRef.current?.pointerDown(worldPos);
+      freehandCursorRef.current = worldPos;
+      setFreehandVersion((version) => version + 1);
+      return;
+    }
+
+    if (activeTool === 'scissors') {
+      freehandOperationRef.current = 'scissors';
+      freehandCursorRef.current = worldPos;
+      setFreehandVersion((version) => version + 1);
+      return;
+    }
+
+    if (activeTool === 'width') {
+      const selectedPath = selectedObjectId ? doc.objects[selectedObjectId] : null;
+      if (selectedPath?.type === 'path') {
+        const nearest = selectNearestPathPoint(selectedPath, worldPos);
+        if (nearest) {
+          freehandOperationRef.current = 'width';
+          widthStartScreenRef.current = screenPos;
+          widthToolRef.current?.pointerDown(selectedPath, nearest.point, nearest.t);
+          setFreehandVersion((version) => version + 1);
+        }
+      }
+      return;
+    }
+
+    if (activeTool === 'smooth') {
+      const selectedPath = selectedObjectId ? doc.objects[selectedObjectId] : null;
+      if (selectedPath?.type === 'path') {
+        freehandOperationRef.current = 'smooth';
+        smoothStartScreenRef.current = screenPos;
+        setPathPreview({ [selectedPath.id]: smoothToolRef.current!.previewPath(selectedPath, freehandSettings.smoothing).nodes });
+        setFreehandVersion((version) => version + 1);
+      }
+      return;
+    }
+
+    if (activeTool === 'corner') {
+      const selectedPath = selectedObjectId ? doc.objects[selectedObjectId] : null;
+      if (selectedPath?.type === 'path') {
+        try { (e.target as HTMLElement).setPointerCapture(e.pointerId); } catch { /* synthetic pointer */ }
+        cornerStartScreenRef.current = screenPos;
+        setCornerPreview(cornerToolRef.current?.start(doc, selectedPath.id) ?? null);
+      }
+      return;
+    }
+
     // Pen owns its draft state; pointer capture loss must not cancel completed nodes.
     if (activeTool !== 'pen') (e.target as HTMLElement).setPointerCapture(e.pointerId);
 
@@ -464,10 +577,32 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     onCursorMove(worldPos);
 
     const drag = dragStateRef.current;
+    const freehandOperation = freehandOperationRef.current;
+    if (freehandOperation && !drag) {
+      freehandCursorRef.current = worldPos;
+      if (freehandOperation === 'pencil') pencilToolRef.current?.pointerMove({ screenPoint: screenPos, worldPoint: worldPos, pressure: freehandSettings.pressure ? e.pressure : 1, time: e.timeStamp }, camera.screenToWorldDistance(2));
+      if (freehandOperation === 'brush') brushToolRef.current?.pointerMove({ screenPoint: screenPos, worldPoint: worldPos, pressure: freehandSettings.pressure ? e.pressure : 1, time: e.timeStamp }, camera.screenToWorldDistance(2));
+      if (freehandOperation === 'eraser') eraserToolRef.current?.pointerMove(worldPos);
+      if (freehandOperation === 'knife') knifeToolRef.current?.pointerMove(worldPos);
+      if (freehandOperation === 'width' && widthStartScreenRef.current) widthToolRef.current?.pointerMove(screenPos.x - widthStartScreenRef.current.x, camera.zoom);
+      if (freehandOperation === 'smooth' && smoothStartScreenRef.current && selectedObjectId) {
+        const object = doc.objects[selectedObjectId];
+        if (object?.type === 'path') {
+          const amount = Math.min(100, Math.max(0, freehandSettings.smoothing + (screenPos.x - smoothStartScreenRef.current.x) / 2));
+          setPathPreview({ [object.id]: smoothToolRef.current!.previewPath(object, amount).nodes });
+        }
+      }
+      setFreehandVersion((version) => version + 1);
+      return;
+    }
     if (!drag) {
       if (activeTool === 'pen') {
         penToolRef.current?.pointerMove({ screenPoint: screenPos, worldPoint: worldPos, shiftKey: e.shiftKey, altKey: e.altKey });
         setPenVersion((version) => version + 1);
+      }
+      if (activeTool === 'corner' && cornerStartScreenRef.current) {
+        const radius = Math.hypot(screenPos.x - cornerStartScreenRef.current.x, screenPos.y - cornerStartScreenRef.current.y) / camera.zoom;
+        setCornerPreview(cornerToolRef.current?.update(radius) ?? null);
       }
       return;
     }
@@ -531,6 +666,63 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   };
 
   const finishInteraction = (e: React.PointerEvent) => {
+    const freehandOperation = freehandOperationRef.current;
+    if (freehandOperation) {
+      const screenPoint = getPointerScreen(e);
+      const point = snapWorldPoint(camera.screenToWorld(screenPoint));
+      freehandCursorRef.current = point;
+      try { (e.target as HTMLElement).releasePointerCapture(e.pointerId); } catch { /* capture may already be released */ }
+      if (freehandOperation === 'pencil' || freehandOperation === 'brush') {
+        const tool = freehandOperation === 'pencil' ? pencilToolRef.current : brushToolRef.current;
+        const result = tool?.pointerUp({ screenPoint, worldPoint: point, pressure: freehandSettings.pressure ? e.pressure : 1, time: e.timeStamp });
+        if (result?.type === 'commit') commitFreehand(result.samples, freehandOperation === 'brush');
+      } else if (freehandOperation === 'eraser' || freehandOperation === 'knife') {
+        const tool = freehandOperation === 'eraser' ? eraserToolRef.current : knifeToolRef.current;
+        const points = tool?.takePoints() ?? [];
+        const hit = selectTool.pick({ document: doc, selection, screenPoint, worldPoint: points[0] ?? point, zoom: camera.zoom }).hit;
+        const object = hit ? doc.objects[hit.objectId] : selectedObjectId ? doc.objects[selectedObjectId] : null;
+        if (object?.type === 'path' && points.length > 1) {
+          const fragments = freehandOperation === 'eraser'
+            ? erasePath(object, points, camera.screenToWorldDistance(eraserToolRef.current!.radiusPx))
+            : splitPathByPolyline(object, points);
+          if (fragments.length > 0 || freehandOperation === 'eraser') onExecuteCommand(freehandOperation === 'eraser' ? new EraserPathCommand(object.id, fragments) : new KnifePathCommand(object.id, fragments));
+        }
+      } else if (freehandOperation === 'scissors') {
+        const hit = selectTool.pick({ document: doc, selection, screenPoint, worldPoint: point, zoom: camera.zoom }).hit;
+        const object = hit ? doc.objects[hit.objectId] : selectedObjectId ? doc.objects[selectedObjectId] : null;
+        if (object?.type === 'path') {
+          const fragments = scissorsToolRef.current!.split(object, point, camera.screenToWorldDistance(10));
+          if (fragments.length === 2) onExecuteCommand(new ScissorsPathCommand(object.id, fragments));
+        }
+      } else if (freehandOperation === 'width') {
+        const object = selectedObjectId ? doc.objects[selectedObjectId] : null;
+        const profile = widthToolRef.current?.pointerUp() ?? [];
+        if (object?.type === 'path' && profile.length > 0) onExecuteCommand(new SetPathWidthCommand(object.id, profile));
+      } else if (freehandOperation === 'smooth') {
+        const object = selectedObjectId ? doc.objects[selectedObjectId] : null;
+        const nodes = object?.type === 'path' ? pathPreview[object.id] : undefined;
+        if (object?.type === 'path' && nodes) onExecuteCommand(new SetPathGeometryCommand(object.id, { nodes }));
+        setPathPreview({});
+      }
+      eraserToolRef.current?.cancel();
+      knifeToolRef.current?.cancel();
+      widthToolRef.current?.cancel();
+      smoothStartScreenRef.current = null;
+      freehandOperationRef.current = null;
+      widthStartScreenRef.current = null;
+      freehandCursorRef.current = null;
+      setPathPreview({});
+      setFreehandVersion((version) => version + 1);
+      return;
+    }
+    if (!dragStateRef.current && activeTool === 'corner') {
+      const command = cornerToolRef.current?.apply();
+      if (command) onExecuteCommand(command);
+      cornerStartScreenRef.current = null;
+      setCornerPreview(null);
+      try { (e.target as HTMLElement).releasePointerCapture(e.pointerId); } catch { /* capture may already be released */ }
+      return;
+    }
     if (!dragStateRef.current && activeTool === 'pen') {
       const screenPoint = getPointerScreen(e);
       const result = penToolRef.current?.pointerUp({ screenPoint, worldPoint: snapWorldPoint(camera.screenToWorld(screenPoint)), shiftKey: e.shiftKey, altKey: e.altKey });
@@ -619,11 +811,29 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   };
 
   const cancelInteraction = () => {
+    if (freehandOperationRef.current) {
+      pencilToolRef.current?.cancel();
+      brushToolRef.current?.cancel();
+      eraserToolRef.current?.cancel();
+      knifeToolRef.current?.cancel();
+      widthToolRef.current?.cancel();
+      smoothStartScreenRef.current = null;
+      freehandOperationRef.current = null;
+      widthStartScreenRef.current = null;
+      freehandCursorRef.current = null;
+      setFreehandVersion((version) => version + 1);
+      return;
+    }
     const drag = dragStateRef.current;
     if (!drag) {
       if (activeTool === 'pen') {
         penToolRef.current?.cancel();
         setPenVersion((version) => version + 1);
+      }
+      if (activeTool === 'corner') {
+        cornerToolRef.current?.cancel();
+        cornerStartScreenRef.current = null;
+        setCornerPreview(null);
       }
       return;
     }
@@ -652,11 +862,43 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     setPenVersion((version) => version + 1);
   }, [doc, onExecuteCommand, onSelectObject]);
 
+  const commitFreehand = useCallback((samples: readonly FreehandSample[], brush: boolean) => {
+    const path = createFreehandPath(samples, {
+      layerId: doc.activeLayerId,
+      name: `${brush ? 'Brush' : 'Pencil'} ${Object.keys(doc.objects).length + 1}`,
+      smoothing: freehandSettings.smoothing,
+      width: freehandSettings.width,
+      samples: brush ? samples : undefined,
+      style: {
+        fill: { type: 'none' },
+        stroke: { ...defaultStroke, width: freehandSettings.width, lineCap: freehandSettings.cap, lineJoin: freehandSettings.join },
+        opacity: 1,
+      },
+    });
+    if (!path) return;
+    onExecuteCommand(new CreateFreehandPathCommand(path));
+    onSelectObject(path.id);
+  }, [doc, freehandSettings, onExecuteCommand, onSelectObject]);
+
   useEffect(() => {
+    if (activeTool !== 'corner') {
+      cornerToolRef.current?.cancel();
+      cornerStartScreenRef.current = null;
+      setCornerPreview(null);
+    }
     if (activeTool === 'pen') return;
     const result = penToolRef.current?.keyDown('Escape');
     if (result?.type === 'commit') commitPen(result.nodes, result.closed);
     else if (result?.type === 'cancel') setPenVersion((version) => version + 1);
+    pencilToolRef.current?.cancel();
+    brushToolRef.current?.cancel();
+    eraserToolRef.current?.cancel();
+    knifeToolRef.current?.cancel();
+    freehandOperationRef.current = null;
+    freehandCursorRef.current = null;
+    widthStartScreenRef.current = null;
+    setPathPreview({});
+    setFreehandVersion((version) => version + 1);
   }, [activeTool, commitPen]);
 
   // Keyboard shortcuts (Space, Delete, Escape)
@@ -751,7 +993,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         cursor:
           isSpacePressed || activeTool === 'hand'
             ? 'grab'
-             : activeTool === 'rectangle' || activeTool === 'ellipse' || activeTool === 'line' || activeTool === 'pen'
+            : activeTool === 'rectangle' || activeTool === 'ellipse' || activeTool === 'line' || activeTool === 'pen' || activeTool === 'pencil' || activeTool === 'brush' || activeTool === 'corner' || activeTool === 'eraser' || activeTool === 'knife' || activeTool === 'scissors'
              ? 'crosshair'
             : 'default',
         touchAction: 'none',
@@ -798,3 +1040,17 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     </div>
   );
 };
+
+function selectNearestPathPoint(path: PathObject, worldPoint: Vec2): { point: Vec2; t: number } | null {
+  const points = flattenPath(path);
+  const inverse = getInverseTransformMatrix(path.transform);
+  const localPoint = inverse ? mat3TransformPoint(inverse, worldPoint) : worldPoint;
+  const nearest = nearestPointOnPolyline(localPoint, points);
+  return nearest ? { point: nearest.point, t: nearest.index / Math.max(1, points.length - 2) } : null;
+}
+
+function pointOnPath(path: PathObject, t: number): Vec2 {
+  const points = flattenPath(path);
+  const point = points[Math.round(Math.min(1, Math.max(0, t)) * Math.max(0, points.length - 1))] ?? points[0] ?? { x: 0, y: 0 };
+  return mat3TransformPoint(getTransformMatrix(path.transform), point);
+}

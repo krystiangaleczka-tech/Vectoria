@@ -22,6 +22,12 @@ export type VectoriaIconName =
   | 'plus'
   | 'trash'
   | 'directSelect'
+  | 'corner'
+  | 'pencil'
+  | 'brush'
+  | 'eraser'
+  | 'scissors'
+  | 'width'
   | 'text'
   | 'layers'
   | 'history'
@@ -225,6 +231,56 @@ export const VectoriaIcon: React.FC<VectoriaIconProps> = ({
         <svg {...iconProps}>
           <path d="M5 3l5.5 14 2-5.5L18 9.5 5 3z" />
           <path d="M12.5 12.5L17 19" />
+        </svg>
+      );
+
+    case 'corner':
+      return (
+        <svg {...iconProps}>
+          <path d="M5 19V7a2 2 0 0 1 2-2h12" />
+          <path d="M5 19h12a2 2 0 0 0 2-2v-4" />
+          <circle cx="7" cy="7" r="2" />
+          <path d="M13 5c0 4 3 7 7 7" />
+        </svg>
+      );
+
+    case 'pencil':
+      return (
+        <svg {...iconProps}>
+          <path d="m4 20 3.5-.8L19 7.7 16.3 5 4.8 16.5 4 20z" />
+          <path d="m14.8 6.5 2.7 2.7M7.5 19.2 4.8 16.5" />
+        </svg>
+      );
+
+    case 'brush':
+      return (
+        <svg {...iconProps}>
+          <path d="m14 4 6 6-8.5 8.5a4.2 4.2 0 0 1-6 0l-.5-.5L14 4z" />
+          <path d="M5 18c-2 1-2.5 3-2 4 2 .5 4-.1 5-2" />
+        </svg>
+      );
+
+    case 'eraser':
+      return (
+        <svg {...iconProps}>
+          <path d="m6 19-3-3a2 2 0 0 1 0-2.8L13.2 3a2 2 0 0 1 2.8 0l5 5a2 2 0 0 1 0 2.8L12 19H6z" />
+          <path d="m11 5 8 8M5 19h16" />
+        </svg>
+      );
+
+    case 'scissors':
+      return (
+        <svg {...iconProps}>
+          <circle cx="6" cy="7" r="2.5" /><circle cx="6" cy="17" r="2.5" />
+          <path d="m8 8.5 13 9M8 15.5 21 6" />
+        </svg>
+      );
+
+    case 'width':
+      return (
+        <svg {...iconProps}>
+          <path d="M4 18c4-8 12-8 16 0M4 6c4 8 12 8 16 0" />
+          <path d="M12 3v18M9 6l3-3 3 3M9 18l3 3 3-3" />
         </svg>
       );
 

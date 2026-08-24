@@ -8,3 +8,19 @@ export { PenTool, type PenToolState, type PenToolPointerEvent, type PenToolResul
 export { SceneHitTester } from './hit-testing/scene-hit-tester.js';
 export { DEFAULT_GRID_SETTINGS, gridLines, normalizeGridSettings, snapToGrid, type GridSettings } from './grid.js';
 export { DEFAULT_SNAP_SETTINGS, SnapService, type Guide, type SnapCandidate, type SnapResult, type SnapSettings, type SnapSource } from './snapping.js';
+export {
+  PencilTool,
+  BrushTool,
+  SmoothTool,
+  EraserTool,
+  KnifeTool,
+  ScissorsTool,
+  WidthTool,
+  type FreehandPointerEvent,
+  type FreehandResult,
+  type FreehandToolState,
+  type PathOperationPreview,
+  type CutPreview,
+} from './tools/freehand-tools.js';
+export { GeometryOperationSession, type GeometrySessionOperation } from './operations/geometry-operation-session.js';
+export { CornerTool, type CornerToolPreview } from './tools/corner-tool.js';

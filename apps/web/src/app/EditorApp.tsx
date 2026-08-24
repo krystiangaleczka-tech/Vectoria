@@ -8,6 +8,8 @@ import type {
   ObjectStyle,
   SceneObject,
   SelectionState,
+  GeometryPreview,
+  CleanupPlan,
 } from '@vectoria/core';
 import {
   CommandHistory,
@@ -40,10 +42,15 @@ import {
   ConnectPathNodeHandlesCommand,
   DisconnectPathNodeHandlesCommand,
   ConvertStrokeToPathCommand,
+  ClosePathCommand,
+  ReversePathDirectionCommand,
+  scanCleanup,
+  SmoothPathCommand,
+  SimplifyPathCommand,
   createDefaultDocument,
   getObjectBounds,
 } from '@vectoria/core';
-import { Camera, emptySelection, selectionService } from '@vectoria/editor-engine';
+import { Camera, emptySelection, selectionService, GeometryOperationSession } from '@vectoria/editor-engine';
 import {
   bootstrapDocument,
   saveDocumentSnapshot,
@@ -58,12 +65,14 @@ import {
 import { TopBar } from '../features/topbar/TopBar.js';
 import { ToolRail, type ActiveTool } from '../features/toolbar/ToolRail.js';
 import { CanvasViewport } from '../features/canvas/CanvasViewport.js';
-import { ContextualControlBar } from '../features/panels/ContextualControlBar.js';
+import { ContextualControlBar, type FreehandSettings } from '../features/panels/ContextualControlBar.js';
 import { RightDock } from '../features/panels/RightDock.js';
 import { StatusBar } from '../features/statusbar/StatusBar.js';
 import { NewDocumentDialog } from '../features/dialogs/NewDocumentDialog.js';
 import type { DockPanel } from '../features/panels/RightDock.js';
 import type { PathAction } from '../features/panels/PropertiesPanel.js';
+import type { GeometryAction } from '../features/properties/GeometryProperties.js';
+import { Button } from '@vectoria/ui';
 
 function isMacPlatform(): boolean {
   const platform = (navigator as { userAgentData?: { platform?: string } }).userAgentData?.platform
@@ -97,6 +106,10 @@ export const EditorApp: React.FC = () => {
   const [zoomPercent, setZoomPercent] = useState(100);
   const [newDocumentOpen, setNewDocumentOpen] = useState(false);
   const [theme, setTheme] = useState<'dark' | 'light'>(() => localStorage.getItem('vectoria-theme') === 'light' ? 'light' : 'dark');
+  const [freehandSettings, setFreehandSettings] = useState<FreehandSettings>({ smoothing: 20, accuracy: 75, width: 4, pressure: true, cap: 'round', join: 'round', eraserRadius: 12 });
+  const [geometryPreview, setGeometryPreview] = useState<GeometryPreview | null>(null);
+  const [cleanupSelectedFindingIds, setCleanupSelectedFindingIds] = useState<readonly string[]>([]);
+  const [destructiveGeometryConfirmOpen, setDestructiveGeometryConfirmOpen] = useState(false);
 
   const history = useMemo(() => new CommandHistory(), []);
   const camera = useMemo(() => new Camera(), []);
@@ -108,6 +121,8 @@ export const EditorApp: React.FC = () => {
   const saveQueueRef = useRef<{ pending: { document: DocumentModel; revision: number } | null; inFlight: boolean }>({ pending: null, inFlight: false });
   const processSaveQueueRef = useRef<() => Promise<void>>(() => Promise.resolve());
   const clipboardRef = useRef<SceneObject[]>([]);
+  const geometrySessionRef = useRef<GeometryOperationSession | null>(null);
+  const geometryConfirmDialogRef = useRef<HTMLElement | null>(null);
 
   const handleSelectObject = useCallback((id: ObjectId | null, additive = false) => {
     setSelection((current) => selectionService.selectObject(current, id, additive));
@@ -273,6 +288,19 @@ export const EditorApp: React.FC = () => {
     setActiveDockPanel(panel);
     setRightDockOpen(true);
   }, []);
+
+  const cleanupPlan = useMemo<CleanupPlan>(() => {
+    if (!doc) return { findings: [], selectedFindingIds: [] };
+    const scanned = scanCleanup(doc);
+    return { ...scanned, selectedFindingIds: scanned.findings.filter((finding) => cleanupSelectedFindingIds.includes(finding.id)).map((finding) => finding.id) };
+  }, [cleanupSelectedFindingIds, doc]);
+
+  const handleOpenCleanup = useCallback(() => {
+    if (!doc) return;
+    const scanned = scanCleanup(doc);
+    setCleanupSelectedFindingIds(scanned.findings.map((finding) => finding.id));
+    handleShowPanel('cleanup');
+  }, [doc, handleShowPanel]);
 
   // Fit Artboard & 100% Zoom
   const handleFitArtboard = useCallback(() => {
@@ -461,6 +489,12 @@ export const EditorApp: React.FC = () => {
       case 'stroke-to-path':
         handleExecuteCommand(new ConvertStrokeToPathCommand(action.objectId));
         break;
+      case 'smooth':
+        if (doc) handleExecuteCommand(new SmoothPathCommand(action.objectId, action.amount, doc));
+        break;
+      case 'simplify':
+        if (doc) handleExecuteCommand(new SimplifyPathCommand(action.objectId, action.accuracy, doc));
+        break;
       case 'reverse':
         handleExecuteCommand(new ReversePathCommand(action.objectId));
         break;
@@ -494,6 +528,83 @@ export const EditorApp: React.FC = () => {
         break;
     }
   }, [doc, handleExecuteCommand]);
+
+  const handleGeometryAction = useCallback((action: GeometryAction) => {
+    if (!doc) return;
+    if (action.type === 'close') {
+      handleExecuteCommand(new ClosePathCommand(action.objectId));
+      return;
+    }
+    if (action.type === 'reverse') {
+      handleExecuteCommand(new ReversePathDirectionCommand(action.objectId));
+      return;
+    }
+    const session = new GeometryOperationSession(doc, action.type === 'expand' ? action.objectIds : [action.objectId]);
+    const preview = action.type === 'expand'
+      ? session.previewExpand()
+      : action.type === 'corners'
+        ? session.previewCorners(action.objectId, { mode: action.mode, radius: action.radius })
+        : action.type === 'offset'
+          ? session.previewOffset(action.objectId, { direction: action.direction, distance: action.distance })
+          : session.previewOutline(action.objectId);
+    geometrySessionRef.current = session;
+    setGeometryPreview(preview);
+    if (action.type === 'expand') setDestructiveGeometryConfirmOpen(true);
+  }, [doc, handleExecuteCommand]);
+
+  const handleApplyGeometryPreview = useCallback((allowDestructive = false) => {
+    if (destructiveGeometryConfirmOpen && !allowDestructive) return;
+    const command = geometrySessionRef.current?.apply();
+    if (command) handleExecuteCommand(command);
+    setGeometryPreview(null);
+    setDestructiveGeometryConfirmOpen(false);
+  }, [destructiveGeometryConfirmOpen, handleExecuteCommand]);
+
+  const handleCancelGeometryPreview = useCallback(() => {
+    geometrySessionRef.current?.cancel();
+    setGeometryPreview(null);
+    setDestructiveGeometryConfirmOpen(false);
+  }, []);
+
+  useEffect(() => {
+    if (!destructiveGeometryConfirmOpen) return;
+    const handleDialogKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        handleCancelGeometryPreview();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const buttons = geometryConfirmDialogRef.current?.querySelectorAll<HTMLButtonElement>('button');
+      if (!buttons || buttons.length === 0) return;
+      const first = buttons[0]!;
+      const last = buttons[buttons.length - 1]!;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    window.addEventListener('keydown', handleDialogKeyDown);
+    return () => window.removeEventListener('keydown', handleDialogKeyDown);
+  }, [destructiveGeometryConfirmOpen, handleCancelGeometryPreview]);
+
+  const handleApplyCleanup = useCallback(() => {
+    if (!doc || cleanupPlan.selectedFindingIds.length === 0) return;
+    const selectedIds = cleanupPlan.findings.filter((finding) => cleanupPlan.selectedFindingIds.includes(finding.id)).flatMap((finding) => finding.targetIds);
+    const session = new GeometryOperationSession(doc, selectedIds);
+    session.previewCleanup(cleanupPlan);
+    const command = session.apply();
+    if (command) handleExecuteCommand(command);
+    setCleanupSelectedFindingIds([]);
+  }, [cleanupPlan, doc, handleExecuteCommand]);
+
+  const handleCancelCleanup = useCallback(() => {
+    setCleanupSelectedFindingIds([]);
+    handleShowPanel('properties');
+  }, [handleShowPanel]);
 
   const handleSelectArtboard = useCallback((id: string) => {
     handleExecuteCommand(new SelectArtboardCommand(id));
@@ -569,6 +680,8 @@ export const EditorApp: React.FC = () => {
       } else if (cmdKey && e.key === '1') {
         e.preventDefault();
         handleFitArtboard();
+        } else if (!cmdKey && e.shiftKey && !e.altKey && e.key.toLowerCase() === 'e') {
+          setActiveTool('eraser');
         } else if (!cmdKey && !e.shiftKey && !e.altKey) {
            if (e.key.toLowerCase() === 'v') {
              setActiveTool('select');
@@ -580,9 +693,23 @@ export const EditorApp: React.FC = () => {
               setActiveTool('ellipse');
             } else if (e.key === '\\') {
               setActiveTool('line');
-           } else if (e.key.toLowerCase() === 'p') {
-             setActiveTool('pen');
-          } else if (e.key.toLowerCase() === 'h') {
+          } else if (e.key.toLowerCase() === 'p') {
+              setActiveTool('pen');
+           } else if (e.key.toLowerCase() === 'n') {
+             setActiveTool('pencil');
+           } else if (e.key.toLowerCase() === 'b') {
+             setActiveTool('brush');
+            } else if (e.key.toLowerCase() === 's') {
+              setActiveTool('smooth');
+            } else if (e.key.toLowerCase() === 'q') {
+              setActiveTool('corner');
+            } else if (e.key.toLowerCase() === 'k') {
+             setActiveTool('knife');
+           } else if (e.key.toLowerCase() === 'c') {
+             setActiveTool('scissors');
+           } else if (e.key.toLowerCase() === 'w') {
+             setActiveTool('width');
+           } else if (e.key.toLowerCase() === 'h') {
             setActiveTool('hand');
           } else if (e.key.toLowerCase() === 'z') {
             setActiveTool('zoom');
@@ -651,7 +778,23 @@ export const EditorApp: React.FC = () => {
       ? 'Drag to draw line · Hold Shift for 45°'
        : activeTool === 'pen'
        ? 'Click to add nodes · Enter/Escape to finish'
-      : activeTool === 'zoom'
+       : activeTool === 'pencil'
+       ? 'Drag to draw a freehand path · Escape cancels'
+       : activeTool === 'brush'
+       ? 'Drag to paint a pressure-sensitive stroke · Escape cancels'
+        : activeTool === 'smooth'
+        ? 'Select a path, then apply Smooth in Properties'
+        : activeTool === 'corner'
+        ? 'Select a closed path, then drag to round, chamfer or invert corners'
+        : activeTool === 'eraser'
+       ? 'Drag across a path to erase · Escape cancels'
+       : activeTool === 'knife'
+       ? 'Drag a cut line across a path'
+       : activeTool === 'scissors'
+       ? 'Click a path segment to split it'
+       : activeTool === 'width'
+       ? 'Select a brush path to edit local width'
+       : activeTool === 'zoom'
       ? 'Click to zoom in · Wheel to zoom at cursor'
       : 'Drag to pan view';
 
@@ -691,8 +834,11 @@ export const EditorApp: React.FC = () => {
            theme={theme}
            onToggleTheme={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')}
            onRetrySave={handleRetrySave}
-           onShowPanel={handleShowPanel}
-       />
+         onShowPanel={handleShowPanel}
+         selectedObjectIds={selectedObjectIds}
+         onConvertToCurves={(objectIds) => handleGeometryAction({ type: 'expand', objectIds })}
+         onOpenCleanup={handleOpenCleanup}
+        />
 
       {bootstrapState.status === 'recovery-error' && (
         <RecoveryBanner 
@@ -707,8 +853,10 @@ export const EditorApp: React.FC = () => {
         selectedObjectId={selectedObjectId}
         onUpdatePosition={handleUpdatePosition}
          onUpdateDimensions={handleUpdateDimensions}
-         onUpdateLineEndpoint={handleUpdateLineEndpoint}
-         onUpdateFill={handleUpdateFill}
+          onUpdateLineEndpoint={handleUpdateLineEndpoint}
+          onUpdateFill={handleUpdateFill}
+          freehandSettings={freehandSettings}
+          onFreehandSettingsChange={setFreehandSettings}
       />
 
       {/* Main Workspace Area */}
@@ -736,8 +884,10 @@ export const EditorApp: React.FC = () => {
             onZoomChange={setZoomPercent}
              showGrid={doc.grid.visible}
             snapToGrid={doc.snap.enabled}
-            gridSettings={doc.grid}
-         />
+             gridSettings={doc.grid}
+             freehandSettings={freehandSettings}
+             geometryPreview={geometryPreview}
+           />
         </div>
 
         <RightDock
@@ -756,12 +906,12 @@ export const EditorApp: React.FC = () => {
            onUpdateLineEndpoint={handleUpdateLineEndpoint}
            onUpdateCornerRadius={handleUpdateCornerRadius}
             onUpdateFill={handleUpdateFill}
-           onUpdateObjectStyle={handleUpdateObjectStyle}
+            onUpdateObjectStyle={handleUpdateObjectStyle}
            onUpdateRotation={handleUpdateRotation}
             onUpdateArtboard={handleUpdateArtboard}
             onUpdateUnit={handleUpdateUnit}
              gridSettings={doc.grid}
-             onUpdateGridSettings={handleUpdateGridSettings}
+              onUpdateGridSettings={handleUpdateGridSettings}
             onToggleObject={handleToggleObject}
             onSelectArtboard={handleSelectArtboard}
             onCreateArtboard={handleCreateArtboard}
@@ -772,14 +922,23 @@ export const EditorApp: React.FC = () => {
              onUpdatePathNodeKind={handleUpdatePathNodeKind}
               onUpdatePathClosed={handleUpdatePathClosed}
               onPathAction={handlePathAction}
-              open={rightDockOpen}
-        />
+              geometryPreview={geometryPreview}
+              onGeometryAction={handleGeometryAction}
+              onApplyGeometryPreview={() => handleApplyGeometryPreview()}
+              onCancelGeometryPreview={handleCancelGeometryPreview}
+              onOpenCleanup={handleOpenCleanup}
+              cleanupPlan={cleanupPlan}
+              onCleanupSelectionChange={setCleanupSelectedFindingIds}
+              onApplyCleanup={handleApplyCleanup}
+              onCancelCleanup={handleCancelCleanup}
+               open={rightDockOpen}
+         />
       </div>
 
       {/* Status Bar */}
       <StatusBar
         toolHint={toolHint}
-         activeTool={activeTool === 'select' ? 'Select' : activeTool === 'direct-select' ? 'Direct Select' : activeTool === 'rectangle' ? 'Rectangle' : activeTool === 'ellipse' ? 'Ellipse' : activeTool === 'line' ? 'Line' : activeTool === 'pen' ? 'Pen' : activeTool === 'hand' ? 'Hand' : 'Zoom'}
+         activeTool={activeTool === 'select' ? 'Select' : activeTool === 'direct-select' ? 'Direct Select' : activeTool === 'rectangle' ? 'Rectangle' : activeTool === 'ellipse' ? 'Ellipse' : activeTool === 'line' ? 'Line' : activeTool === 'pen' ? 'Pen' : activeTool === 'pencil' ? 'Pencil' : activeTool === 'brush' ? 'Brush' : activeTool === 'smooth' ? 'Smooth' : activeTool === 'corner' ? 'Corner' : activeTool === 'eraser' ? 'Eraser' : activeTool === 'knife' ? 'Knife' : activeTool === 'scissors' ? 'Scissors' : activeTool === 'width' ? 'Width' : activeTool === 'hand' ? 'Hand' : 'Zoom'}
         selectedObjectName={selectedObjectId ? doc.objects[selectedObjectId]?.name ?? null : null}
         selectedObjectCount={selectedObjectIds.length}
         cursorWorld={cursorWorld}
@@ -791,7 +950,8 @@ export const EditorApp: React.FC = () => {
          unit={doc.unit}
          snapEnabled={doc.snap.enabled}
        />
-      {newDocumentOpen && <NewDocumentDialog onClose={() => setNewDocumentOpen(false)} onCreate={handleCreateDocument} />}
+       {newDocumentOpen && <NewDocumentDialog onClose={() => setNewDocumentOpen(false)} onCreate={handleCreateDocument} />}
+       {destructiveGeometryConfirmOpen && geometryPreview && <div className="dialog-backdrop" role="presentation"><section ref={geometryConfirmDialogRef} className="geometry-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="geometry-confirm-title"><div className="dialog-eyebrow">Destructive geometry edit</div><h2 id="geometry-confirm-title">Convert to curves?</h2><p className="dialog-description">Selected parametric objects will become paths. Visual geometry, style and transform stay unchanged, but shape parameters will no longer be editable.</p><div className="geometry-confirm-summary" role="status">{geometryPreview.proposed.length} object(s) ready. Undo remains available.</div><div className="dialog-actions"><Button size="sm" variant="ghost" onClick={handleCancelGeometryPreview}>Cancel</Button><Button size="sm" variant="danger" autoFocus onClick={() => handleApplyGeometryPreview(true)}>Convert to curves</Button></div></section></div>}
     </div>
   );
 };

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Button, IconButton, VectoriaIcon } from '@vectoria/ui';
 import type { DockPanel } from '../panels/RightDock.js';
+import type { ObjectId } from '@vectoria/core';
 
 interface AppMenuBarProps {
   saveStatus: 'idle' | 'dirty' | 'saving' | 'saved-locally' | 'error' | 'offline';
@@ -26,6 +27,9 @@ interface AppMenuBarProps {
   onToggleTheme: () => void;
   onRetrySave: () => void;
   onShowPanel: (panel: DockPanel) => void;
+  selectedObjectIds: readonly ObjectId[];
+  onConvertToCurves: (objectIds: readonly ObjectId[]) => void;
+  onOpenCleanup: () => void;
 }
 
 type MenuName = 'Plik' | 'Edycja' | 'Obiekt' | 'Tekst' | 'Widok' | 'Okno' | 'Pomoc';
@@ -54,6 +58,9 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
   onToggleTheme,
   onRetrySave,
   onShowPanel,
+  selectedObjectIds,
+  onConvertToCurves,
+  onOpenCleanup,
 }) => {
   const [openMenu, setOpenMenu] = useState<MenuName | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -103,6 +110,12 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
         <MenuItem label={`${showGrid ? 'Ukryj' : 'Pokaż'} siatkę`} onClick={() => run(onToggleGrid)} />
         <MenuItem label={`${snapToGrid ? 'Wyłącz' : 'Włącz'} snap do siatki`} onClick={() => run(onToggleSnap)} />
         <MenuItem label={`Motyw: ${theme === 'dark' ? 'jasny' : 'ciemny'}`} onClick={() => run(onToggleTheme)} />
+      </>;
+    }
+    if (menu === 'Obiekt') {
+      return <>
+        <MenuItem label="Convert to curves" disabled={selectedObjectIds.length === 0} onClick={() => run(() => onConvertToCurves(selectedObjectIds))} />
+        <MenuItem label="Clean Up document" onClick={() => run(onOpenCleanup)} />
       </>;
     }
     if (menu === 'Okno') {

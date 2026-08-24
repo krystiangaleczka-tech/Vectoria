@@ -46,3 +46,27 @@ export {
   UpdateLayerCommand,
   UpdateObjectCommand,
 } from './document-commands.js';
+export {
+  ConvertToCurvesCommand,
+  CornerPathCommand,
+  OffsetPathCommand,
+  OutlineStrokeCommand,
+  ClosePathCommand,
+  ReversePathDirectionCommand,
+  JoinPathsCommand,
+  CleanUpCommand,
+} from './geometry-commands.js';
+export {
+  CreateFreehandPathCommand,
+  UpdatePathOperationCommand,
+  UpdatePathCommand,
+  SmoothPathCommand,
+  SimplifyPathCommand,
+  SetPathWidthCommand,
+  ReplacePathWithFragmentsCommand,
+  KnifePathCommand,
+  EraserPathCommand,
+  ScissorsPathCommand,
+  CutPathCommand,
+  createFreehandPath,
+} from './freehand-commands.js';

@@ -1,7 +1,7 @@
 import type { Camera } from '@vectoria/editor-engine';
 import type { Vec2 } from '@vectoria/shared';
-import type { DocumentModel, Artboard, RectangleObject, EllipseObject, LineObject, PathObject, ObjectId, Transform2D, LinearGradientFill } from '@vectoria/core';
-import { getTransformMatrix, getObjectBounds, rectsIntersect, normalizeCornerRadii } from '@vectoria/core';
+import type { DocumentModel, Artboard, RectangleObject, EllipseObject, LineObject, PathObject, ObjectId, Transform2D, LinearGradientFill, GeometryPreview, SceneObject } from '@vectoria/core';
+import { getTransformMatrix, getObjectBounds, rectsIntersect, normalizeCornerRadii, flattenPath, widthAtT } from '@vectoria/core';
 import { mat3TransformPoint } from '@vectoria/shared';
 export interface GridSettings { visible: boolean; size: number; subdivisions: number }
 
@@ -254,8 +254,8 @@ export function renderScene(
         case 'line':
           renderLine(ctx, obj as LineObject);
           break;
-        case 'path':
-          renderPath(ctx, obj as PathObject);
+         case 'path':
+           renderPath(ctx, obj as PathObject);
           break;
       }
     }
@@ -457,10 +457,27 @@ function renderPath(
       ctx.setLineDash([...obj.style.stroke.dashArray]);
     }
     ctx.globalAlpha = obj.style.opacity * obj.style.stroke.opacity;
-    ctx.stroke();
+    if (obj.widthProfile && obj.widthProfile.length > 1 && !obj.closed) renderVariableWidthStroke(ctx, obj);
+    else ctx.stroke();
   }
 
   ctx.restore();
+}
+
+function renderVariableWidthStroke(ctx: CanvasRenderingContext2D, obj: PathObject): void {
+  const points = flattenPath(obj);
+  if (points.length < 2 || !obj.style.stroke) return;
+  const profile = obj.widthProfile ?? [];
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const t = index / Math.max(1, points.length - 2);
+    const start = points[index]!;
+    const end = points[index + 1]!;
+    ctx.lineWidth = widthAtT(profile, t);
+    ctx.beginPath();
+    ctx.moveTo(start.x, start.y);
+    ctx.lineTo(end.x, end.y);
+    ctx.stroke();
+  }
 }
 
 function roundRect(
@@ -497,6 +514,7 @@ export function renderOverlay(
     pathPreviews?: ReadonlyMap<ObjectId, PathObject['nodes']>;
     nodeSelectionIds?: readonly string[];
     marquee?: { start: Vec2; end: Vec2 };
+    geometryPreview?: GeometryPreview;
   },
 ): void {
   const dpr = window.devicePixelRatio || 1;
@@ -517,6 +535,10 @@ export function renderOverlay(
     ctx.fillRect(x, y, Math.abs(end.x - start.x), Math.abs(end.y - start.y));
     ctx.strokeRect(x + 0.5, y + 0.5, Math.abs(end.x - start.x), Math.abs(end.y - start.y));
     ctx.setLineDash([]);
+  }
+
+  if (options?.geometryPreview) {
+    renderGeometryPreview(ctx, camera, options.geometryPreview);
   }
 
   if (selectedIds.size === 0) {
@@ -574,6 +596,109 @@ export function renderOverlay(
   }
 
   ctx.restore();
+}
+
+function renderGeometryPreview(ctx: CanvasRenderingContext2D, camera: Camera, preview: GeometryPreview): void {
+  const accent = themeColor('--color-accent', '#5caeff');
+  const warning = themeColor('--color-warning', '#f0bd58');
+  ctx.save();
+  ctx.setLineDash([6, 4]);
+  ctx.strokeStyle = preview.warnings.length > 0 ? warning : accent;
+  ctx.lineWidth = 1.5;
+  for (const object of preview.proposed) {
+    renderPreviewObject(ctx, camera, object);
+    const bound = getObjectBounds(object);
+    const topLeft = camera.worldToScreen({ x: bound.x, y: bound.y });
+    const bottomRight = camera.worldToScreen({ x: bound.x + bound.width, y: bound.y + bound.height });
+    ctx.fillStyle = themeColor('--color-accent-subtle', 'rgba(92, 174, 255, .16)');
+    ctx.fillRect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
+    ctx.strokeRect(topLeft.x + 0.5, topLeft.y + 0.5, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
+  }
+  ctx.setLineDash([]);
+  const bounds = preview.proposed.map(getObjectBounds);
+  if (bounds.length > 0) {
+    const minX = Math.min(...bounds.map((bound) => bound.x));
+    const minY = Math.min(...bounds.map((bound) => bound.y));
+    const label = camera.worldToScreen({ x: minX, y: minY - 8 / camera.zoom });
+    ctx.setTransform(window.devicePixelRatio || 1, 0, 0, window.devicePixelRatio || 1, 0, 0);
+    ctx.fillStyle = preview.warnings.length > 0 ? warning : accent;
+    ctx.font = '10px var(--font-mono)';
+    ctx.fillText(`${preview.operation} preview`, label.x, label.y);
+  }
+  ctx.restore();
+}
+
+function renderPreviewObject(ctx: CanvasRenderingContext2D, camera: Camera, object: SceneObject): void {
+  switch (object.type) {
+    case 'rectangle':
+      renderRectangleSelectionOutline(ctx, camera, object);
+      break;
+    case 'ellipse':
+      renderEllipseSelectionOutline(ctx, camera, object);
+      break;
+    case 'line':
+      renderLineSelectionOutline(ctx, camera, object);
+      break;
+    case 'path':
+      renderPathSelectionOutline(ctx, camera, object);
+      break;
+  }
+}
+
+export interface FreehandOverlayOptions {
+  readonly points?: readonly Vec2[];
+  readonly strokeWidth?: number;
+  readonly cutLine?: readonly Vec2[];
+  readonly eraserCursor?: { point: Vec2; radiusPx: number };
+  readonly widthPoints?: readonly { point: Vec2; width: number }[];
+}
+
+/** Draw transient drawing and destructive-tool feedback without touching scene canvas. */
+export function renderFreehandOverlay(ctx: CanvasRenderingContext2D, camera: Camera, canvasWidth: number, canvasHeight: number, options: FreehandOverlayOptions): void {
+  const dpr = window.devicePixelRatio || 1;
+  ctx.save();
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  const drawWorldPolyline = (points: readonly Vec2[], color: string, width: number, dash: readonly number[] = []): void => {
+    if (points.length < 2) return;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.setLineDash([...dash]);
+    ctx.beginPath();
+    points.forEach((point, index) => {
+      const screen = camera.worldToScreen(point);
+      if (index === 0) ctx.moveTo(screen.x, screen.y);
+      else ctx.lineTo(screen.x, screen.y);
+    });
+    ctx.stroke();
+    ctx.setLineDash([]);
+  };
+  if (options.points && options.points.length > 0) drawWorldPolyline(options.points, themeColor('--color-accent', '#5caeff'), Math.max(1.5, (options.strokeWidth ?? 1) * camera.zoom), []);
+  if (options.cutLine && options.cutLine.length > 1) drawWorldPolyline(options.cutLine, themeColor('--color-danger', '#f06a6a'), 1.5, [6, 4]);
+  if (options.eraserCursor) {
+    const center = camera.worldToScreen(options.eraserCursor.point);
+    ctx.strokeStyle = themeColor('--color-danger', '#f06a6a');
+    ctx.fillStyle = themeColor('--color-danger-subtle', 'rgba(240, 106, 106, .16)');
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(center.x, center.y, options.eraserCursor.radiusPx, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+  for (const marker of options.widthPoints ?? []) {
+    const center = camera.worldToScreen(marker.point);
+    ctx.fillStyle = themeColor('--color-accent', '#5caeff');
+    ctx.strokeStyle = themeColor('--color-node', '#ffffff');
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(center.x, center.y, 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+  ctx.restore();
+  void canvasWidth;
+  void canvasHeight;
 }
 
 function renderRectangleSelectionOutline(

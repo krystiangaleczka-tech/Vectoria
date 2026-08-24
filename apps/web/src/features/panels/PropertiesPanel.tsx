@@ -1,5 +1,5 @@
 import React from 'react';
-import type { DocumentModel, ObjectId, ObjectStyle, SceneObject, CornerRadii, PathNode, SelectionState } from '@vectoria/core';
+import type { DocumentModel, ObjectId, ObjectStyle, SceneObject, CornerRadii, PathNode, SelectionState, GeometryPreview } from '@vectoria/core';
 import { normalizeCornerRadii } from '@vectoria/core';
 import type { Vec2 } from '@vectoria/shared';
 import { defaultStroke } from '@vectoria/core';
@@ -7,9 +7,12 @@ import { NumberInput, ColorControl, Button } from '@vectoria/ui';
 import { convertUnit } from '@vectoria/shared';
 import type { DocumentUnit } from '@vectoria/core';
 import type { GridSettings } from '@vectoria/editor-engine';
+import { GeometryProperties, type GeometryAction } from '../properties/GeometryProperties.js';
 
 export type PathAction =
-  | { type: 'stroke-to-path'; objectId: ObjectId }
+   | { type: 'stroke-to-path'; objectId: ObjectId }
+   | { type: 'smooth'; objectId: ObjectId; amount: number }
+   | { type: 'simplify'; objectId: ObjectId; accuracy: number }
   | { type: 'reverse'; objectId: ObjectId }
   | { type: 'add-node'; objectId: ObjectId; segmentIndex: number }
   | { type: 'remove-node'; objectId: ObjectId; nodeIndex: number }
@@ -40,6 +43,11 @@ export interface PropertiesPanelProps {
   onUpdatePathNodeKind?: (id: ObjectId, index: number, kind: PathNode['kind']) => void;
   onUpdatePathClosed?: (id: ObjectId, closed: boolean) => void;
   onPathAction?: (action: PathAction) => void;
+  geometryPreview?: GeometryPreview | null;
+  onGeometryAction?: (action: GeometryAction) => void;
+  onApplyGeometryPreview?: () => void;
+  onCancelGeometryPreview?: () => void;
+  onOpenCleanup?: () => void;
 }
 
 const dimensions = (object: SceneObject): { width: number; height: number } | null =>
@@ -65,6 +73,11 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   onUpdatePathNodeKind,
   onUpdatePathClosed,
   onPathAction,
+  geometryPreview,
+  onGeometryAction,
+  onApplyGeometryPreview,
+  onCancelGeometryPreview,
+  onOpenCleanup,
 }) => {
   const selected = selectedObjectId ? doc.objects[selectedObjectId] : null;
   const artboard = doc.artboards[doc.activeArtboardId];
@@ -85,6 +98,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       <div className="dock-panel-content">
         {selected ? <>
            {selected.locked && <div className="property-lock-message" role="status">Object is locked. Unlock it in Layers to edit.</div>}
+           <GeometryProperties document={doc} selectedObjectId={selectedObjectId} selectedObjectIds={selectedObjectIds} preview={geometryPreview ?? null} onAction={onGeometryAction ?? (() => undefined)} onApplyPreview={onApplyGeometryPreview ?? (() => undefined)} onCancelPreview={onCancelGeometryPreview ?? (() => undefined)} onOpenCleanup={onOpenCleanup ?? (() => undefined)} />
            <section className="property-section">
             <div className="panel-section-heading"><span>Transformacja</span></div>
             <div className="property-grid">
@@ -111,7 +125,14 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               <NumberInput data-testid="prop-rotation" label="Rot" disabled={selected.locked} value={selected.transform.rotation * 180 / Math.PI} decimals={1} unit="°" onChange={(value) => onUpdateRotation?.(selected.id, value)} />
             </div>
            </section>
-           {selected.type === 'path' && selectedPathNode && <section className="property-section" aria-label="Path node properties">
+            {selected.type === 'path' && <section className="property-section" aria-label="Path operations">
+              <div className="panel-section-heading"><span>Drawing</span><span className="panel-count">{selected.nodes.length} nodes</span></div>
+              <div className="property-actions path-actions">
+                <Button size="sm" variant="ghost" disabled={selected.locked} onClick={() => onPathAction?.({ type: 'smooth', objectId: selected.id, amount: 50 })}>Smooth</Button>
+                <Button size="sm" variant="ghost" disabled={selected.locked} onClick={() => onPathAction?.({ type: 'simplify', objectId: selected.id, accuracy: 75 })}>Simplify</Button>
+              </div>
+            </section>}
+            {selected.type === 'path' && selectedPathNode && <section className="property-section" aria-label="Path node properties">
              <div className="panel-section-heading"><span>Node</span><span className="panel-count">{selectedPathNodeIndex + 1}/{selected.nodes.length}</span></div>
              <label className="dialog-label">Type<select value={selectedPathNode.kind} disabled={selected.locked} onChange={(event) => onUpdatePathNodeKind?.(selected.id, selectedPathNodeIndex, event.target.value as PathNode['kind'])}><option value="corner">Corner</option><option value="cusp">Cusp</option><option value="smooth">Smooth</option><option value="symmetric">Symmetric</option><option value="auto">Auto smooth</option></select></label>
               <div className="property-grid">
