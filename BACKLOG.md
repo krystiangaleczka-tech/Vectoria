@@ -1,6 +1,6 @@
 # Backlog — Vectoria
 
-Poniżej jest kompletny backlog dla **Vectoria** — rozbity na epiki i implementowalne taski. Priorytety: **P0** = fundament/MVP, **P1** = po MVP, **P2** = dalszy rozwój. Wydajność, stałe FPS i odporność na ogromne wymiary dokumentu są wymaganiem P0 dla całego silnika. 
+Poniżej jest kompletny backlog dla **Vectoria** — rozbity na epiki i implementowalne taski. Vectoria jest pełnym rozwijanym projektem, nie aplikacją ograniczoną do MVP. Priorytety **P0/P1/P2** opisują kolejność i ryzyko, nie redukują zakresu epiców. „MVP” oznacza kamień milowy fundamentu; zadania epiców realizujemy względem pełnej specyfikacji, chyba że ograniczenie zostanie jawnie zapisane. Wydajność, stałe FPS i odporność na ogromne wymiary dokumentu są wymaganiem P0 dla całego silnika.
 
 ## EPIC-00: Architektura i wydajność
 

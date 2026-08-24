@@ -7,11 +7,11 @@
 
 ## 0. Cel i priorytety
 
-**Najpierw sprawdź rzeczywistość repozytorium, potem pisz kod.** Nie zgaduj struktury, wersji paczek, API, browser API, formatów plików ani zakresu MVP.
+**Najpierw sprawdź rzeczywistość repozytorium, potem pisz kod.** Nie zgaduj struktury, wersji paczek, API, browser API ani formatów plików.
 
-Vectoria to webowy/PWA edytor grafiki wektorowej. Skeleton MVP obejmuje: tworzenie dokumentu, rectangle/ellipse/line/prosty Pen, select/move/resize, fill/stroke/opacity, autozapis lokalny, import/eksport wspieranego podzbioru SVG oraz eksport PNG.
+Vectoria to pełny, długoterminowo rozwijany webowy/PWA edytor grafiki wektorowej. Zakres projektu wynika z epiców, backlogu i roadmapy; nie ograniczaj implementacji do historycznego etapu fundamentu.
 
-Nie wchodzą do MVP bez jawnego taska: pełny Node Tool, booleany, clipping/masks, text, obrazy, AI/CDR/PDF, assety, cloud, collaboration i AI.
+Nie rozszerzaj bieżącego zakresu bez jawnego taska. Funkcje z backlogu mają być wdrażane według pełnych specyfikacji epiców, z etapowaniem zapisanym w dokumentacji, jeśli jest konieczne.
 
 Przy konflikcie stosuj kolejność:
 
@@ -92,7 +92,7 @@ Nie uruchamiaj `p` samoczynnie po ukończeniu taska — tylko po triggerze użyt
 
 ## 3. Granice architektury
 
-### Stack Skeleton MVP
+### Stack i granice architektury
 
 - React + TypeScript + Vite + PWA.
 - React UI, CSS Modules/Tailwind i Radix/shadcn tam, gdzie zwiększa to dostępność.
@@ -163,7 +163,7 @@ Każda modyfikacja dokumentu jest komendą z deterministycznym `execute` i `undo
 - Tool dostaje `screenPoint` oraz `worldPoint`.
 - Hit-test i handles używają tolerancji w ekranowych px; w world space zależą od zoomu.
 - Narzędzia są state machines, nigdy logiką w komponencie React.
-- MVP: Select (`V`), Rectangle (`R`), Ellipse (`L`), Line, Pen (`P`), Pan (`Space`/middle mouse).
+- Podstawowe narzędzia: Select (`V`), Rectangle (`R`), Ellipse (`L`), Line, Pen (`P`), Pan (`Space`/middle mouse); kolejne narzędzia wynikają z backlogu.
 - Pen: click = corner, drag = smooth handle, klik first node = close, Enter = commit, Escape = cancel.
 
 ### Render loop
@@ -216,7 +216,7 @@ SVG, plik, metadata, workspace JSON i IndexedDB payload są danymi nieufnymi.
 
 ### SVG, PNG i `.vct`
 
-- MVP SVG: `rect`, `circle`, `ellipse`, `line`, `polyline`, `polygon`, `path`, `g`, podstawowy fill/stroke/transform.
+- SVG: `rect`, `circle`, `ellipse`, `line`, `polyline`, `polygon`, `path`, `g`, fill/stroke/transform oraz rozszerzenia z backlogu.
 - Wybierz jedną strategię transformacji: przechowuj ją w modelu albo materializuj geometrię; nie mieszaj ad hoc.
 - Eksporter tworzy poprawny `viewBox` z artboardu i wspiera dozwolone obiekty/basic linear gradient.
 - `editable` export nie może agresywnie niszczyć struktury; `optimized` jest osobną opcją.
@@ -239,7 +239,7 @@ SVG, plik, metadata, workspace JSON i IndexedDB payload są danymi nieufnymi.
 
 ### 1. Zrozumienie
 
-Ustal workflow użytkownika, granicę MVP, dotknięte warstwy, invariants, error/cancel/recovery, istniejące testy i potrzebę aktualnej dokumentacji API. Dla UI uwzględnij empty document, selection, drag, ekstremalny zoom, loading/error i mały viewport.
+Ustal workflow użytkownika, granicę zaakceptowanego zakresu zadania, dotknięte warstwy, invariants, error/cancel/recovery, istniejące testy i potrzebę aktualnej dokumentacji API. Dla UI uwzględnij empty document, selection, drag, ekstremalny zoom, loading/error i mały viewport.
 
 ### 2. Mapa wpływu
 
@@ -299,7 +299,7 @@ Finalny raport: pliki, rezultat, wykonane komendy i wynik, dodane testy, znane o
 
 Utrzymuj E2E dla: create→draw→move→undo/redo→autosave/restore→export; import happy/failure bez zmiany active document; workspace persistence/reset; huge artboard resize bez giant canvas/freeze; crash recovery.
 
-Budżety MVP:
+Budżety produktu:
 
 - pan/zoom 100 prostych obiektów: 60 FPS na urządzeniu referencyjnym;
 - drag pojedynczego obiektu: p95 frame time ≤ 16.67 ms;
@@ -334,7 +334,7 @@ Nie wolno:
 
 ## 10. Checklist przed finalem
 
-- [ ] Zakres odpowiada MVP albo zaakceptowanemu taskowi.
+- [ ] Zakres odpowiada pełnej specyfikacji epicu albo zaakceptowanemu ograniczeniu taska.
 - [ ] Kod, dokumentacja i API versions zostały sprawdzone.
 - [ ] Granice pakietów są zachowane.
 - [ ] Mutacja dokumentu jest commandem z Undo/Redo.

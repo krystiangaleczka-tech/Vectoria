@@ -6,6 +6,8 @@
 >
 > Zasada: etap kończy się działającym workflow użytkownika, nie liczbą „ukończonych tasków”.
 
+> Ważne: Vectoria jest normalnym, długoterminowym projektem produktu. „MVP” i „Skeleton MVP” oznaczają kamienie milowe, nie docelowy zakres projektu. Implementacja epiców obejmuje pełną specyfikację, a nie tylko MVP slice, chyba że zakres został jawnie ograniczony w tasku.
+
 ---
 
 ## 1. North Star

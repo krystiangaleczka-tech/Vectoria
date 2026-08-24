@@ -88,3 +88,10 @@ Add dedicated user/saved palette management and import UX, then add visual regre
 - `packages/io/test/io.test.ts`: covered radial and pattern SVG export.
 - `packages/renderer/src/index.ts`: rendered radial/conic/pattern fills and Canvas blend modes.
 - `packages/ui/src/icons/VectoriaIcon.tsx`: added eyedropper and bucket icons.
+
+## Scope Policy Correction
+
+- `AGENTS.md`: removed Skeleton/MVP as product scope and replaced it with full-epic implementation policy.
+- `README.md`: documented Vectoria as a full long-term project; MVP is only a foundation milestone.
+- `ROADMAP.md`: clarified that roadmap stages sequence delivery and do not reduce epic scope.
+- `BACKLOG.md`: clarified that P0/P1/P2 describe priority, while epic acceptance remains complete-specification based.
