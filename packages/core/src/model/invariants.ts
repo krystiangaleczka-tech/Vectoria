@@ -12,6 +12,13 @@ export interface InvariantViolation {
 export function validateInvariants(doc: DocumentModel): InvariantViolation[] {
   const violations: InvariantViolation[] = [];
 
+  const allIds = new Set<string>();
+  const registerId = (id: string, code: string): void => {
+    if (allIds.has(id)) violations.push({ code, message: `ID '${id}' is not unique across the document.` });
+    allIds.add(id);
+  };
+  registerId(doc.id, 'DUPLICATE_DOCUMENT_ID');
+
   if (new Set(doc.layerIds).size !== doc.layerIds.length) {
     violations.push({ code: 'DUPLICATE_LAYER_ID', message: 'layerIds contains duplicates.' });
   }
@@ -42,6 +49,8 @@ export function validateInvariants(doc: DocumentModel): InvariantViolation[] {
   for (const artboardId of doc.artboardIds) {
     const artboard = doc.artboards[artboardId];
     if (!artboard) continue;
+    registerId(artboard.id, 'DUPLICATE_DOCUMENT_ID');
+    if (artboard.id !== artboardId) violations.push({ code: 'ARTBOARD_KEY_MISMATCH', message: `Artboard key '${artboardId}' does not match its id.` });
     if (!Number.isFinite(artboard.x) || !Number.isFinite(artboard.y)) violations.push({ code: 'INVALID_ARTBOARD_POSITION', message: `Artboard '${artboardId}' position must be finite.` });
     if (!Number.isFinite(artboard.width) || artboard.width <= 0) violations.push({ code: 'INVALID_ARTBOARD_WIDTH', message: `Artboard '${artboardId}' width must be positive and finite.` });
     if (!Number.isFinite(artboard.height) || artboard.height <= 0) violations.push({ code: 'INVALID_ARTBOARD_HEIGHT', message: `Artboard '${artboardId}' height must be positive and finite.` });
@@ -55,6 +64,10 @@ export function validateInvariants(doc: DocumentModel): InvariantViolation[] {
   for (const layerId of doc.layerIds) {
     const layer = doc.layers[layerId];
     if (layer && (!Number.isFinite(layer.opacity) || layer.opacity < 0 || layer.opacity > 1)) violations.push({ code: 'INVALID_LAYER_OPACITY', message: `Layer '${layerId}' opacity must be within [0, 1].` });
+    if (layer) {
+      registerId(layer.id, 'DUPLICATE_DOCUMENT_ID');
+      if (layer.id !== layerId) violations.push({ code: 'LAYER_KEY_MISMATCH', message: `Layer key '${layerId}' does not match its id.` });
+    }
   }
 
   // ── activeLayerId exists ──────────────────────────────────────────────────
@@ -96,6 +109,8 @@ export function validateInvariants(doc: DocumentModel): InvariantViolation[] {
           message: `ObjectId '${objectId}' is in layer '${layerId}' objectIds but not in objects.`,
         });
       } else {
+        registerId(obj.id, 'DUPLICATE_DOCUMENT_ID');
+        if (obj.id !== objectId) violations.push({ code: 'OBJECT_KEY_MISMATCH', message: `Object key '${objectId}' does not match its id.` });
         // object.layerId must match
         if (obj.layerId !== layerId) {
           violations.push({
@@ -151,6 +166,7 @@ export function validateInvariants(doc: DocumentModel): InvariantViolation[] {
           if (!Number.isFinite(s.miterLimit) || s.miterLimit < 1) {
             violations.push({ code: 'INVALID_MITER_LIMIT', message: `Object '${objectId}' miterLimit must be >= 1 and finite.` });
           }
+          if (s.dashArray.some((value) => !Number.isFinite(value) || value < 0)) violations.push({ code: 'INVALID_DASH_ARRAY', message: `Object '${objectId}' has an invalid dash pattern.` });
         }
 
         // ── Gradient validation ─────────────────────────────────────────────

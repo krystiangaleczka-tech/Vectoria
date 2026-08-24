@@ -47,6 +47,11 @@ export function mat3Scale(sx: number, sy: number): Matrix3 {
   return [sx, 0, 0, 0, sy, 0, 0, 0, 1];
 }
 
+/** Create an affine skew matrix from horizontal and vertical angles. */
+export function mat3Skew(skewX: number, skewY: number): Matrix3 {
+  return [1, Math.tan(skewY), 0, Math.tan(skewX), 1, 0, 0, 0, 1];
+}
+
 /** Multiply two 3×3 matrices: result = a · b */
 export function mat3Multiply(a: Matrix3, b: Matrix3): Matrix3 {
   return [

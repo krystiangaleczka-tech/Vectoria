@@ -19,17 +19,30 @@ export class SelectTool {
   readonly cursor = 'default';
   private readonly selection = new SelectionService();
 
+  private lastCycleKey: string | null = null;
+  private cycleIndex = 0;
+
   /** Resolve one pointer pick and return next selection state. */
   pick(context: SelectToolContext): { selection: SelectionState; hit: HitTestResult | null } {
-    const hit = hitTestDetailed(context.document, context.worldPoint, {
+    const candidates = hitTestDetailed(context.document, context.worldPoint, {
       tolerancePx: 6,
       zoom: context.zoom,
       visibleWorldRect: context.visibleWorldRect,
-    })[0] ?? null;
+    });
+    const key = `${Math.round(context.screenPoint.x)}:${Math.round(context.screenPoint.y)}`;
+    if (key !== this.lastCycleKey) this.cycleIndex = 0;
+    this.lastCycleKey = key;
+    const hit = candidates[this.cycleIndex % Math.max(1, candidates.length)] ?? null;
     return {
       hit,
       selection: this.selection.selectObject(context.selection, hit?.objectId ?? null, context.additive ?? false),
     };
+  }
+
+  /** Pick next overlapping object when the same screen location is queried repeatedly. */
+  cycle(context: SelectToolContext): { selection: SelectionState; hit: HitTestResult | null } {
+    this.cycleIndex += 1;
+    return this.pick(context);
   }
 
   /** Apply documented touching/fully-contained marquee policy. */
@@ -40,5 +53,9 @@ export class SelectTool {
 
   clear(): SelectionState {
     return emptySelection();
+  }
+
+  lasso(context: Omit<SelectToolContext, 'screenPoint' | 'worldPoint'> & { polygon: readonly Vec2[] }): SelectionState {
+    return this.selection.lasso(context.document, context.polygon, context.additive ?? false, context.selection);
   }
 }

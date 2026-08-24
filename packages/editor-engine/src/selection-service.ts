@@ -1,8 +1,9 @@
 import type { ObjectId, SelectionState } from '@vectoria/core';
-import type { Rect } from '@vectoria/shared';
+import type { Rect, Vec2 } from '@vectoria/shared';
 import { rectContainsRect, rectIntersects } from '@vectoria/shared';
 import type { DocumentModel } from '@vectoria/core';
 import { getObjectBounds } from '@vectoria/core';
+import { pointInPolygon } from '@vectoria/shared';
 
 export const emptySelection = (): SelectionState => ({ objectIds: [], nodeIds: [], mode: 'object' });
 
@@ -54,6 +55,38 @@ export class SelectionService {
       }
     }
     return this.selectObjects(selection, ids, additive);
+  }
+
+  /** Select objects whose bounds overlap a lasso polygon, preserving additive selection. */
+  lasso(doc: DocumentModel, polygon: readonly Vec2[], additive = false, selection: SelectionState = emptySelection()): SelectionState {
+    if (polygon.length < 3) return additive ? selection : emptySelection();
+    const ids: ObjectId[] = [];
+    for (const layerId of doc.layerIds) {
+      const layer = doc.layers[layerId];
+      if (!layer || !layer.visible || layer.locked) continue;
+      for (const objectId of layer.objectIds) {
+        const object = doc.objects[objectId];
+        if (!object || !object.visible || object.locked) continue;
+        const bounds = getObjectBounds(object);
+        const corners = [
+          { x: bounds.x, y: bounds.y },
+          { x: bounds.x + bounds.width, y: bounds.y },
+          { x: bounds.x + bounds.width, y: bounds.y + bounds.height },
+          { x: bounds.x, y: bounds.y + bounds.height },
+        ];
+        if (corners.some((corner) => pointInPolygon(corner, polygon))) ids.push(objectId);
+      }
+    }
+    return this.selectObjects(selection, ids, additive);
+  }
+
+  /** Select path nodes contained by a lasso polygon using stable node keys. */
+  lassoNodes(doc: DocumentModel, polygon: readonly Vec2[], objectId: ObjectId, additive = false, selection: SelectionState = emptySelection()): SelectionState {
+    const object = doc.objects[objectId];
+    if (polygon.length < 3 || object?.type !== 'path') return additive ? selection : { ...emptySelection(), mode: 'node' };
+    const nodeIds = object.nodes.map((node, index) => pointInPolygon(node.point, polygon) ? `${objectId}:${index}` : null).filter((id): id is string => id !== null);
+    const next = additive ? [...new Set([...selection.nodeIds, ...nodeIds])] : nodeIds;
+    return { objectIds: [objectId], nodeIds: next, mode: 'node' };
   }
 }
 

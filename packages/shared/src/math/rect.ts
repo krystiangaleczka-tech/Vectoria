@@ -60,6 +60,20 @@ export function rectContainsPoint(r: Rect, p: Vec2): boolean {
   return p.x >= r.x && p.x <= r.x + r.width && p.y >= r.y && p.y <= r.y + r.height;
 }
 
+/** Return whether point lies inside a simple polygon using ray casting. */
+export function pointInPolygon(point: Vec2, polygon: readonly Vec2[]): boolean {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const current = polygon[i]!;
+    const previous = polygon[j]!;
+    const crosses = (current.y > point.y) !== (previous.y > point.y);
+    if (crosses && point.x < ((previous.x - current.x) * (point.y - current.y)) / (previous.y - current.y) + current.x) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
 export function rectIntersects(a: Rect, b: Rect): boolean {
   return !(
     a.x + a.width < b.x ||

@@ -49,4 +49,12 @@ describe('Camera Coordinate Transforms & Navigation', () => {
     expect(camera.screenToWorld(screen).x).toBeCloseTo(point.x, 5);
     expect(camera.screenToWorld(screen).y).toBeCloseTo(point.y, 5);
   });
+
+  it('returns bounds covering rotated viewport corners', () => {
+    const camera = new Camera();
+    camera.setRotation(Math.PI / 4);
+    const visible = camera.getVisibleWorldRect({ x: 200, y: 100 });
+    expect(visible.width).toBeCloseTo(visible.height, 5);
+    expect(visible.width).toBeGreaterThan(200);
+  });
 });

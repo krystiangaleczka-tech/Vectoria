@@ -3,6 +3,7 @@ import {
   mat3Translate,
   mat3Rotate,
   mat3Scale,
+  mat3Skew,
   mat3Multiply,
   mat3Inverse,
   type Matrix3,
@@ -21,10 +22,12 @@ export function getTransformMatrix(transform: Transform2D): Matrix3 {
   const tPos = mat3Translate(position.x, position.y);
   const rot = mat3Rotate(rotation);
   const sc = mat3Scale(scale.x, scale.y);
+  const skew = transform.skew ?? { x: 0, y: 0 };
+  const skewMatrix = mat3Skew(skew.x, skew.y);
   const tPivot = mat3Translate(-pivot.x, -pivot.y);
 
   return mat3Multiply(
-    mat3Multiply(mat3Multiply(tPos, rot), sc),
+    mat3Multiply(mat3Multiply(mat3Multiply(tPos, rot), skewMatrix), sc),
     tPivot,
   );
 }
@@ -77,6 +80,7 @@ export function isValidTransform(transform: Transform2D): boolean {
     Number.isFinite(transform.rotation) &&
     Number.isFinite(transform.scale.x) &&
     Number.isFinite(transform.scale.y) &&
+    (!transform.skew || (Number.isFinite(transform.skew.x) && Number.isFinite(transform.skew.y))) &&
     Number.isFinite(transform.pivot.x) &&
     Number.isFinite(transform.pivot.y)
   );

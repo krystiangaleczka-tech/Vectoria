@@ -13,6 +13,7 @@ export const Transform2DSchema = z.object({
     (s) => Math.abs(s.x) >= 1e-6 && Math.abs(s.y) >= 1e-6,
     { message: 'scale absolute value must be >= 1e-6' }
   ),
+  skew: Vec2Schema.default({ x: 0, y: 0 }),
   pivot: Vec2Schema,
 });
 

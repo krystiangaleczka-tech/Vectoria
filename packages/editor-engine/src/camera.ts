@@ -110,6 +110,7 @@ export class Camera {
    *   pan' = pointerScreen - worldBefore * zoom'
    */
   zoomAtPoint(factor: number, screenPoint: Vec2): void {
+    if (!Number.isFinite(factor) || factor <= 0 || !Number.isFinite(screenPoint.x) || !Number.isFinite(screenPoint.y)) return;
     const worldBefore = this.screenToWorld(screenPoint);
     this._zoom = clamp(this._zoom * factor, MIN_ZOOM, MAX_ZOOM);
 
@@ -171,14 +172,22 @@ export class Camera {
    * Get the visible world-space rectangle for the current viewport.
    */
   getVisibleWorldRect(viewportSize: Vec2): Rect {
-    const topLeft = this.screenToWorld({ x: 0, y: 0 });
-    const bottomRight = this.screenToWorld(viewportSize);
+    const corners = [
+      this.screenToWorld({ x: 0, y: 0 }),
+      this.screenToWorld({ x: viewportSize.x, y: 0 }),
+      this.screenToWorld({ x: viewportSize.x, y: viewportSize.y }),
+      this.screenToWorld({ x: 0, y: viewportSize.y }),
+    ];
+    const minX = Math.min(...corners.map((corner) => corner.x));
+    const minY = Math.min(...corners.map((corner) => corner.y));
+    const maxX = Math.max(...corners.map((corner) => corner.x));
+    const maxY = Math.max(...corners.map((corner) => corner.y));
 
     return {
-      x: topLeft.x,
-      y: topLeft.y,
-      width: bottomRight.x - topLeft.x,
-      height: bottomRight.y - topLeft.y,
+      x: minX,
+      y: minY,
+      width: maxX - minX,
+      height: maxY - minY,
     };
   }
 

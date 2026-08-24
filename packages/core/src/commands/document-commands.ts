@@ -251,6 +251,20 @@ export class UpdateObjectTransformCommand extends TransformObjectsCommand {
 
 export type ReorderDirection = 'front' | 'back' | 'forward' | 'backward';
 
+/** Apply bounded skew around the existing transform pivot. */
+export class SkewObjectsCommand extends TransformObjectsCommand {
+  constructor(objectIds: readonly ObjectId[], axis: 'horizontal' | 'vertical', angle: number, doc: DocumentModel) {
+    const transforms = new Map<ObjectId, Transform2D>();
+    for (const id of objectIds) {
+      const object = doc.objects[id];
+      if (!object || !Number.isFinite(angle) || Math.abs(angle) >= Math.PI / 2) continue;
+      const skew = object.transform.skew ?? { x: 0, y: 0 };
+      transforms.set(id, { ...object.transform, skew: { ...skew, [axis === 'horizontal' ? 'x' : 'y']: angle } });
+    }
+    super(objectIds, transforms);
+  }
+}
+
 /** Reorder selected objects inside their layers without changing ownership. */
 export class ReorderObjectsCommand implements Command {
   readonly type = 'ReorderObjects';

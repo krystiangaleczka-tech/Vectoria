@@ -11,6 +11,7 @@ export {
   DistributeObjectsCommand,
   FlipObjectsCommand,
   RepeatTransformCommand,
+  SkewObjectsCommand,
   type ReorderDirection,
   type Alignment,
   SetObjectStyleCommand,

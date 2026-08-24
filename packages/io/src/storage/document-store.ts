@@ -4,6 +4,7 @@ import { parseAndMigrateDocument, PersistedDocumentSchema, type PersistedDocumen
 import { IndexedDBDocumentRepository } from './indexeddb-repository.js';
 
 const CURRENT_DOC_KEY = 'current_document';
+const LAST_KNOWN_GOOD_KEY = 'last_known_good_document';
 const repository = new IndexedDBDocumentRepository(CURRENT_DOC_KEY);
 
 export type BootstrapState =
@@ -51,6 +52,17 @@ export async function bootstrapDocument(): Promise<BootstrapState> {
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
     console.error('[Vectoria] Document recovery fallback triggered:', errorMsg);
+    const knownGood = await repository.loadKnownGood?.(LAST_KNOWN_GOOD_KEY).catch(() => null);
+    if (knownGood) {
+      try {
+        const recovered = parseAndMigrateDocument(knownGood.document);
+        if (validateInvariants(recovered).length === 0) {
+          return { status: 'recovery-error', document: recovered, error: errorMsg, revision: knownGood.revision };
+        }
+      } catch {
+        // Fall through to a fresh document when both snapshots are unusable.
+      }
+    }
     const fallbackDoc = createDefaultDocument();
     return {
       status: 'recovery-error',
@@ -84,5 +96,5 @@ export async function saveDocumentSnapshot(document: DocumentModel, revision: nu
     revision,
     savedAt: new Date().toISOString(),
   };
-  return repository.save(snapshot);
+  return repository.saveAtomic?.(snapshot, LAST_KNOWN_GOOD_KEY) ?? repository.save(snapshot);
 }

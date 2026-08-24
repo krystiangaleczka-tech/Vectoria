@@ -34,6 +34,9 @@ export interface Transform2D {
    */
   readonly scale: Vec2;
 
+  /** Horizontal and vertical skew angles in radians. */
+  readonly skew?: Vec2;
+
   /** Pivot point in local object space. */
   readonly pivot: Vec2;
 }

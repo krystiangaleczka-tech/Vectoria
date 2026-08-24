@@ -7,7 +7,7 @@ import {
   type RectangleObject,
   type PathObject,
 } from '@vectoria/core';
-import { DirectSelectTool, DragSession, SelectionService, hitTestDetailed } from '../src/index.js';
+import { DirectSelectTool, DragSession, SelectTool, SelectionService, emptySelection, hitTestDetailed } from '../src/index.js';
 
 function withObjects(objects: readonly (RectangleObject | PathObject)[]): DocumentModel {
   const doc = createDefaultDocument({ width: 800, height: 600 });
@@ -61,5 +61,20 @@ describe('Selection contracts', () => {
     const session = new DragSession({ objectIds: ['one'], initialTransforms: {}, initialBounds: { x: 0, y: 0, width: 1, height: 1 }, pivotWorld: { x: 0, y: 0 }, operation: 'move' }, { x: 10, y: 20 });
     session.update({ x: 18, y: 14 });
     expect(session.delta).toEqual({ x: 8, y: -6 });
+  });
+
+  it('cycles overlapping candidates deterministically', () => {
+    const doc = withObjects([rectangle('bottom', 20, 20), rectangle('top', 20, 20)]);
+    const tool = new SelectTool();
+    const context = { document: doc, selection: emptySelection(), screenPoint: { x: 50, y: 50 }, worldPoint: { x: 50, y: 50 }, zoom: 1 };
+    expect(tool.pick(context).hit?.objectId).toBe('top');
+    expect(tool.cycle(context).hit?.objectId).toBe('bottom');
+  });
+
+  it('selects object bounds and nodes with lasso', () => {
+    const doc = withObjects([rectangle('one', 20, 20), rectangle('two', 300, 300)]);
+    const service = new SelectionService();
+    const polygon = [{ x: 0, y: 0 }, { x: 160, y: 0 }, { x: 160, y: 160 }, { x: 0, y: 160 }];
+    expect(service.lasso(doc, polygon).objectIds).toEqual(['one']);
   });
 });

@@ -4,6 +4,7 @@ import {
   CommandHistory,
   DuplicateObjectsCommand,
   ReorderObjectsCommand,
+  SkewObjectsCommand,
   TransformObjectsCommand,
   createDefaultDocument,
   createTransform,
@@ -49,5 +50,14 @@ describe('EPIC-03 command contracts', () => {
     const unchanged = history.execute(new TransformObjectsCommand(['one'], new Map([['one', { ...doc.objects.one!.transform, scale: { x: 0, y: 1 } }]])), doc);
     expect(unchanged).toBe(doc);
     expect(history.canUndo).toBe(false);
+  });
+
+  it('applies bounded skew and restores exact transform on undo', () => {
+    const original = documentWithRectangles();
+    const history = new CommandHistory();
+    const skewed = history.execute(new SkewObjectsCommand(['one'], 'horizontal', Math.PI / 6, original), original);
+    expect(skewed.objects.one!.transform.skew).toEqual({ x: Math.PI / 6, y: 0 });
+    const restored = history.undo(skewed)!;
+    expect(restored.objects.one!.transform).toEqual(original.objects.one!.transform);
   });
 });

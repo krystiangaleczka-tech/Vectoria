@@ -36,6 +36,21 @@ export class IndexedDBDocumentRepository implements DocumentRepository {
     db.close();
   }
 
+  /** Commit current and last-known-good snapshots in one IndexedDB transaction. */
+  async saveAtomic(snapshot: PersistedDocument, knownGoodKey: string): Promise<void> {
+    const db = await openDB();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      store.put(snapshot, this.storageKey ?? snapshot.document.id);
+      store.put(snapshot, knownGoodKey);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error ?? new Error('Failed to atomically save document snapshots'));
+      tx.onabort = () => reject(tx.error ?? new Error('IndexedDB atomic save aborted'));
+    });
+    db.close();
+  }
+
   /** Loads one persisted envelope, returning null when no snapshot exists. */
   async load(documentId: string): Promise<PersistedDocument | null> {
     const db = await openDB();
@@ -47,5 +62,9 @@ export class IndexedDBDocumentRepository implements DocumentRepository {
     });
     db.close();
     return snapshot;
+  }
+
+  async loadKnownGood(knownGoodKey: string): Promise<PersistedDocument | null> {
+    return this.load(knownGoodKey);
   }
 }
