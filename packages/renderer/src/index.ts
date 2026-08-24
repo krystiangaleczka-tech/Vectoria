@@ -419,7 +419,8 @@ function renderPath(
   ctx.globalAlpha = obj.style.opacity;
 
   ctx.beginPath();
-  obj.nodes.forEach((node, i) => {
+  const drawSubpath = (nodes: PathObject['nodes']): void => {
+    nodes.forEach((node, i) => {
     if (i === 0) {
       ctx.moveTo(node.point.x, node.point.y);
       return;
@@ -428,10 +429,10 @@ function renderPath(
     const cp1 = prev.outHandle ?? prev.point;
     const cp2 = node.inHandle ?? node.point;
     ctx.bezierCurveTo(cp1.x, cp1.y, cp2.x, cp2.y, node.point.x, node.point.y);
-  });
-  if (obj.closed && obj.nodes.length > 1) {
-    const last = obj.nodes[obj.nodes.length - 1]!;
-    const first = obj.nodes[0]!;
+    });
+    if (obj.closed && nodes.length > 1) {
+    const last = nodes[nodes.length - 1]!;
+    const first = nodes[0]!;
     ctx.bezierCurveTo(
       last.outHandle?.x ?? last.point.x,
       last.outHandle?.y ?? last.point.y,
@@ -441,11 +442,14 @@ function renderPath(
       first.point.y,
     );
     ctx.closePath();
-  }
+    }
+  };
+  drawSubpath(obj.nodes);
+  obj.compoundChildren?.forEach((nodes) => drawSubpath(nodes));
 
   if (obj.style.fill.type !== 'none' && obj.closed) {
     ctx.fillStyle = resolveFill(ctx, obj.style.fill);
-    ctx.fill();
+    ctx.fill(obj.fillRule ?? 'nonzero');
   }
   if (obj.style.stroke) {
     ctx.strokeStyle = obj.style.stroke.color;

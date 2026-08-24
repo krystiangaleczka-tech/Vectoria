@@ -253,5 +253,10 @@ export function validateInvariants(doc: DocumentModel): InvariantViolation[] {
     }
   }
 
+  for (const group of Object.values(doc.maskGroups ?? {})) {
+    if (!doc.objects[group.maskId]) violations.push({ code: 'DANGLING_MASK_TARGET', message: `Mask '${group.id}' references missing mask object.` });
+    if (group.contentIds.length === 0 || group.contentIds.some((id) => !doc.objects[id] || id === group.maskId)) violations.push({ code: 'INVALID_MASK_CONTENT', message: `Mask '${group.id}' has missing or empty content references.` });
+  }
+
   return violations;
 }

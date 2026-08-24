@@ -24,3 +24,5 @@ export {
 } from './tools/freehand-tools.js';
 export { GeometryOperationSession, type GeometrySessionOperation } from './operations/geometry-operation-session.js';
 export { CornerTool, type CornerToolPreview } from './tools/corner-tool.js';
+export { BooleanOperationSession } from './operations/boolean-session.js';
+export { IsolationService, type IsolationContext } from './isolation/isolation-service.js';

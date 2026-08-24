@@ -50,7 +50,7 @@ import {
   createDefaultDocument,
   getObjectBounds,
 } from '@vectoria/core';
-import { Camera, emptySelection, selectionService, GeometryOperationSession } from '@vectoria/editor-engine';
+import { Camera, emptySelection, selectionService, GeometryOperationSession, BooleanOperationSession } from '@vectoria/editor-engine';
 import {
   bootstrapDocument,
   saveDocumentSnapshot,
@@ -121,7 +121,7 @@ export const EditorApp: React.FC = () => {
   const saveQueueRef = useRef<{ pending: { document: DocumentModel; revision: number } | null; inFlight: boolean }>({ pending: null, inFlight: false });
   const processSaveQueueRef = useRef<() => Promise<void>>(() => Promise.resolve());
   const clipboardRef = useRef<SceneObject[]>([]);
-  const geometrySessionRef = useRef<GeometryOperationSession | null>(null);
+  const geometrySessionRef = useRef<{ apply: () => Command | null; cancel: () => void } | null>(null);
   const geometryConfirmDialogRef = useRef<HTMLElement | null>(null);
 
   const handleSelectObject = useCallback((id: ObjectId | null, additive = false) => {
@@ -537,6 +537,13 @@ export const EditorApp: React.FC = () => {
     }
     if (action.type === 'reverse') {
       handleExecuteCommand(new ReversePathDirectionCommand(action.objectId));
+      return;
+    }
+    if (action.type === 'boolean' || action.type === 'compound') {
+      const session = new BooleanOperationSession(doc, action.objectIds);
+      const booleanPreview = action.type === 'compound' ? session.previewCompound() : session.previewBoolean(action.operation);
+      geometrySessionRef.current = session;
+      setGeometryPreview({ operation: booleanPreview.operation, originals: booleanPreview.inputIds, proposed: booleanPreview.result, warnings: booleanPreview.warnings });
       return;
     }
     const session = new GeometryOperationSession(doc, action.type === 'expand' ? action.objectIds : [action.objectId]);

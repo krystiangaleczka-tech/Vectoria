@@ -135,6 +135,8 @@ export interface PathObject extends SceneObjectBase {
   readonly closed: boolean;
   /** Optional normalized width profile for pressure-sensitive brush strokes. */
   readonly widthProfile?: readonly WidthPoint[];
+  readonly compoundChildren?: readonly (readonly PathNode[])[];
+  readonly fillRule?: 'nonzero' | 'evenodd';
 }
 
 export interface WidthPoint {
@@ -225,4 +227,22 @@ export interface DocumentModel {
 
   readonly createdAt: string;
   readonly updatedAt: string;
+  readonly maskGroups?: Readonly<Record<string, MaskGroup>>;
 }
+
+export interface MaskGroup {
+  readonly id: string;
+  readonly mode: 'clip' | 'opacity';
+  readonly maskId: ObjectId;
+  readonly contentIds: readonly ObjectId[];
+  readonly opacityMode?: 'alpha' | 'luminance';
+}
+
+export interface BooleanPreview {
+  readonly operation: BooleanOperation;
+  readonly inputIds: readonly ObjectId[];
+  readonly result: readonly PathObject[];
+  readonly warnings: readonly string[];
+}
+
+export type BooleanOperation = 'unite' | 'subtract' | 'intersect' | 'exclude' | 'divide' | 'crop';

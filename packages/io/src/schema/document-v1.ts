@@ -126,6 +126,8 @@ export const PathObjectSchema = z.object({
   style: ObjectStyleSchema,
   nodes: z.array(PathNodeSchema),
   closed: z.boolean(),
+  compoundChildren: z.array(z.array(PathNodeSchema)).optional(),
+  fillRule: z.enum(['nonzero', 'evenodd']).optional(),
 });
 
 export const SceneObjectSchema = z.discriminatedUnion('type', [
@@ -176,6 +178,7 @@ export const DocumentV1Schema = z.object({
   layerIds: z.array(z.string().min(1)),
   activeLayerId: z.string().min(1),
   objects: z.record(SceneObjectSchema),
+  maskGroups: z.record(z.object({ id: z.string().min(1), mode: z.enum(['clip', 'opacity']), maskId: z.string().min(1), contentIds: z.array(z.string().min(1)), opacityMode: z.enum(['alpha', 'luminance']).optional() })).optional(),
   guides: z.array(z.object({ id: z.string().min(1), axis: z.enum(['horizontal', 'vertical']), position: z.number().finite(), visible: z.boolean(), locked: z.boolean() })).default([]),
   grid: z.object({ visible: z.boolean(), size: z.number().positive().finite(), subdivisions: z.number().int().min(1) }).default({ visible: true, size: 10, subdivisions: 1 }),
   snap: z.object({ enabled: z.boolean(), tolerancePx: z.number().nonnegative().finite(), sources: z.record(z.boolean()) }).default({ enabled: false, tolerancePx: 8, sources: { grid: true, guide: true, node: true, edge: true, center: true, intersection: true, pixel: false } }),

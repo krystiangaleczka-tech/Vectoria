@@ -9,7 +9,9 @@ export type GeometryAction =
   | { type: 'offset'; objectId: ObjectId; direction: 'inside' | 'outside'; distance: number }
   | { type: 'outline'; objectId: ObjectId }
   | { type: 'close'; objectId: ObjectId }
-  | { type: 'reverse'; objectId: ObjectId };
+  | { type: 'reverse'; objectId: ObjectId }
+  | { type: 'boolean'; operation: 'unite' | 'subtract' | 'intersect' | 'exclude' | 'divide' | 'crop'; objectIds: readonly ObjectId[] }
+  | { type: 'compound'; objectIds: readonly ObjectId[] };
 
 interface GeometryPropertiesProps {
   document: DocumentModel;
@@ -44,6 +46,11 @@ export const GeometryProperties: React.FC<GeometryPropertiesProps> = ({ document
       )}
       <div className="geometry-action-group">
         <Button size="sm" variant="ghost" disabled={selectedObjectIds.length === 0} onClick={() => onAction({ type: 'expand', objectIds: selectedObjectIds })}>Convert to curves</Button>
+        <div className="geometry-operation-title">Boolean</div>
+        <div className="property-actions" role="group" aria-label="Boolean operations">
+          {(['unite', 'subtract', 'intersect', 'exclude', 'divide', 'crop'] as const).map((operation) => <Button key={operation} size="sm" variant="ghost" disabled={selectedObjectIds.length < 2} aria-label={operation} onClick={() => onAction({ type: 'boolean', operation, objectIds: selectedObjectIds })}>{operation}</Button>)}
+          <Button size="sm" variant="ghost" disabled={selectedObjectIds.length < 2} onClick={() => onAction({ type: 'compound', objectIds: selectedObjectIds })}>Compound</Button>
+        </div>
         <Button size="sm" variant="ghost" onClick={onOpenCleanup}>Clean Up document</Button>
       </div>
       {path && (

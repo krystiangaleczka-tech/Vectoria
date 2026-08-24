@@ -70,3 +70,4 @@ export {
   CutPathCommand,
   createFreehandPath,
 } from './freehand-commands.js';
+export { BooleanCommand, CompoundPathCommand, MaskCommand } from './boolean.js';

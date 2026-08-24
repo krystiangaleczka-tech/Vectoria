@@ -7,5 +7,6 @@ export * from './model/shapes.js';
 export * from './model/path.js';
 export * from './model/freehand.js';
 export * from './geometry/operations.js';
+export * from './geometry/boolean.js';
 export * from './commands/index.js';
 export { DOCUMENT_PRESETS, type DocumentPreset } from './model/presets.js';
