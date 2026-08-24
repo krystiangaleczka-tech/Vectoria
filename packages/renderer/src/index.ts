@@ -244,6 +244,8 @@ export function renderScene(
 
       if (!rectsIntersect(getObjectBounds(obj), visibleWorldRect)) continue;
 
+      ctx.globalCompositeOperation = obj.style.blendMode === 'normal' || obj.style.blendMode === undefined ? 'source-over' : obj.style.blendMode;
+
       switch (obj.type) {
         case 'rectangle':
           renderRectangle(ctx, obj as RectangleObject);

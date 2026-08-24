@@ -37,6 +37,7 @@ export const defaultObjectStyle: ObjectStyle = {
   fill: { type: 'solid', color: '#cccccc' },
   stroke: null,
   opacity: 1,
+  blendMode: 'normal',
 };
 
 export const defaultCornerRadii: CornerRadii = { topLeft: 0, topRight: 0, bottomRight: 0, bottomLeft: 0 };

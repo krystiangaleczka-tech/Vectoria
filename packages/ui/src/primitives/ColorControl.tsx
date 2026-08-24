@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { parseColor } from '@vectoria/shared';
 
 export interface ColorControlProps {
   label: string;
@@ -14,14 +15,34 @@ export const ColorControl: React.FC<ColorControlProps> = ({
   onChange,
 }) => {
   const isNone = color === null;
+  const [text, setText] = useState(color ?? '');
+  const [error, setError] = useState(false);
+  const parsed = text ? parseColor(text) : null;
+
+  useEffect(() => {
+    setText(color ?? '');
+    setError(false);
+  }, [color]);
+
+  const commit = (value: string) => {
+    const next = parseColor(value);
+    if (!next) {
+      setError(true);
+      return;
+    }
+    setError(false);
+    setText(next.hex);
+    onChange(next.hex);
+  };
 
   return (
     <div
       style={{
-        display: 'flex',
-        alignItems: 'center',
+         display: 'flex',
+         flexWrap: 'wrap',
+         alignItems: 'center',
         justifyContent: 'space-between',
-        height: '28px',
+         minHeight: '28px',
         padding: '0 4px',
         backgroundColor: 'var(--color-input)',
         border: '1px solid var(--color-border-subtle)',
@@ -56,7 +77,7 @@ export const ColorControl: React.FC<ColorControlProps> = ({
             alignItems: 'center',
             justifyContent: 'center',
           }}
-          title={isNone ? 'No color (Click to pick)' : `Current color: ${color}`}
+           title={isNone ? 'No color (Click to pick)' : `Current color: ${color}`}
         >
           {isNone && (
             <div
@@ -95,6 +116,17 @@ export const ColorControl: React.FC<ColorControlProps> = ({
           {isNone ? 'None' : color?.toUpperCase()}
         </span>
 
+        <input
+          aria-label={`${label} HEX`}
+          value={text}
+          disabled={disabled || isNone}
+          onChange={(event) => { setText(event.target.value); setError(false); }}
+          onBlur={() => !isNone && commit(text)}
+          onKeyDown={(event) => { if (event.key === 'Enter') commit(text); if (event.key === 'Escape') setText(color ?? ''); }}
+          aria-invalid={error}
+          style={{ width: '76px', height: '22px', border: `1px solid ${error ? 'var(--color-danger)' : 'var(--color-border-subtle)'}`, borderRadius: 'var(--radius-xs)', background: 'var(--color-input)', color: 'var(--color-text-primary)', font: '10px var(--font-mono)', padding: '0 4px' }}
+        />
+
         {/* None toggle button */}
         <button
           type="button"
@@ -114,6 +146,8 @@ export const ColorControl: React.FC<ColorControlProps> = ({
           {isNone ? 'Fill' : 'None'}
         </button>
       </div>
+      {error && <span role="alert" style={{ color: 'var(--color-danger)', fontSize: '10px' }}>Invalid color</span>}
+      {parsed?.outOfGamut && <span role="status" style={{ color: 'var(--color-warning)', fontSize: '10px' }}>Color outside display gamut</span>}
     </div>
   );
 };

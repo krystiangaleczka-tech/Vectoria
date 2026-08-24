@@ -1,5 +1,5 @@
 import React from 'react';
-import type { DocumentModel, ObjectId, ObjectStyle, SceneObject, CornerRadii, PathNode, SelectionState, GeometryPreview } from '@vectoria/core';
+import type { DocumentModel, ObjectId, ObjectStyle, SceneObject, CornerRadii, PathNode, SelectionState, GeometryPreview, BlendMode } from '@vectoria/core';
 import { normalizeCornerRadii } from '@vectoria/core';
 import type { Vec2 } from '@vectoria/shared';
 import { defaultStroke } from '@vectoria/core';
@@ -159,9 +159,16 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           <section className="property-section">
             <div className="panel-section-heading"><span>Wygląd</span></div>
              <ColorControl label="Fill" disabled={selected.locked} color={selected.style.fill.type === 'solid' ? selected.style.fill.color : null} onChange={(value) => onUpdateFill(selected.id, value)} />
-             <ColorControl label="Stroke" disabled={selected.locked} color={selected.style.stroke?.color ?? null} onChange={(value) => patchStyle({ stroke: value ? { ...(selected.style.stroke ?? defaultStroke), color: value } : null })} />
-             <NumberInput data-testid="prop-stroke-width" label="Stroke" value={selected.style.stroke?.width ?? 0} min={0.1} disabled={selected.locked || !selected.style.stroke} decimals={1} onChange={(value) => selected.style.stroke && patchStyle({ stroke: { ...selected.style.stroke, width: value } })} />
-             <NumberInput data-testid="prop-opacity" label="Opacity" value={selected.style.opacity} min={0} max={1} step={0.05} disabled={selected.locked} decimals={2} unit="" onChange={(value) => patchStyle({ opacity: value })} />
+              <ColorControl label="Stroke" disabled={selected.locked} color={selected.style.stroke?.color ?? null} onChange={(value) => patchStyle({ stroke: value ? { ...(selected.style.stroke ?? defaultStroke), color: value } : null })} />
+              <NumberInput data-testid="prop-stroke-width" label="Stroke" value={selected.style.stroke?.width ?? 0} min={0.1} disabled={selected.locked || !selected.style.stroke} decimals={1} onChange={(value) => selected.style.stroke && patchStyle({ stroke: { ...selected.style.stroke, width: value } })} />
+              {selected.style.stroke && <>
+                <label className="dialog-label">Cap<select data-testid="prop-stroke-cap" value={selected.style.stroke.lineCap} disabled={selected.locked} onChange={(event) => patchStyle({ stroke: { ...(selected.style.stroke ?? defaultStroke), lineCap: event.target.value as typeof defaultStroke.lineCap } })}><option value="butt">Butt</option><option value="round">Round</option><option value="square">Square</option></select></label>
+                <label className="dialog-label">Join<select data-testid="prop-stroke-join" value={selected.style.stroke.lineJoin} disabled={selected.locked} onChange={(event) => patchStyle({ stroke: { ...(selected.style.stroke ?? defaultStroke), lineJoin: event.target.value as typeof defaultStroke.lineJoin } })}><option value="miter">Miter</option><option value="round">Round</option><option value="bevel">Bevel</option></select></label>
+                <NumberInput data-testid="prop-miter-limit" label="Miter" value={selected.style.stroke.miterLimit} min={1} disabled={selected.locked} decimals={1} onChange={(value) => patchStyle({ stroke: { ...(selected.style.stroke ?? defaultStroke), miterLimit: value } })} />
+                <label className="dialog-label">Dash / gap<input data-testid="prop-dash-array" value={selected.style.stroke.dashArray.join(', ')} disabled={selected.locked} aria-label="Dash and gap lengths" onChange={(event) => { const values = event.target.value.split(',').map((part) => Number(part.trim())); if (values.length > 0 && values.every((value) => Number.isFinite(value) && value >= 0)) patchStyle({ stroke: { ...(selected.style.stroke ?? defaultStroke), dashArray: values } }); }} /></label>
+              </>}
+              <NumberInput data-testid="prop-opacity" label="Opacity" value={selected.style.opacity} min={0} max={1} step={0.05} disabled={selected.locked} decimals={2} unit="" onChange={(value) => patchStyle({ opacity: value })} />
+              <label className="dialog-label">Blend<select data-testid="prop-blend-mode" value={selected.style.blendMode ?? 'normal'} disabled={selected.locked} onChange={(event) => patchStyle({ blendMode: event.target.value as BlendMode })}><option value="normal">Normal</option><option value="multiply">Multiply</option><option value="screen">Screen</option><option value="overlay">Overlay</option></select></label>
              <div className="property-actions">
                 <Button size="sm" variant="ghost" disabled={selected.locked} onClick={() => patchStyle({ fill: { type: 'linear-gradient', start: { x: 0, y: 0 }, end: { x: size?.width ?? 100, y: 0 }, stops: [{ offset: 0, color: '#5caeff', opacity: 1 }, { offset: 1, color: '#8e5cff', opacity: 1 }] } })}>Gradient</Button>
                 {selected.style.stroke && <Button size="sm" variant="ghost" disabled={selected.locked} onClick={() => onPathAction?.({ type: 'stroke-to-path', objectId: selected.id })}>Stroke to path</Button>}

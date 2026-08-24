@@ -135,6 +135,9 @@ export function validateInvariants(doc: DocumentModel): InvariantViolation[] {
         if (!Number.isFinite(obj.style.opacity) || obj.style.opacity < 0 || obj.style.opacity > 1) {
           violations.push({ code: 'INVALID_OPACITY', message: `Object '${objectId}' has opacity out of bounds [0, 1] or non-finite.` });
         }
+        if (obj.style.blendMode !== undefined && !['normal', 'multiply', 'screen', 'overlay'].includes(obj.style.blendMode)) {
+          violations.push({ code: 'INVALID_BLEND_MODE', message: `Object '${objectId}' has an unsupported blend mode.` });
+        }
 
         // ── Stroke validation ──────────────────────────────────────────────
         if (obj.style.stroke) {

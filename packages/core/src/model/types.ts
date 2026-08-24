@@ -80,7 +80,10 @@ export interface ObjectStyle {
 
   /** Single canonical opacity for the object: 0–1. */
   readonly opacity: number;
+  readonly blendMode?: BlendMode;
 }
+
+export type BlendMode = 'normal' | 'multiply' | 'screen' | 'overlay';
 
 export interface CornerRadii {
   readonly topLeft: number;

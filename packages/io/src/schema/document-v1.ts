@@ -58,6 +58,7 @@ export const ObjectStyleSchema = z.object({
   fill: FillStyleSchema,
   stroke: StrokeStyleSchema.nullable(),
   opacity: z.number().min(0).max(1),
+  blendMode: z.enum(['normal', 'multiply', 'screen', 'overlay']).default('normal'),
 });
 
 export const RectangleObjectSchema = z.object({
@@ -229,7 +230,8 @@ export function parseAndMigrateDocument(raw: unknown): DocumentModel {
     const objects = Object.fromEntries(Object.entries(parsed.objects).map(([id, object]) => [id, object.type === 'path'
       ? { ...object, nodes: object.nodes.map((node, index) => ({ ...node, id: node.id ?? `${object.id}-node-${index + 1}` })) }
       : object]));
-    return { ...parsed, objects, artboards, snap: { ...parsed.snap, sources: { ...DEFAULT_SNAP_SOURCES, ...parsed.snap.sources } } } as unknown as DocumentModel;
+    const normalizedObjects = Object.fromEntries(Object.entries(objects).map(([id, object]) => [id, { ...object, style: { ...object.style, blendMode: object.style.blendMode ?? 'normal' } }]));
+    return { ...parsed, objects: normalizedObjects, artboards, snap: { ...parsed.snap, sources: { ...DEFAULT_SNAP_SOURCES, ...parsed.snap.sources } } } as unknown as DocumentModel;
   }
 
   throw new Error(`Unsupported schema version: ${String(schemaVersion)}`);

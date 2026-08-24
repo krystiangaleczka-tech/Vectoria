@@ -136,10 +136,10 @@ function renderRectangleToSvg(obj: RectangleObject, gradientMap: Map<LinearGradi
     : '';
   if (radii.topLeft !== radii.topRight || radii.topRight !== radii.bottomRight || radii.bottomRight !== radii.bottomLeft) {
     const d = roundedRectanglePath(obj.width, obj.height, radii);
-    return `<path d="${d}" transform="${transformAttr}" ${fillAttr}${strokeAttr}${opacityAttr} />`;
+     return `<path d="${d}" transform="${transformAttr}" ${fillAttr}${strokeAttr}${opacityAttr}${blendAttr(obj.style.blendMode)} />`;
   }
 
-  return `<rect x="0" y="0" width="${obj.width}" height="${obj.height}" transform="${transformAttr}" ${fillAttr}${strokeAttr}${opacityAttr}${radiusAttr} />`;
+   return `<rect x="0" y="0" width="${obj.width}" height="${obj.height}" transform="${transformAttr}" ${fillAttr}${strokeAttr}${opacityAttr}${blendAttr(obj.style.blendMode)}${radiusAttr} />`;
 }
 
 function roundedRectanglePath(width: number, height: number, radii: { topLeft: number; topRight: number; bottomRight: number; bottomLeft: number }): string {
@@ -157,7 +157,7 @@ function renderEllipseToSvg(obj: EllipseObject, gradientMap: Map<LinearGradientF
   const strokeAttr = obj.style.stroke ? buildStrokeAttr(obj.style.stroke) : '';
   const opacityAttr = obj.style.opacity < 1 ? ` opacity="${obj.style.opacity}"` : '';
 
-  return `<ellipse cx="${rx}" cy="${ry}" rx="${rx}" ry="${ry}" transform="${transformAttr}" ${fillAttr}${strokeAttr}${opacityAttr} />`;
+  return `<ellipse cx="${rx}" cy="${ry}" rx="${rx}" ry="${ry}" transform="${transformAttr}" ${fillAttr}${strokeAttr}${opacityAttr}${blendAttr(obj.style.blendMode)} />`;
 }
 
 function renderLineToSvg(obj: LineObject, _gradientMap: Map<LinearGradientFill, string>): string {
@@ -168,7 +168,7 @@ function renderLineToSvg(obj: LineObject, _gradientMap: Map<LinearGradientFill, 
   const strokeAttr = obj.style.stroke ? buildStrokeAttr(obj.style.stroke) : '';
   const opacityAttr = obj.style.opacity < 1 ? ` opacity="${obj.style.opacity}"` : '';
 
-  return `<line x1="0" y1="0" x2="${obj.endPoint.x}" y2="${obj.endPoint.y}" transform="${transformAttr}" ${fillAttr}${strokeAttr}${opacityAttr} />`;
+  return `<line x1="0" y1="0" x2="${obj.endPoint.x}" y2="${obj.endPoint.y}" transform="${transformAttr}" ${fillAttr}${strokeAttr}${opacityAttr}${blendAttr(obj.style.blendMode)} />`;
 }
 
 function renderPathToSvg(obj: PathObject, gradientMap: Map<LinearGradientFill, string>): string {
@@ -193,7 +193,11 @@ function renderPathToSvg(obj: PathObject, gradientMap: Map<LinearGradientFill, s
   const strokeAttr = obj.style.stroke ? buildStrokeAttr(obj.style.stroke) : '';
   const opacityAttr = obj.style.opacity < 1 ? ` opacity="${obj.style.opacity}"` : '';
 
-  return `<path d="${d}" transform="${transformAttr}" ${fillAttr}${strokeAttr}${opacityAttr} />`;
+   return `<path d="${d}" transform="${transformAttr}" ${fillAttr}${strokeAttr}${opacityAttr}${blendAttr(obj.style.blendMode)} />`;
+}
+
+function blendAttr(mode: import('@vectoria/core').BlendMode | undefined): string {
+  return !mode || mode === 'normal' ? '' : ` style="mix-blend-mode:${mode}"`;
 }
 
 function buildStrokeAttr(stroke: StrokeStyle): string {

@@ -1,4 +1,4 @@
-import { generateId, type Vec2 } from '@vectoria/shared';
+import { generateId, normalizeColor, type Vec2 } from '@vectoria/shared';
 import type { Command } from './command.js';
 import type {
   DocumentModel,
@@ -466,6 +466,8 @@ export class SetObjectStyleCommand implements Command {
       this.description = 'Change stroke';
     } else if (stylePatch.opacity !== undefined) {
       this.description = 'Change opacity';
+    } else if (stylePatch.blendMode !== undefined) {
+      this.description = 'Change blend mode';
     } else {
       this.description = 'Change style';
     }
@@ -481,9 +483,27 @@ export class SetObjectStyleCommand implements Command {
 
       this.previousStyles.set(objectId, obj.style);
 
+      const fill = this.stylePatch.fill;
+      const stroke = this.stylePatch.stroke;
+      const normalizedFill = fill?.type === 'solid' ? normalizeColor(fill.color) : null;
+      const normalizedStops = fill?.type === 'linear-gradient'
+        ? fill.stops.map((stop) => ({ ...stop, color: normalizeColor(stop.color) }))
+        : null;
+      const normalizedStroke = stroke ? normalizeColor(stroke.color) : null;
+      if (fill?.type === 'solid' && normalizedFill === null) continue;
+      if (normalizedStops?.some((stop) => stop.color === null)) continue;
+      if (stroke && normalizedStroke === null) continue;
+      if (this.stylePatch.opacity !== undefined && (!Number.isFinite(this.stylePatch.opacity) || this.stylePatch.opacity < 0 || this.stylePatch.opacity > 1)) continue;
+
       newObjects[objectId] = {
         ...obj,
-        style: { ...obj.style, ...this.stylePatch },
+        style: {
+          ...obj.style,
+          ...this.stylePatch,
+          ...(fill?.type === 'solid' && normalizedFill ? { fill: { ...fill, color: normalizedFill } } : {}),
+          ...(fill?.type === 'linear-gradient' && normalizedStops ? { fill: { ...fill, stops: normalizedStops.map((stop) => ({ ...stop, color: stop.color ?? fill.stops[0]?.color ?? '#000000' })) } } : {}),
+          ...(stroke && normalizedStroke ? { stroke: { ...stroke, color: normalizedStroke } } : {}),
+        },
       };
       changed = true;
     }
