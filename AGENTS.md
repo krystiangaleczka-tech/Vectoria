@@ -263,15 +263,44 @@ Przed zmianą symbolu, typu, sygnatury, serializacji, commandu, modelu lub publi
 
 ### 3. Plan
 
-Dla zmian większych niż lokalna, oczywista korekta pokaż jeden kompletny plan:
+Dla zmian większych niż lokalna, oczywista korekta pokaż jeden kompletny plan. Plan nie jest listą plików — to udokumentowane decyzje. Każdy punkt poniżej jest **obowiązkowy**; brak któregokolwiek blokuje przejście do implementacji.
 
-- rezultat użytkownika i granica scope;
-- pliki oraz co zmieni się w każdym;
-- dotknięte warstwy i zależności;
-- commands/Undo-Redo dla mutacji dokumentu;
-- error/cancel/recovery;
-- testy unit/integration/E2E/visual/performance;
-- wszystkie pytania w jednej rundzie.
+#### 3.1 Wymagane elementy planu
+
+- **Rezultat użytkownika i granica scope**: co użytkownik będzie mógł zrobić; które taski backlogu (ID) wchodzą, a które jawnie nie.
+- **Status audytu vs kod**: dla każdego dotkniętego taska podaj status DONE/PARTIAL/MISSING z dowodem `file:line` z rzeczywistego kodu, a nie z `BACKLOG.md`. Nie powtarzaj statusu z backlogu bez weryfikacji.
+- **Pliki per warstwa**: dla każdego pliku — MODIFY/NEW + konkretna zmiana + cel. Sama lista ścieżek nie wystarcza.
+- **Zmiany kontraktu domenowego**: nowe/edytowane typy `SceneObject`, `Command`, style, schema. Jeśli dodajesz typ obiektu, komendę lub zmieniasz `DocumentModel` — **ADR jest wymagane przed implementacją** (§10). Zapisz jawne ID ADR.
+- **Commands/Undo-Redo**: każda mutacja dokumentu ma komendę z `execute`/`undo`; wskaż komendę i czy jest nowa czy istniejąca.
+- **Invariants — jawna lista**: wymień konkretnych invariantów (np. `sides ∈ [3,64]`, `0 <= inner < outer`, skończone kąty, `turns ∈ (0,20]`), nie ogólnikowe "dodaj reguły".
+- **Error/cancel/recovery**: Escape, pointercancel, błąd importu, pusty wynik — nie zostawiają częściowej mutacji.
+- **Zależności międzyepiczne i międzywarstwowe**: jeśli task polega na innej warstwie/epicu (np. eksport `fill-rule` zależy od EPIC-08, mask rendering zależy od EPIC-08), zaznacz to jawnie. Nie implementuj w założeniu, że zależność już działa — zweryfikuj `file:line`.
+- **Ryzyko regresji istniejących tasków DONE**: jeśli refaktorujesz istniejący kod (np. przenosisz logikę inline do engine), wskaż które DONE taski dotyka i jak zachowasz ich zachowanie + testy regresji.
+- **Decyzje do rozstrzygnięcia PRZED implementacją**: każda niejasność (np. "osobny typ czy podtyp polygonu?", "pole persistowane czy wyliczane?") musi mieć rozstrzygnięcie w planie. Zabronione jest pisać "nie ma niejasności", jeśli plan wprowadza nowy kontrakt.
+- **Pełna macierz testów**: unit (geometria/invariants/commands), Playwright E2E (workflow create→edit→cancel→export→undo), visual regression (Dark/Light, DPR 1/2, wymiary z §8), performance (jeśli hot path). Wymień scenariusze, nie tylko kategorie.
+- **Quality gates — dokładne skrypty**: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm exec playwright test`, `pnpm build` (jeśli dotyka build). Nie zgaduj nazw — sprawdź `package.json`.
+- **Comment rules**: plan dotyka publicznych metod/getterów >3 linie → JSDoc (CO/DLACZEGO, nie JAK).
+- **Wszystkie pytania w jednej rundzie**.
+
+#### 3.2 Checklist akceptacji planu
+
+Plan jest kompletny (gotowy do implementacji) dopiero gdy każdy punkt odhaczony `[x]`:
+
+- [ ] Scope + ID tasków backlogu (wchodzi/nie wchodzi).
+- [ ] Status DONE/PARTIAL/MISSING per task z `file:line`.
+- [ ] Pliki per warstwa z MODIFY/NEW + konkretna zmiana.
+- [ ] ADR dla zmiany kontraktu domenowego (ID zapisane).
+- [ ] Komendy z `execute`/`undo` wskazane.
+- [ ] Invariants wylistowane jawnie.
+- [ ] Error/cancel/recovery opisane.
+- [ ] Zależności międzyepiczne/ międzywarstwowe zaznaczone i zweryfikowane.
+- [ ] Ryzyko regresji istniejących DONE + testy regresji.
+- [ ] Decyzje rozstrzygnięte (brak otwartych niejasności).
+- [ ] Pełna macierz testów (unit + E2E + visual + perf).
+- [ ] Quality gates — dokładne skrypty z `package.json`.
+- [ ] Comment rules uwzględnione.
+
+Jeśli choć jeden punkt jest `[ ]` bez uzasadnienia — plan **nie jest gotowy**. Nie mów "plan gotowy do implementacji".
 
 Po akceptacji planu nie reanalizuj i nie rozszerzaj zakresu bez zgody.
 
