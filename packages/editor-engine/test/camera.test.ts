@@ -57,4 +57,29 @@ describe('Camera Coordinate Transforms & Navigation', () => {
     expect(visible.width).toBeCloseTo(visible.height, 5);
     expect(visible.width).toBeGreaterThan(200);
   });
+
+  it('handles extreme zoom values safely by clamping', () => {
+    const camera = new Camera();
+    camera.zoomAtPoint(1000000, { x: 500, y: 500 });
+    expect(camera.zoom).toBeLessThanOrEqual(64); // MAX_ZOOM
+
+    camera.zoomAtPoint(0.0000001, { x: 500, y: 500 });
+    expect(camera.zoom).toBeGreaterThanOrEqual(0.01); // MIN_ZOOM
+  });
+
+  it('ignores NaN and Infinity in rotation and zoom factors', () => {
+    const camera = new Camera();
+    camera.setRotation(NaN);
+    expect(camera.rotation).toBe(0);
+
+    camera.setRotation(Infinity);
+    expect(camera.rotation).toBe(0);
+
+    const prevZoom = camera.zoom;
+    camera.zoomAtPoint(NaN, { x: 100, y: 100 });
+    expect(camera.zoom).toBe(prevZoom);
+
+    camera.zoomAtPoint(Infinity, { x: 100, y: 100 });
+    expect(camera.zoom).toBe(prevZoom);
+  });
 });

@@ -345,3 +345,30 @@ Nie wolno:
 - [ ] Dodano adekwatne testy, fixtures, baselines lub benchmark.
 - [ ] Uruchomiono oraz zaraportowano rzeczywiste quality gates.
 - [ ] Zaktualizowano ADR/dokumentację, gdy zmieniono architekturę.
+
+---
+
+## 11. GEMINI FLASH CONSTRAINTS (Twarde reguły dla modeli generujących)
+
+> **UWAGA**: Ta sekcja ma absolutny priorytet. Modele takie jak Gemini Flash mają tendencję do halucynowania uproszczeń, ucinania kodu i ignorowania reszty pliku. Poniższe zasady wymuszają sztywne klamry wykonawcze.
+
+### 11.1 Rola i Tryb Pracy
+- Jesteś precyzyjnym wykonawcą kodu (Code Generator).
+- **Zakaz lania wody**, wstępów i podsumowań.
+- Wykonujesz **wyłącznie zdefiniowany task**, nie optymalizujesz kodu dookoła.
+
+### 11.2 Żelazne Zakazy (Negative Rules)
+- **NO MOCKING / NO GUESSING:** Jeśli brakuje typu/importu/funkcji, nie twórz atrapy – zgłoś brak.
+- **NO SILENT TRUNCATION:** Bezwzględny zakaz wstawiania `// ...rest of code`, `// TODO`, `// implement later`.
+- **NO SCOPE CREEP:** Nie zmieniaj architektury, bibliotek ani struktury plików bez wyraźnego polecenia.
+- **NO PLACEHOLDER IMPLEMENTATION:** Każda funkcja musi mieć pełne, działające ciało. Zwracaj kompletny plik.
+
+### 11.3 Protokół Wykonania (Execution Chain)
+Zanim wygenerujesz jakikolwiek kod lub wykonasz operacje na plikach, zawsze wygeneruj scratchpad w myślach (lub w formacie tekstowym dla użytkownika):
+1. **SCOPE:** 1-2 zdania określające co dokładnie zmieniasz.
+2. **EDGE CASES:** 1-2 warunki brzegowe (np. `null`, pusty stan, błąd parsowania), które ten kod musi obsłużyć.
+3. **CHECKLIST:** Wypisz wymagania z promptu w formie `[ ]`.
+
+### 11.4 Format Zwracania Kodu (Output)
+- Generuj **wyłącznie** docelowy blok kodu w odpowiednim języku bez zmian architektury w tle.
+- Pod kodem oznacz checklistę jako `[x]`, by wymusić weryfikację spełnienia założeń zadania przez system uwagi modelu.

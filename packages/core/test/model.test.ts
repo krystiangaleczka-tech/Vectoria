@@ -11,6 +11,7 @@ import {
   DeleteArtboardCommand,
   DuplicateArtboardCommand,
   SetDocumentUnitCommand,
+  SetArtboardOrientationCommand,
 } from '../src/index.js';
 import { mat3TransformPoint } from '@vectoria/shared';
 
@@ -74,6 +75,15 @@ describe('Artboard and unit commands', () => {
     const changed = new SetDocumentUnitCommand('in').execute(doc);
     expect(changed.artboards[changed.activeArtboardId]!.width).toBe(width);
     expect(changed.unit).toBe('in');
+  });
+
+  it('changes artboard orientation through an undoable command', () => {
+    const doc = createDefaultDocument({ width: 800, height: 600 });
+    const command = new SetArtboardOrientationCommand(doc.activeArtboardId, 'portrait', doc);
+    const next = command.execute(doc);
+    expect(next.artboards[next.activeArtboardId]!.width).toBe(600);
+    expect(next.artboards[next.activeArtboardId]!.height).toBe(800);
+    expect(command.undo(next).artboards[doc.activeArtboardId]!.width).toBe(800);
   });
 });
 

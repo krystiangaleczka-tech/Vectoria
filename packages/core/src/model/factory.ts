@@ -68,6 +68,7 @@ export function createDefaultDocument(options: CreateDocumentOptions = {}): Docu
     height: unitToPx(height, unit),
     background: { type: 'color', color: '#ffffff' },
     visible: true,
+    orientation: height >= width ? 'portrait' : 'landscape',
     frame: { x: 0, y: 0, width: unitToPx(width, unit), height: unitToPx(height, unit) },
   };
 

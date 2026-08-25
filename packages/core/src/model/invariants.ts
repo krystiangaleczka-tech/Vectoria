@@ -111,6 +111,25 @@ export function validateInvariants(doc: DocumentModel): InvariantViolation[] {
       } else {
         registerId(obj.id, 'DUPLICATE_DOCUMENT_ID');
         if (obj.id !== objectId) violations.push({ code: 'OBJECT_KEY_MISMATCH', message: `Object key '${objectId}' does not match its id.` });
+        if (obj.type === 'group') {
+          if (obj.childIds.length === 0) violations.push({ code: 'EMPTY_GROUP', message: `Group '${objectId}' must contain at least one child.` });
+          const nestedIds = new Set<string>();
+          const visitChild = (childId: string, ancestors: ReadonlySet<string>): void => {
+            if (nestedIds.has(childId)) violations.push({ code: 'DUPLICATE_GROUP_CHILD', message: `Group '${objectId}' contains child '${childId}' more than once.` });
+            nestedIds.add(childId);
+            const child = doc.objects[childId];
+            if (!child) violations.push({ code: 'MISSING_GROUP_CHILD', message: `Group '${objectId}' references missing child '${childId}'.` });
+            if (ancestors.has(childId)) violations.push({ code: 'GROUP_CYCLE', message: `Group hierarchy contains cycle at '${childId}'.` });
+            if (child && child.layerId !== obj.layerId) violations.push({ code: 'GROUP_LAYER_MISMATCH', message: `Group '${objectId}' child '${childId}' belongs to another layer.` });
+            if (child && seenObjectIds.has(childId)) violations.push({ code: 'DUPLICATE_OBJECT_IN_GROUPS', message: `Object '${childId}' appears in more than one ownership location.` });
+            if (child) seenObjectIds.add(childId);
+            if (child?.type === 'group' && !ancestors.has(childId)) visitGroup(child, new Set([...ancestors, childId]));
+          };
+          const visitGroup = (group: Extract<typeof obj, { type: 'group' }>, ancestors: ReadonlySet<string>): void => {
+            for (const childId of group.childIds) visitChild(childId, ancestors);
+          };
+          visitGroup(obj, new Set([objectId]));
+        }
         // object.layerId must match
         if (obj.layerId !== layerId) {
           violations.push({

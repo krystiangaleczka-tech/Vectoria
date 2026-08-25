@@ -1,6 +1,6 @@
 import React from 'react';
 import type { DocumentModel, ObjectId, ObjectStyle, SceneObject, CornerRadii, PathNode, SelectionState, GeometryPreview, BlendMode } from '@vectoria/core';
-import { normalizeCornerRadii } from '@vectoria/core';
+import { normalizeCornerRadii, getObjectBounds } from '@vectoria/core';
 import type { Vec2 } from '@vectoria/shared';
 import { defaultStroke } from '@vectoria/core';
 import { NumberInput, ColorControl, Button } from '@vectoria/ui';
@@ -8,6 +8,7 @@ import { convertUnit } from '@vectoria/shared';
 import type { DocumentUnit } from '@vectoria/core';
 import type { GridSettings } from '@vectoria/editor-engine';
 import { GeometryProperties, type GeometryAction } from '../properties/GeometryProperties.js';
+import { PivotControl } from './PivotControl.js';
 
 export type PathAction =
    | { type: 'stroke-to-path'; objectId: ObjectId }
@@ -34,6 +35,11 @@ export interface PropertiesPanelProps {
   onUpdateFill: (id: ObjectId, color: string | null) => void;
   onUpdateObjectStyle?: (id: ObjectId, patch: Partial<ObjectStyle>) => void;
   onUpdateRotation?: (id: ObjectId, degrees: number) => void;
+  onUpdatePivot?: (id: ObjectId, pivot: Vec2) => void;
+  onUpdateSkew?: (id: ObjectId, axis: 'x' | 'y', degrees: number) => void;
+  onAlign?: (alignment: import('@vectoria/core').Alignment, target: 'selection' | 'artboard' | 'key') => void;
+  onDistribute?: (axis: 'horizontal' | 'vertical') => void;
+  onReorder?: (direction: import('@vectoria/core').ReorderDirection) => void;
   onUpdateArtboard?: (width: number, height: number, background?: { type: 'transparent' } | { type: 'color'; color: string }) => void;
   onUpdateUnit?: (unit: DocumentUnit) => void;
   gridSettings?: GridSettings;
@@ -48,6 +54,7 @@ export interface PropertiesPanelProps {
   onApplyGeometryPreview?: () => void;
   onCancelGeometryPreview?: () => void;
   onOpenCleanup?: () => void;
+  onUpdateGroupTransform?: (ids: readonly ObjectId[], scaleX: number, scaleY: number, pivotWorld: { x: number; y: number }) => void;
 }
 
 const dimensions = (object: SceneObject): { width: number; height: number } | null =>
@@ -64,6 +71,11 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   onUpdateFill,
   onUpdateObjectStyle,
   onUpdateRotation,
+  onUpdatePivot,
+  onUpdateSkew,
+  onAlign,
+  onDistribute,
+  onReorder,
   onUpdateArtboard,
   onUpdateUnit,
   gridSettings,
@@ -78,12 +90,33 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   onApplyGeometryPreview,
   onCancelGeometryPreview,
   onOpenCleanup,
+  onUpdateGroupTransform,
 }) => {
+  const [aspectLocked, setAspectLocked] = React.useState(true);
+  const [alignTarget, setAlignTarget] = React.useState<'selection' | 'artboard' | 'key'>('selection');
   const selected = selectedObjectId ? doc.objects[selectedObjectId] : null;
   const artboard = doc.artboards[doc.activeArtboardId];
   const size = selected ? dimensions(selected) : null;
   const radii = selected?.type === 'rectangle' ? normalizeCornerRadii(selected.cornerRadius, selected.width, selected.height) : null;
   const patchStyle = (patch: Partial<ObjectStyle>) => selected && onUpdateObjectStyle?.(selected.id, patch);
+
+  // Effective signed dimensions (reflect flip state via scale sign)
+  const flipX = selected ? (selected.transform.scale.x < 0 ? -1 : 1) : 1;
+  const flipY = selected ? (selected.transform.scale.y < 0 ? -1 : 1) : 1;
+  const effectiveWidth = size ? size.width * flipX : 0;
+  const effectiveHeight = size ? size.height * flipY : 0;
+
+  // Group bounds for multiselect using proper getObjectBounds
+  const groupBounds = selectedObjectIds.length > 1 ? selectedObjectIds.reduce<{ x: number; y: number; right: number; bottom: number } | null>((acc, id) => {
+    const obj = doc.objects[id];
+    if (!obj) return acc;
+    const b = getObjectBounds(obj, doc);
+    if (!acc) return { x: b.x, y: b.y, right: b.x + b.width, bottom: b.y + b.height };
+    return { x: Math.min(acc.x, b.x), y: Math.min(acc.y, b.y), right: Math.max(acc.right, b.x + b.width), bottom: Math.max(acc.bottom, b.y + b.height) };
+  }, null) : null;
+  const groupW = groupBounds ? groupBounds.right - groupBounds.x : 0;
+  const groupH = groupBounds ? groupBounds.bottom - groupBounds.y : 0;
+  const groupPivotWorld = groupBounds ? { x: groupBounds.x + groupW / 2, y: groupBounds.y + groupH / 2 } : { x: 0, y: 0 };
   const selectedPathNodeIndex = selected?.type === 'path'
     ? Math.max(0, selected.nodes.findIndex((_, index) => selection.nodeIds.includes(`${selected.id}:${index}`)))
     : -1;
@@ -106,8 +139,9 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               <NumberInput data-testid="prop-x" label="X" disabled={selected.locked} value={convertUnit(selected.transform.position.x, 'px', doc.unit)} unit={doc.unit} decimals={2} onChange={(value) => onUpdatePosition(selected.id, convertUnit(value, doc.unit, 'px'), selected.transform.position.y)} />
               <NumberInput data-testid="prop-y" label="Y" disabled={selected.locked} value={convertUnit(selected.transform.position.y, 'px', doc.unit)} unit={doc.unit} decimals={2} onChange={(value) => onUpdatePosition(selected.id, selected.transform.position.x, convertUnit(value, doc.unit, 'px'))} />
                {size && <>
-                 <NumberInput data-testid="prop-w" label="W" disabled={selected.locked} min={0.000001} value={convertUnit(size.width, 'px', doc.unit)} unit={doc.unit} decimals={2} onChange={(value) => onUpdateDimensions(selected.id, convertUnit(value, doc.unit, 'px'), size.height)} />
-                 <NumberInput data-testid="prop-h" label="H" disabled={selected.locked} min={0.000001} value={convertUnit(size.height, 'px', doc.unit)} unit={doc.unit} decimals={2} onChange={(value) => onUpdateDimensions(selected.id, size.width, convertUnit(value, doc.unit, 'px'))} />
+                 <NumberInput data-testid="prop-w" label="W" disabled={selected.locked} value={convertUnit(effectiveWidth, 'px', doc.unit)} unit={doc.unit} decimals={2} onChange={(value) => { const newWidth = convertUnit(value, doc.unit, 'px'); onUpdateDimensions(selected.id, newWidth, aspectLocked && size.width !== 0 ? Math.abs(size.height) * (Math.abs(newWidth) / Math.abs(size.width)) * (newWidth < 0 ? -1 : 1) : effectiveHeight); }} />
+                 <button type="button" className={`aspect-lock-button ${aspectLocked ? 'locked' : 'unlocked'}`} onClick={() => setAspectLocked(!aspectLocked)} title={aspectLocked ? 'Unlock proportions' : 'Lock proportions'} aria-label="Toggle aspect ratio lock">{aspectLocked ? '🔒' : '🔓'}</button>
+                 <NumberInput data-testid="prop-h" label="H" disabled={selected.locked} value={convertUnit(effectiveHeight, 'px', doc.unit)} unit={doc.unit} decimals={2} onChange={(value) => { const newHeight = convertUnit(value, doc.unit, 'px'); onUpdateDimensions(selected.id, aspectLocked && size.height !== 0 ? Math.abs(size.width) * (Math.abs(newHeight) / Math.abs(size.height)) * (newHeight < 0 ? -1 : 1) : effectiveWidth, newHeight); }} />
                </>}
                 {selected.type === 'line' && <>
                  <NumberInput data-testid="prop-end-x" label="End X" disabled={selected.locked} value={convertUnit(selected.endPoint.x, 'px', doc.unit)} unit={doc.unit} decimals={2} onChange={(value) => onUpdateLineEndpoint?.(selected.id, { x: convertUnit(value, doc.unit, 'px'), y: selected.endPoint.y })} />
@@ -123,9 +157,57 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                  <NumberInput data-testid="prop-radius-br" label="BR" disabled={selected.locked} min={0} value={convertUnit(radii.bottomRight, 'px', doc.unit)} unit={doc.unit} decimals={2} onChange={(value) => onUpdateCornerRadius?.(selected.id, { ...radii, bottomRight: convertUnit(value, doc.unit, 'px') })} />
                  <NumberInput data-testid="prop-radius-bl" label="BL" disabled={selected.locked} min={0} value={convertUnit(radii.bottomLeft, 'px', doc.unit)} unit={doc.unit} decimals={2} onChange={(value) => onUpdateCornerRadius?.(selected.id, { ...radii, bottomLeft: convertUnit(value, doc.unit, 'px') })} />
                </>}
-              <NumberInput data-testid="prop-rotation" label="Rot" disabled={selected.locked} value={selected.transform.rotation * 180 / Math.PI} decimals={1} unit="°" onChange={(value) => onUpdateRotation?.(selected.id, value)} />
-            </div>
-           </section>
+               <NumberInput data-testid="prop-rotation" label="Rot" disabled={selected.locked} value={selected.transform.rotation * 180 / Math.PI} decimals={1} unit="°" onChange={(value) => onUpdateRotation?.(selected.id, value)} />
+               {size && <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                 <PivotControl pivot={selected.transform.pivot} size={size} disabled={selected.locked} onChange={(pivot) => onUpdatePivot?.(selected.id, pivot)} />
+                 <div style={{ flex: 1, display: 'flex', gap: '4px', flexDirection: 'column' }}>
+                   <NumberInput data-testid="prop-pivot-x" label="Pivot X" disabled={selected.locked} value={selected.transform.pivot.x} decimals={2} onChange={(value) => onUpdatePivot?.(selected.id, { x: value, y: selected.transform.pivot.y })} />
+                   <NumberInput data-testid="prop-pivot-y" label="Pivot Y" disabled={selected.locked} value={selected.transform.pivot.y} decimals={2} onChange={(value) => onUpdatePivot?.(selected.id, { x: selected.transform.pivot.x, y: value })} />
+                 </div>
+               </div>}
+               <NumberInput data-testid="prop-skew-x" label="Skew X" disabled={selected.locked} min={-89} max={89} value={(selected.transform.skew?.x ?? 0) * 180 / Math.PI} decimals={1} unit="°" onChange={(value) => onUpdateSkew?.(selected.id, 'x', value)} />
+               <NumberInput data-testid="prop-skew-y" label="Skew Y" disabled={selected.locked} min={-89} max={89} value={(selected.transform.skew?.y ?? 0) * 180 / Math.PI} decimals={1} unit="°" onChange={(value) => onUpdateSkew?.(selected.id, 'y', value)} />
+             </div>
+             </section>
+             {selectedObjectIds.length > 1 && groupBounds && <section className="property-section" aria-label="Group transform">
+               <div className="panel-section-heading"><span>Group Transform</span><span className="panel-count">{selectedObjectIds.length} objects</span></div>
+               <div className="property-grid">
+                 <NumberInput data-testid="group-w" label="W" value={convertUnit(groupW, 'px', doc.unit)} unit={doc.unit} decimals={2} onChange={(value) => {
+                   const newW = convertUnit(Math.abs(value), doc.unit, 'px');
+                   if (groupW > 0) onUpdateGroupTransform?.(selectedObjectIds, newW / groupW, 1, groupPivotWorld);
+                 }} />
+                 <button type="button" className={`aspect-lock-button ${aspectLocked ? 'locked' : 'unlocked'}`} onClick={() => setAspectLocked(!aspectLocked)} title={aspectLocked ? 'Unlock proportions' : 'Lock proportions'} aria-label="Toggle aspect ratio lock">{aspectLocked ? '🔒' : '🔓'}</button>
+                 <NumberInput data-testid="group-h" label="H" value={convertUnit(groupH, 'px', doc.unit)} unit={doc.unit} decimals={2} onChange={(value) => {
+                   const newH = convertUnit(Math.abs(value), doc.unit, 'px');
+                   if (groupH > 0) onUpdateGroupTransform?.(selectedObjectIds, aspectLocked && groupH > 0 ? newH / groupH : 1, newH / groupH, groupPivotWorld);
+                 }} />
+               </div>
+             </section>}
+            {selectedObjectIds.length > 1 && <section className="property-section" aria-label="Selection operations">
+              <div className="panel-section-heading">
+                <span>Arrange</span>
+                <select className="arrange-target-select" style={{ background: 'transparent', color: 'inherit', border: 'none', outline: 'none', marginLeft: 'auto', fontSize: '11px' }} value={alignTarget} onChange={(e) => setAlignTarget(e.target.value as 'selection' | 'artboard' | 'key')} aria-label="Align target">
+                  <option value="selection">Selection</option>
+                  <option value="artboard">Artboard</option>
+                  <option value="key">Key Object</option>
+                </select>
+                <span className="panel-count">{selectedObjectIds.length}</span>
+              </div>
+              <div className="property-actions path-actions">
+                <Button size="sm" variant="ghost" onClick={() => onAlign?.('left', alignTarget)}>Left</Button>
+                <Button size="sm" variant="ghost" onClick={() => onAlign?.('center', alignTarget)}>Center</Button>
+                <Button size="sm" variant="ghost" onClick={() => onAlign?.('right', alignTarget)}>Right</Button>
+                <Button size="sm" variant="ghost" onClick={() => onAlign?.('top', alignTarget)}>Top</Button>
+                <Button size="sm" variant="ghost" onClick={() => onAlign?.('middle', alignTarget)}>Middle</Button>
+                <Button size="sm" variant="ghost" onClick={() => onAlign?.('bottom', alignTarget)}>Bottom</Button>
+                <Button size="sm" variant="ghost" onClick={() => onDistribute?.('horizontal')}>Distribute X</Button>
+                <Button size="sm" variant="ghost" onClick={() => onDistribute?.('vertical')}>Distribute Y</Button>
+                <Button size="sm" variant="ghost" onClick={() => onReorder?.('front')}>Front</Button>
+                <Button size="sm" variant="ghost" onClick={() => onReorder?.('back')}>Back</Button>
+                <Button size="sm" variant="ghost" onClick={() => onReorder?.('forward')}>Forward</Button>
+                <Button size="sm" variant="ghost" onClick={() => onReorder?.('backward')}>Backward</Button>
+              </div>
+            </section>}
             {selected.type === 'path' && <section className="property-section" aria-label="Path operations">
               <div className="panel-section-heading"><span>Drawing</span><span className="panel-count">{selected.nodes.length} nodes</span></div>
               <div className="property-actions path-actions">

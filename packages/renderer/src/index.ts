@@ -1,8 +1,13 @@
 import type { Camera } from '@vectoria/editor-engine';
 import type { Vec2 } from '@vectoria/shared';
 import type { DocumentModel, Artboard, RectangleObject, EllipseObject, LineObject, PathObject, ObjectId, Transform2D, LinearGradientFill, RadialGradientFill, AngularGradientFill, PatternFill, GeometryPreview, SceneObject } from '@vectoria/core';
+import type { SnapResult } from '@vectoria/editor-engine';
 import { getTransformMatrix, getObjectBounds, rectsIntersect, normalizeCornerRadii, flattenPath, widthAtT } from '@vectoria/core';
 import { mat3TransformPoint } from '@vectoria/shared';
+import { RenderMetrics } from './metrics.js';
+export { RenderQualityPolicy, type RenderQuality } from './quality.js';
+export { RenderMetrics, type RenderMetricsSnapshot } from './metrics.js';
+export { FRAME_BUDGET_MS, INPUT_TO_RENDER_BUDGET_MS, evaluatePerformanceBudget, type PerformanceBudgetResult } from './performance.js';
 export interface GridSettings { visible: boolean; size: number; subdivisions: number }
 
 // ─── Theme color cache (avoids per-frame getComputedStyle calls) ─────────────
@@ -43,6 +48,7 @@ function getGridLines(rect: { x: number; y: number; width: number; height: numbe
 export class RenderLoop {
   private rafId: number | null = null;
   private started = false;
+  readonly metrics = new RenderMetrics();
 
   constructor(private readonly renderFn: () => void) {}
 
@@ -51,9 +57,13 @@ export class RenderLoop {
     if (!this.started || this.rafId !== null) return;
     this.rafId = requestAnimationFrame(() => {
       this.rafId = null;
+      const startedAt = performance.now();
       this.renderFn();
+      this.metrics.recordFrame(performance.now() - startedAt);
     });
   }
+
+  markInput(timestamp = performance.now()): void { this.metrics.markInput(timestamp); }
 
   /** Start the render loop. */
   start(): void {
@@ -105,7 +115,7 @@ export function renderBackground(
   artboard: Artboard,
   canvasWidth: number,
   canvasHeight: number,
-  options?: { showGrid?: boolean; grid?: GridSettings },
+  options?: { showGrid?: boolean; grid?: GridSettings; guides?: readonly import('@vectoria/core').Guide[] },
 ): void {
   const dpr = window.devicePixelRatio || 1;
 
@@ -140,6 +150,21 @@ export function renderBackground(
       drawLines(lines.minor, 0.12);
       drawLines(lines.major, 0.24);
     }
+  }
+
+  for (const guide of options?.guides ?? []) {
+    if (!guide.visible) continue;
+    ctx.strokeStyle = themeColor('--color-guide', '#52cdf6');
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    if (guide.axis === 'vertical') {
+      const x = camera.worldToScreen({ x: guide.position, y: 0 }).x;
+      ctx.moveTo(x + 0.5, 0); ctx.lineTo(x + 0.5, canvasHeight / dpr);
+    } else {
+      const y = camera.worldToScreen({ x: 0, y: guide.position }).y;
+      ctx.moveTo(0, y + 0.5); ctx.lineTo(canvasWidth / dpr, y + 0.5);
+    }
+    ctx.stroke();
   }
 
   // Artboard shadow
@@ -201,6 +226,7 @@ export function renderScene(
   options?: {
     previewTransforms?: Record<string, import('@vectoria/core').Transform2D>;
     showGrid?: boolean;
+    quality?: import('./quality.js').RenderQuality;
   }
 ): void {
   const dpr = window.devicePixelRatio || 1;
@@ -242,11 +268,12 @@ export function renderScene(
         obj = { ...obj, style: { ...obj.style, opacity: obj.style.opacity * layer.opacity } };
       }
 
-      if (!rectsIntersect(getObjectBounds(obj), visibleWorldRect)) continue;
+       if (!rectsIntersect(getObjectBounds(obj, doc), visibleWorldRect)) continue;
 
       ctx.globalCompositeOperation = obj.style.blendMode === 'normal' || obj.style.blendMode === undefined ? 'source-over' : obj.style.blendMode;
 
-      switch (obj.type) {
+       if (options?.quality === 'interactive' && getObjectBounds(obj, doc).width * camera.zoom < 2 && getObjectBounds(obj, doc).height * camera.zoom < 2) continue;
+       switch (obj.type) {
         case 'rectangle':
           renderRectangle(ctx, obj as RectangleObject);
           break;
@@ -257,8 +284,14 @@ export function renderScene(
           renderLine(ctx, obj as LineObject);
           break;
          case 'path':
-           renderPath(ctx, obj as PathObject);
-          break;
+            renderPath(ctx, obj as PathObject);
+           break;
+         case 'group':
+           for (const childId of obj.childIds) {
+             const child = doc.objects[childId];
+             if (child?.visible) renderSceneObject(ctx, child, doc);
+           }
+           break;
       }
     }
   }
@@ -332,6 +365,16 @@ function resolveFill(
   if (fill.type === 'angular-gradient') return buildAngularGradient(ctx, fill);
   if (fill.type === 'pattern') return buildPattern(ctx, fill);
   return 'transparent'; // 'none'
+}
+
+function renderSceneObject(ctx: CanvasRenderingContext2D, obj: SceneObject, doc?: DocumentModel): void {
+  switch (obj.type) {
+    case 'rectangle': renderRectangle(ctx, obj); break;
+    case 'ellipse': renderEllipse(ctx, obj); break;
+    case 'line': renderLine(ctx, obj); break;
+    case 'path': renderPath(ctx, obj); break;
+    case 'group': obj.childIds.forEach((childId) => { const child = doc?.objects[childId]; if (child?.visible) renderSceneObject(ctx, child, doc); }); break;
+  }
 }
 
 function renderRectangle(
@@ -558,6 +601,18 @@ export function renderOverlay(
     pathPreviews?: ReadonlyMap<ObjectId, PathObject['nodes']>;
     nodeSelectionIds?: readonly string[];
     marquee?: { start: Vec2; end: Vec2 };
+    lasso?: readonly Vec2[];
+    snap?: SnapResult;
+    smartDistance?: { 
+      point: Vec2; dx: number; dy: number;
+      hover?: {
+        selectionBounds: { x: number; y: number; width: number; height: number };
+        hoverBounds: { x: number; y: number; width: number; height: number };
+      }
+    };
+    objectSnap?: {
+      guides: { axis: 'horizontal' | 'vertical'; position: number; targetId: string }[];
+    };
     geometryPreview?: GeometryPreview;
   },
 ): void {
@@ -581,8 +636,83 @@ export function renderOverlay(
     ctx.setLineDash([]);
   }
 
+  if (options?.lasso && options.lasso.length > 1) {
+    ctx.strokeStyle = themeColor('--color-selection', '#5caeff');
+    ctx.fillStyle = themeColor('--color-selection-fill', 'rgba(92, 174, 255, 0.13)');
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 3]);
+    ctx.beginPath();
+    options.lasso.forEach((point, index) => {
+      const screen = camera.worldToScreen(point);
+      if (index === 0) ctx.moveTo(screen.x, screen.y);
+      else ctx.lineTo(screen.x, screen.y);
+    });
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  if (options?.snap?.snapped) {
+    const point = camera.worldToScreen(options.snap.worldPoint);
+    ctx.strokeStyle = themeColor('--color-snap', '#ed61da');
+    ctx.fillStyle = themeColor('--color-snap', '#ed61da');
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(point.x - 6, point.y); ctx.lineTo(point.x + 6, point.y);
+    ctx.moveTo(point.x, point.y - 6); ctx.lineTo(point.x, point.y + 6);
+    ctx.stroke();
+    ctx.font = '10px var(--font-mono)';
+    ctx.fillText(options.snap.candidate?.label ?? 'Snap', point.x + 8, point.y - 8);
+  }
+
+  if (options?.smartDistance) {
+    const point = camera.worldToScreen(options.smartDistance.point);
+    ctx.fillStyle = themeColor('--color-smart-distance', '#5acc9a');
+    ctx.strokeStyle = themeColor('--color-smart-distance', '#5acc9a');
+    ctx.font = '10px var(--font-mono)';
+    ctx.fillText(`ΔX ${options.smartDistance.dx.toFixed(1)} · ΔY ${options.smartDistance.dy.toFixed(1)}`, point.x + 8, point.y + 16);
+    
+    if (options.smartDistance.hover) {
+      const { selectionBounds: sb, hoverBounds: hb } = options.smartDistance.hover;
+      ctx.lineWidth = 1;
+      
+      const drawDist = (p1: Vec2, p2: Vec2, label: string) => {
+        const s1 = camera.worldToScreen(p1);
+        const s2 = camera.worldToScreen(p2);
+        ctx.beginPath();
+        ctx.moveTo(s1.x, s1.y);
+        ctx.lineTo(s2.x, s2.y);
+        ctx.stroke();
+        const mid = { x: (s1.x + s2.x) / 2, y: (s1.y + s2.y) / 2 };
+        ctx.fillText(label, mid.x + 4, mid.y - 4);
+      };
+
+      if (sb.x + sb.width < hb.x) drawDist({ x: sb.x + sb.width, y: sb.y + sb.height / 2 }, { x: hb.x, y: sb.y + sb.height / 2 }, (hb.x - (sb.x + sb.width)).toFixed(1));
+      if (hb.x + hb.width < sb.x) drawDist({ x: hb.x + hb.width, y: hb.y + hb.height / 2 }, { x: sb.x, y: hb.y + hb.height / 2 }, (sb.x - (hb.x + hb.width)).toFixed(1));
+      if (sb.y + sb.height < hb.y) drawDist({ x: sb.x + sb.width / 2, y: sb.y + sb.height }, { x: sb.x + sb.width / 2, y: hb.y }, (hb.y - (sb.y + sb.height)).toFixed(1));
+      if (hb.y + hb.height < sb.y) drawDist({ x: hb.x + hb.width / 2, y: hb.y + hb.height }, { x: hb.x + hb.width / 2, y: sb.y }, (sb.y - (hb.y + hb.height)).toFixed(1));
+    }
+  }
+
   if (options?.geometryPreview) {
     renderGeometryPreview(ctx, camera, options.geometryPreview);
+  }
+
+  if (options?.objectSnap && options.objectSnap.guides.length > 0) {
+    ctx.strokeStyle = themeColor('--color-snap', '#ed61da');
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (const guide of options.objectSnap.guides) {
+      if (guide.axis === 'vertical') {
+        const x = camera.worldToScreen({ x: guide.position, y: 0 }).x;
+        ctx.moveTo(x + 0.5, 0);
+        ctx.lineTo(x + 0.5, canvasHeight / dpr);
+      } else {
+        const y = camera.worldToScreen({ x: 0, y: guide.position }).y;
+        ctx.moveTo(0, y + 0.5);
+        ctx.lineTo(canvasWidth / dpr, y + 0.5);
+      }
+    }
+    ctx.stroke();
   }
 
   if (selectedIds.size === 0) {
@@ -591,7 +721,7 @@ export function renderOverlay(
   }
 
   if (selectedIds.size > 1) {
-    const bounds = [...selectedIds].map((id) => doc.objects[id]).filter(Boolean).map((object) => getObjectBounds(object!));
+     const bounds = [...selectedIds].map((id) => doc.objects[id]).filter(Boolean).map((object) => getObjectBounds(object!, doc));
     if (bounds.length > 0) {
       const minX = Math.min(...bounds.map((bound) => bound.x));
       const minY = Math.min(...bounds.map((bound) => bound.y));
@@ -634,8 +764,19 @@ export function renderOverlay(
         renderLineSelectionOutline(ctx, camera, obj as LineObject);
         break;
       case 'path':
-        renderPathSelectionOutline(ctx, camera, options?.pathPreviews?.get(objectId) ? { ...obj, nodes: options.pathPreviews.get(objectId)! } : obj as PathObject);
-        break;
+         renderPathSelectionOutline(ctx, camera, options?.pathPreviews?.get(objectId) ? { ...obj, nodes: options.pathPreviews.get(objectId)! } : obj as PathObject);
+         break;
+       case 'group': {
+         const bound = getObjectBounds(obj, doc);
+         const topLeft = camera.worldToScreen({ x: bound.x, y: bound.y });
+         const bottomRight = camera.worldToScreen({ x: bound.x + bound.width, y: bound.y + bound.height });
+         ctx.strokeStyle = themeColor('--color-selection', '#5caeff');
+         ctx.fillStyle = themeColor('--color-selection-fill', 'rgba(92, 174, 255, 0.13)');
+         ctx.lineWidth = 1.5;
+         ctx.strokeRect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
+         ctx.fillRect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
+         break;
+       }
     }
   }
 
@@ -651,7 +792,7 @@ function renderGeometryPreview(ctx: CanvasRenderingContext2D, camera: Camera, pr
   ctx.lineWidth = 1.5;
   for (const object of preview.proposed) {
     renderPreviewObject(ctx, camera, object);
-    const bound = getObjectBounds(object);
+     const bound = getObjectBounds(object);
     const topLeft = camera.worldToScreen({ x: bound.x, y: bound.y });
     const bottomRight = camera.worldToScreen({ x: bound.x + bound.width, y: bound.y + bound.height });
     ctx.fillStyle = themeColor('--color-accent-subtle', 'rgba(92, 174, 255, .16)');
@@ -659,7 +800,7 @@ function renderGeometryPreview(ctx: CanvasRenderingContext2D, camera: Camera, pr
     ctx.strokeRect(topLeft.x + 0.5, topLeft.y + 0.5, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
   }
   ctx.setLineDash([]);
-  const bounds = preview.proposed.map(getObjectBounds);
+   const bounds = preview.proposed.map((object) => getObjectBounds(object));
   if (bounds.length > 0) {
     const minX = Math.min(...bounds.map((bound) => bound.x));
     const minY = Math.min(...bounds.map((bound) => bound.y));

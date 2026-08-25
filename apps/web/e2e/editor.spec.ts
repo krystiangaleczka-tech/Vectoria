@@ -287,10 +287,10 @@ test.describe('Vectoria MVP Skeleton', () => {
     // Verify object count is still 1 after reload
     await expect(statusbar).toContainText('1 object');
 
-    // Switch to select tool and click where the rectangle was
-    const selectTool = page.locator('button[title="Select Tool (V)"]');
-    await selectTool.click();
-    await page.mouse.click(cx, cy);
+    // Select restored object from Layers so camera placement cannot affect recovery evidence.
+    await page.getByRole('tab', { name: 'Warstwy' }).click();
+    await page.getByRole('button', { name: /Zaznacz Rectangle/ }).click();
+    await page.getByRole('tab', { name: 'Właściwości' }).click();
 
     // Verify properties panel shows the rectangle (proves it was saved and restored)
     const propsPanel = page.locator('[data-testid="properties-panel"]');
@@ -434,5 +434,40 @@ test.describe('Vectoria MVP Skeleton', () => {
     await expect(page.getByTestId('history-panel')).toBeHidden();
     await page.getByRole('tab', { name: 'Historia' }).click();
     await expect(page.getByTestId('history-panel')).toContainText('Convert to curves');
+  });
+
+  test('groups objects, manages artboard metadata, and saves a named version', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    const canvas = page.getByTestId('canvas-viewport');
+    const box = await canvas.boundingBox();
+    if (!box) throw new Error('Canvas not found');
+    await page.getByRole('button', { name: 'Rectangle Tool' }).click();
+    await page.mouse.move(box.x + 220, box.y + 180);
+    await page.mouse.down();
+    await page.mouse.move(box.x + 280, box.y + 240, { steps: 3 });
+    await page.mouse.up();
+    await page.mouse.move(box.x + 340, box.y + 180);
+    await page.mouse.down();
+    await page.mouse.move(box.x + 400, box.y + 240, { steps: 3 });
+    await page.mouse.up();
+
+    await page.getByRole('tab', { name: 'Warstwy' }).click();
+    await page.getByRole('button', { name: 'Zaznacz Rectangle 1' }).click();
+    await page.getByRole('button', { name: 'Zaznacz Rectangle 2' }).click({ modifiers: ['Shift'] });
+    await page.getByRole('button', { name: 'Obiekt' }).click();
+    await page.getByRole('menuitem', { name: /^Group Cmd\+G$/ }).click();
+    await expect(page.getByTestId('layers-panel')).toContainText('Group');
+
+    await page.getByRole('tab', { name: 'Historia' }).click();
+    await page.getByLabel('Nazwa wersji').fill('Before polish');
+    await page.getByRole('button', { name: 'Zapisz' }).click();
+    await expect(page.getByTestId('history-panel')).toContainText('Before polish');
+
+    await page.getByRole('tab', { name: 'Artboardy' }).click();
+    await page.getByRole('button', { name: /Zmień nazwę Artboard 1/ }).click();
+    await page.getByRole('textbox', { name: 'Nazwa Artboard 1' }).fill('Main board');
+    await page.getByRole('textbox', { name: 'Nazwa Artboard 1' }).press('Enter');
+    await expect(page.getByTestId('artboards-panel')).toContainText('Main board');
   });
 });

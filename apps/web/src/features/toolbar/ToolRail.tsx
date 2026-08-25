@@ -2,7 +2,7 @@ import React from 'react';
 import { IconButton, VectoriaIcon } from '@vectoria/ui';
 import { Tooltip } from '@vectoria/ui';
 
-export type ActiveTool = 'select' | 'direct-select' | 'rectangle' | 'ellipse' | 'line' | 'pen' | 'pencil' | 'brush' | 'smooth' | 'corner' | 'eraser' | 'knife' | 'scissors' | 'width' | 'eyedropper' | 'bucket' | 'hand' | 'zoom';
+export type ActiveTool = 'select' | 'direct-select' | 'lasso' | 'node-lasso' | 'rectangle' | 'ellipse' | 'line' | 'pen' | 'pencil' | 'brush' | 'smooth' | 'corner' | 'eraser' | 'knife' | 'scissors' | 'width' | 'eyedropper' | 'bucket' | 'hand' | 'zoom';
 
 export interface ToolRailProps {
   activeTool: ActiveTool;
@@ -11,7 +11,7 @@ export interface ToolRailProps {
 
 export const ToolRail: React.FC<ToolRailProps> = ({ activeTool, onSelectTool }) => {
   const groups: readonly ToolGroup[] = [
-    { label: 'Selection', tools: [{ id: 'select', label: 'Select Tool', shortcut: 'V', icon: 'select' }, { id: 'direct-select', label: 'Direct Select Tool', shortcut: 'A', icon: 'directSelect' }] },
+    { label: 'Selection', tools: [{ id: 'select', label: 'Select Tool', shortcut: 'V', icon: 'select' }, { id: 'direct-select', label: 'Direct Select Tool', shortcut: 'A', icon: 'directSelect' }, { id: 'lasso', label: 'Lasso Tool', shortcut: 'O', icon: 'select' }, { id: 'node-lasso', label: 'Node Lasso Tool', shortcut: 'Shift+O', icon: 'directSelect' }] },
     { label: 'Shape', tools: [{ id: 'rectangle', label: 'Rectangle Tool', shortcut: 'R', icon: 'rectangle' }, { id: 'ellipse', label: 'Ellipse Tool', shortcut: 'L', icon: 'ellipse' }, { id: 'line', label: 'Line Tool', shortcut: '\\', icon: 'line' }] },
     { label: 'Draw', tools: [{ id: 'pen', label: 'Pen Tool', shortcut: 'P', icon: 'pen' }, { id: 'pencil', label: 'Pencil Tool', shortcut: 'N', icon: 'pencil' }, { id: 'brush', label: 'Brush Tool', shortcut: 'B', icon: 'brush' }, { id: 'smooth', label: 'Smooth Tool', shortcut: 'S', icon: 'pen' }] },
     { label: 'Edit path', tools: [{ id: 'corner', label: 'Corner Tool', shortcut: 'Q', icon: 'corner' }, { id: 'eraser', label: 'Eraser Tool', shortcut: 'Shift+E', icon: 'eraser' }, { id: 'knife', label: 'Knife Tool', shortcut: 'K', icon: 'scissors' }, { id: 'scissors', label: 'Scissors Tool', shortcut: 'C', icon: 'scissors' }, { id: 'width', label: 'Width Tool', shortcut: 'W', icon: 'width' }] },

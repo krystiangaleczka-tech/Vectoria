@@ -10,6 +10,7 @@ export interface HitTestOptions {
   readonly tolerancePx?: number;
   readonly zoom?: number;
   readonly visibleWorldRect?: Rect;
+  readonly allowedObjectIds?: ReadonlySet<ObjectId>;
 }
 
 export interface HitTestResult {
@@ -40,11 +41,11 @@ export function hitTest(
       const obj = doc.objects[objectId];
       if (!obj || !obj.visible || obj.locked) continue;
       if (visibleWorldRect) {
-        const bounds = getObjectBounds(obj);
+        const bounds = getObjectBounds(obj, doc);
         if (bounds.x > visibleWorldRect.x + visibleWorldRect.width || bounds.x + bounds.width < visibleWorldRect.x || bounds.y > visibleWorldRect.y + visibleWorldRect.height || bounds.y + bounds.height < visibleWorldRect.y) continue;
       }
 
-      if (hitTestObject(obj, worldPoint, 4)) {
+       if (hitTestDocumentObject(doc, obj, worldPoint, 4)) {
         return objectId;
       }
     }
@@ -60,11 +61,14 @@ export function hitTestCandidates(doc: DocumentModel, worldPoint: Vec2, options:
   for (let li = doc.layerIds.length - 1; li >= 0; li -= 1) {
     const layer = doc.layers[doc.layerIds[li]!];
     if (!layer || !layer.visible || layer.locked) continue;
-    for (let oi = layer.objectIds.length - 1; oi >= 0; oi -= 1) {
-      const object = doc.objects[layer.objectIds[oi]!];
+    const order = options.allowedObjectIds
+      ? flattenObjects(doc, layer.objectIds).filter((object) => options.allowedObjectIds!.has(object.id)).map((object) => object.id)
+      : layer.objectIds;
+    for (let oi = order.length - 1; oi >= 0; oi -= 1) {
+      const object = doc.objects[order[oi]!];
       if (!object || !object.visible || object.locked) continue;
-      if (options.visibleWorldRect && !rectsOverlap(getObjectBounds(object), options.visibleWorldRect)) continue;
-      if (!hitTestObject(object, worldPoint, toleranceWorld)) continue;
+       if (options.visibleWorldRect && !rectsOverlap(getObjectBounds(object, doc), options.visibleWorldRect)) continue;
+       if (!hitTestDocumentObject(doc, object, worldPoint, toleranceWorld)) continue;
       results.push({
         objectId: object.id,
         part: object.style.fill.type === 'none' ? 'stroke' : 'fill',
@@ -78,6 +82,17 @@ export function hitTestCandidates(doc: DocumentModel, worldPoint: Vec2, options:
 /** Hit-test with the result contract used by selection tools. */
 export function hitTestDetailed(doc: DocumentModel, worldPoint: Vec2, options: HitTestOptions = {}): HitTestResult[] {
   return hitTestCandidates(doc, worldPoint, options);
+}
+
+function flattenObjects(doc: DocumentModel, ids: readonly ObjectId[]): SceneObject[] {
+  const result: SceneObject[] = [];
+  for (const id of ids) {
+    const object = doc.objects[id];
+    if (!object) continue;
+    result.push(object);
+    if (object.type === 'group') result.push(...flattenObjects(doc, object.childIds));
+  }
+  return result;
 }
 
 function rectsOverlap(a: Rect, b: Rect): boolean {
@@ -97,9 +112,19 @@ function hitTestObject(obj: SceneObject, worldPoint: Vec2, toleranceWorld: numbe
       return hitTestLine(obj, worldPoint, toleranceWorld);
     case 'path':
       return hitTestPath(obj, worldPoint, toleranceWorld);
+    case 'group':
+      return false;
     default:
       return false;
   }
+}
+
+function hitTestDocumentObject(doc: DocumentModel, object: SceneObject, worldPoint: Vec2, toleranceWorld: number): boolean {
+  if (object.type !== 'group') return hitTestObject(object, worldPoint, toleranceWorld);
+  return object.childIds.some((childId) => {
+    const child = doc.objects[childId];
+    return child?.visible && !child.locked && hitTestDocumentObject(doc, child, worldPoint, toleranceWorld);
+  });
 }
 
 /**

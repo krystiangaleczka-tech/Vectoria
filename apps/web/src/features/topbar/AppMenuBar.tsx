@@ -12,6 +12,7 @@ interface AppMenuBarProps {
   onRedo: () => void;
   onFitArtboard: () => void;
   onFitDrawing: () => void;
+  onFitSelection: () => void;
   onZoom100: () => void;
   onExportSvg: () => void;
   onExportPng: () => void;
@@ -30,6 +31,9 @@ interface AppMenuBarProps {
   selectedObjectIds: readonly ObjectId[];
   onConvertToCurves: (objectIds: readonly ObjectId[]) => void;
   onOpenCleanup: () => void;
+  onGroup: () => void;
+  onUngroup: () => void;
+  onRepeatTransform: () => void;
 }
 
 type MenuName = 'Plik' | 'Edycja' | 'Obiekt' | 'Tekst' | 'Widok' | 'Okno' | 'Pomoc';
@@ -43,6 +47,7 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
   onRedo,
   onFitArtboard,
   onFitDrawing,
+  onFitSelection,
   onZoom100,
   onExportSvg,
   onExportPng,
@@ -61,6 +66,9 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
   selectedObjectIds,
   onConvertToCurves,
   onOpenCleanup,
+  onGroup,
+  onUngroup,
+  onRepeatTransform,
 }) => {
   const [openMenu, setOpenMenu] = useState<MenuName | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -106,6 +114,7 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
       return <>
         <MenuItem label="Dopasuj do obszaru" shortcut="Ctrl+1" onClick={() => run(onFitArtboard)} />
         <MenuItem label="Dopasuj do rysunku" onClick={() => run(onFitDrawing)} />
+        <MenuItem label="Dopasuj do zaznaczenia" disabled={selectedObjectIds.length === 0} onClick={() => run(onFitSelection)} />
         <MenuItem label="Zoom 100%" shortcut="Ctrl+0" onClick={() => run(onZoom100)} />
         <MenuItem label={`${showGrid ? 'Ukryj' : 'Pokaż'} siatkę`} onClick={() => run(onToggleGrid)} />
         <MenuItem label={`${snapToGrid ? 'Wyłącz' : 'Włącz'} snap do siatki`} onClick={() => run(onToggleSnap)} />
@@ -114,6 +123,9 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
     }
     if (menu === 'Obiekt') {
       return <>
+        <MenuItem label="Group" shortcut="Cmd+G" disabled={selectedObjectIds.length < 2} onClick={() => run(onGroup)} />
+        <MenuItem label="Ungroup" shortcut="Cmd+Shift+G" disabled={selectedObjectIds.length === 0} onClick={() => run(onUngroup)} />
+        <MenuItem label="Repeat transform" shortcut="Cmd+Shift+R" disabled={selectedObjectIds.length === 0} onClick={() => run(onRepeatTransform)} />
         <MenuItem label="Convert to curves" disabled={selectedObjectIds.length === 0} onClick={() => run(() => onConvertToCurves(selectedObjectIds))} />
         <MenuItem label="Clean Up document" onClick={() => run(onOpenCleanup)} />
       </>;

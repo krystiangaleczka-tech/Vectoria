@@ -2,14 +2,30 @@ import type { DocumentModel } from '@vectoria/core';
 import { createDefaultDocument, validateInvariants } from '@vectoria/core';
 import { parseAndMigrateDocument, PersistedDocumentSchema, type PersistedDocument } from '../schema/document-v1.js';
 import { IndexedDBDocumentRepository } from './indexeddb-repository.js';
+import type { DocumentVersion } from './document-repository.js';
 
 const CURRENT_DOC_KEY = 'current_document';
 const LAST_KNOWN_GOOD_KEY = 'last_known_good_document';
+const VERSIONS_KEY = 'document_versions';
 const repository = new IndexedDBDocumentRepository(CURRENT_DOC_KEY);
+const SESSION_MARKER = 'vectoria-session-open';
+
+export function markSessionOpen(): void {
+  try { sessionStorage.setItem(SESSION_MARKER, '1'); } catch { /* storage may be unavailable */ }
+}
+
+export function markSessionClosed(): void {
+  try { sessionStorage.removeItem(SESSION_MARKER); } catch { /* storage may be unavailable */ }
+}
+
+function hadInterruptedSession(): boolean {
+  try { return sessionStorage.getItem(SESSION_MARKER) === '1'; } catch { return false; }
+}
 
 export type BootstrapState =
   | { status: 'loading' }
   | { status: 'ready'; document: DocumentModel; revision: number; savedAt?: string }
+  | { status: 'recovery-available'; document: DocumentModel; recoveryDocument: DocumentModel; error: string; revision: number }
   | {
       status: 'recovery-error';
       document: DocumentModel;
@@ -43,10 +59,18 @@ export async function bootstrapDocument(): Promise<BootstrapState> {
     }
 
     const envelope = persisted as Partial<PersistedDocument> | null;
+    const revision = typeof envelope?.revision === 'number' && Number.isInteger(envelope.revision) && envelope.revision >= 0 ? envelope.revision : 0;
+    const knownGood = await repository.loadKnownGood?.(LAST_KNOWN_GOOD_KEY).catch(() => null);
+    if (hadInterruptedSession() && knownGood && knownGood.revision <= revision) {
+      const recoveryDocument = parseAndMigrateDocument(knownGood.document);
+      if (validateInvariants(recoveryDocument).length === 0) {
+        return { status: 'recovery-available', document: parsed, recoveryDocument, error: 'Previous session did not close cleanly.', revision };
+      }
+    }
     return {
       status: 'ready',
       document: parsed,
-      revision: typeof envelope?.revision === 'number' && Number.isInteger(envelope.revision) && envelope.revision >= 0 ? envelope.revision : 0,
+      revision,
       savedAt: typeof envelope?.savedAt === 'string' ? envelope.savedAt : undefined,
     };
   } catch (err) {
@@ -80,6 +104,24 @@ export async function saveDocument(document: DocumentModel, revision = 0): Promi
   return saveDocumentSnapshot(document, revision);
 }
 
+export async function saveLastKnownGoodSnapshot(document: DocumentModel, revision: number): Promise<void> {
+  if (!Number.isInteger(revision) || revision < 0) {
+    throw new Error('Cannot persist document with invalid revision');
+  }
+  const violations = validateInvariants(document);
+  if (violations.length > 0) {
+    throw new Error(`Cannot persist invalid document: ${violations.map((v) => v.code).join(', ')}`);
+  }
+  const snapshot: PersistedDocument = {
+    app: 'vectoria',
+    schemaVersion: document.schemaVersion,
+    document,
+    revision,
+    savedAt: new Date().toISOString(),
+  };
+  return repository.saveAtomic?.(snapshot, LAST_KNOWN_GOOD_KEY) ?? repository.save(snapshot);
+}
+
 /** Persists validated document snapshot with revision metadata for stale-write guards. */
 export async function saveDocumentSnapshot(document: DocumentModel, revision: number): Promise<void> {
   if (!Number.isInteger(revision) || revision < 0) {
@@ -96,5 +138,26 @@ export async function saveDocumentSnapshot(document: DocumentModel, revision: nu
     revision,
     savedAt: new Date().toISOString(),
   };
-  return repository.saveAtomic?.(snapshot, LAST_KNOWN_GOOD_KEY) ?? repository.save(snapshot);
+  return repository.save(snapshot);
+}
+
+/** Save a bounded named document version without changing the active document. */
+export async function saveDocumentVersion(document: DocumentModel, name: string, revision: number): Promise<DocumentVersion> {
+  if (!name.trim()) throw new Error('Version name cannot be empty');
+  if (!Number.isInteger(revision) || revision < 0) throw new Error('Cannot version document with invalid revision');
+  const violations = validateInvariants(document);
+  if (violations.length > 0) throw new Error(`Cannot version invalid document: ${violations.map((v) => v.code).join(', ')}`);
+  const version: DocumentVersion = {
+    id: `${revision}-${Date.now()}`,
+    name: name.trim().slice(0, 120),
+    document: { app: 'vectoria', schemaVersion: document.schemaVersion, document, revision, savedAt: new Date().toISOString() },
+  };
+  if (!repository.saveVersion) throw new Error('Versioned persistence is not supported');
+  await repository.saveVersion(version, VERSIONS_KEY);
+  return version;
+}
+
+/** Load version metadata and snapshots ordered newest first. */
+export async function listDocumentVersions(): Promise<readonly DocumentVersion[]> {
+  return repository.loadVersions?.(VERSIONS_KEY) ?? [];
 }

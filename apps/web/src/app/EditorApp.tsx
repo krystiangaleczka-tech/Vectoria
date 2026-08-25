@@ -27,6 +27,16 @@ import {
   CreateArtboardCommand,
   DuplicateArtboardCommand,
   DeleteArtboardCommand,
+  GroupObjectsCommand,
+  UngroupObjectsCommand,
+  ReplaceDocumentCommand,
+  RenameArtboardCommand,
+  SetArtboardOrientationCommand,
+  AlignObjectsCommand,
+  DistributeObjectsCommand,
+  ReorderObjectsCommand,
+  RepeatTransformCommand,
+  SkewObjectsCommand,
   SelectArtboardCommand,
   UpdateObjectCommand,
   UpdatePathNodeCommand,
@@ -49,6 +59,7 @@ import {
   SimplifyPathCommand,
   createDefaultDocument,
   getObjectBounds,
+  AddGuideCommand,
 } from '@vectoria/core';
 import { Camera, emptySelection, selectionService, GeometryOperationSession, BooleanOperationSession } from '@vectoria/editor-engine';
 import {
@@ -59,12 +70,17 @@ import {
   rasterizeSvgToPng,
   downloadBlob,
   importSvgToDocument,
+  saveDocumentVersion,
+  listDocumentVersions,
+  markSessionOpen,
+  markSessionClosed,
   type BootstrapState,
 } from '@vectoria/io';
 
 import { TopBar } from '../features/topbar/TopBar.js';
 import { ToolRail, type ActiveTool } from '../features/toolbar/ToolRail.js';
 import { CanvasViewport } from '../features/canvas/CanvasViewport.js';
+import { CanvasRulers } from '../features/canvas/CanvasRulers.js';
 import { ContextualControlBar, type FreehandSettings } from '../features/panels/ContextualControlBar.js';
 import { RightDock } from '../features/panels/RightDock.js';
 import { StatusBar } from '../features/statusbar/StatusBar.js';
@@ -83,10 +99,11 @@ function isMacPlatform(): boolean {
 
 type SaveStatus = 'idle' | 'dirty' | 'saving' | 'saved-locally' | 'error' | 'offline';
 
-const RecoveryBanner: React.FC<{ message: string; details?: string }> = ({ message, details }) => (
+const RecoveryBanner: React.FC<{ message: string; details?: string; onRestore?: () => void; onDiscard?: () => void }> = ({ message, details, onRestore, onDiscard }) => (
   <div className="recovery-banner" role="alert">
     <span>{message}</span>
     {details && <span style={{ opacity: 0.7 }}>{details}</span>}
+    {onRestore && onDiscard && <span className="recovery-actions"><button type="button" onClick={onRestore}>Przywróć</button><button type="button" onClick={onDiscard}>Odrzuć</button></span>}
   </div>
 );
 
@@ -102,6 +119,8 @@ export const EditorApp: React.FC = () => {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [revision, setRevision] = useState(0);
   const [savedRevision, setSavedRevision] = useState(0);
+  const [documentVersions, setDocumentVersions] = useState<readonly import('@vectoria/io').DocumentVersion[]>([]);
+  const lastTransformRef = useRef<Partial<import('@vectoria/core').Transform2D>>({});
   const [cursorWorld, setCursorWorld] = useState<Vec2 | null>(null);
   const [zoomPercent, setZoomPercent] = useState(100);
   const [newDocumentOpen, setNewDocumentOpen] = useState(false);
@@ -123,6 +142,13 @@ export const EditorApp: React.FC = () => {
   const clipboardRef = useRef<SceneObject[]>([]);
   const geometrySessionRef = useRef<{ apply: () => Command | null; cancel: () => void } | null>(null);
   const geometryConfirmDialogRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    markSessionOpen();
+    const closeSession = () => markSessionClosed();
+    window.addEventListener('pagehide', closeSession);
+    return () => { window.removeEventListener('pagehide', closeSession); markSessionClosed(); };
+  }, []);
 
   const handleSelectObject = useCallback((id: ObjectId | null, additive = false) => {
     setSelection((current) => selectionService.selectObject(current, id, additive));
@@ -210,7 +236,7 @@ export const EditorApp: React.FC = () => {
     async function init() {
       const state = await bootstrapDocument();
       setBootstrapState(state);
-      if (state.status === 'ready' || state.status === 'recovery-error') {
+      if (state.status === 'ready' || state.status === 'recovery-error' || state.status === 'recovery-available') {
         history.clear(state.revision);
         setDoc(state.document);
         latestDocRef.current = state.document;
@@ -218,7 +244,8 @@ export const EditorApp: React.FC = () => {
         savedRevisionRef.current = state.revision;
         setRevision(state.revision);
         setSavedRevision(state.revision);
-        setSaveStatus(state.status === 'ready' ? 'saved-locally' : 'error');
+        setSaveStatus(state.status === 'ready' || state.status === 'recovery-available' ? 'saved-locally' : 'error');
+        void listDocumentVersions().then(setDocumentVersions).catch(() => undefined);
       }
       isBootstrappedRef.current = true;
     }
@@ -250,11 +277,74 @@ export const EditorApp: React.FC = () => {
   const handleExecuteCommand = useCallback(
     (command: Command) => {
       if (!doc) return;
+      
+      // Save transform delta for Repeat Transform
+      if (command instanceof TransformObjectsCommand && !(command instanceof RepeatTransformCommand)) {
+        const firstId = command.objectIds[0];
+        if (firstId) {
+          const oldTransform = doc.objects[firstId]?.transform;
+          const newTransform = command.newTransforms.get(firstId);
+          if (oldTransform && newTransform) {
+             const dx = newTransform.position.x - oldTransform.position.x;
+             const dy = newTransform.position.y - oldTransform.position.y;
+             const dr = newTransform.rotation - oldTransform.rotation;
+             const sx = newTransform.scale.x / (oldTransform.scale.x || 1);
+             const sy = newTransform.scale.y / (oldTransform.scale.y || 1);
+             type TransformDelta = { position?: { x: number; y: number }; rotation?: number; scale?: { x: number; y: number } };
+             const patch: TransformDelta = {};
+             if (Math.abs(dx) > 1e-6 || Math.abs(dy) > 1e-6) patch.position = { x: dx, y: dy };
+             if (Math.abs(dr) > 1e-6) patch.rotation = dr;
+             if (Math.abs(sx - 1) > 1e-6 || Math.abs(sy - 1) > 1e-6) patch.scale = { x: sx, y: sy };
+             
+             if (Object.keys(patch).length > 0) {
+               lastTransformRef.current = patch;
+             }
+          }
+        }
+      }
+
       const newDoc = history.execute(command, doc);
       if (newDoc !== doc) commitDocument(newDoc);
     },
     [commitDocument, doc, history]
   );
+
+  const handleSaveVersion = useCallback((name: string) => {
+    if (!doc) return;
+    void saveDocumentVersion(doc, name, latestRevisionRef.current).then((version) => setDocumentVersions((current) => [version, ...current.filter((item) => item.id !== version.id)].slice(0, 20))).catch((error) => console.error('[Vectoria] Version save error:', error));
+  }, [doc]);
+
+  const handleRestoreVersion = useCallback((version: import('@vectoria/io').DocumentVersion) => {
+    if (!doc) return;
+    handleExecuteCommand(new ReplaceDocumentCommand(version.document.document));
+    setSelection(emptySelection());
+  }, [doc, handleExecuteCommand]);
+
+  const handleRestoreRecovery = useCallback(() => {
+    if (bootstrapState.status !== 'recovery-available') return;
+    const nextRevision = latestRevisionRef.current + 1;
+    history.clear(nextRevision);
+    latestRevisionRef.current = nextRevision;
+    latestDocRef.current = bootstrapState.document;
+    setDoc(bootstrapState.document);
+    setRevision(nextRevision);
+    setSaveStatus('dirty');
+    scheduleAutosave(bootstrapState.document, nextRevision);
+    setBootstrapState({ status: 'ready', document: bootstrapState.document, revision: nextRevision });
+  }, [bootstrapState, history, scheduleAutosave]);
+
+  const handleDiscardRecovery = useCallback(() => {
+    if (bootstrapState.status !== 'recovery-available') return;
+    const nextRevision = latestRevisionRef.current + 1;
+    history.clear(nextRevision);
+    latestRevisionRef.current = nextRevision;
+    latestDocRef.current = bootstrapState.recoveryDocument;
+    setDoc(bootstrapState.recoveryDocument);
+    setRevision(nextRevision);
+    setSaveStatus('dirty');
+    scheduleAutosave(bootstrapState.recoveryDocument, nextRevision);
+    setBootstrapState({ status: 'ready', document: bootstrapState.recoveryDocument, revision: nextRevision });
+  }, [bootstrapState, history, scheduleAutosave]);
 
   // Undo / Redo
   const handleUndo = useCallback(() => {
@@ -333,7 +423,7 @@ export const EditorApp: React.FC = () => {
 
   const handleFitDrawing = useCallback(() => {
     if (!doc) return;
-    const bounds = Object.values(doc.objects).filter((object) => object.visible).map(getObjectBounds);
+     const bounds = Object.values(doc.objects).filter((object) => object.visible).map((object) => getObjectBounds(object, doc));
     if (bounds.length === 0) return handleFitArtboard();
     const minX = Math.min(...bounds.map((rect) => rect.x));
     const minY = Math.min(...bounds.map((rect) => rect.y));
@@ -342,6 +432,18 @@ export const EditorApp: React.FC = () => {
      camera.fitRect({ x: minX, y: minY, width: Math.max(1, maxX - minX), height: Math.max(1, maxY - minY) }, { x: Math.max(100, window.innerWidth - 368), y: Math.max(100, window.innerHeight - 134) });
     setZoomPercent(camera.zoomPercent);
   }, [camera, doc, handleFitArtboard]);
+
+  const handleFitSelection = useCallback(() => {
+    if (!doc || selectedObjectIds.length === 0) return;
+    const bounds = selectedObjectIds.map((id) => doc.objects[id]).filter((object): object is SceneObject => Boolean(object)).map((object) => getObjectBounds(object, doc));
+    if (bounds.length === 0) return;
+    const minX = Math.min(...bounds.map((bound) => bound.x));
+    const minY = Math.min(...bounds.map((bound) => bound.y));
+    const maxX = Math.max(...bounds.map((bound) => bound.x + bound.width));
+    const maxY = Math.max(...bounds.map((bound) => bound.y + bound.height));
+    camera.fitRect({ x: minX, y: minY, width: Math.max(1, maxX - minX), height: Math.max(1, maxY - minY) }, { x: Math.max(100, window.innerWidth - 368), y: Math.max(100, window.innerHeight - 134) });
+    setZoomPercent(camera.zoomPercent);
+  }, [camera, doc, selectedObjectIds]);
 
   // Export SVG
   const handleExportSvg = useCallback(() => {
@@ -404,6 +506,7 @@ export const EditorApp: React.FC = () => {
       const obj = doc.objects[id];
       if (!obj) return;
 
+
       const newTransforms = new Map([
         [
           id,
@@ -421,8 +524,43 @@ export const EditorApp: React.FC = () => {
   const handleUpdateDimensions = useCallback(
     (id: ObjectId, width: number, height: number) => {
       const object = doc?.objects[id];
-      if (object?.type === 'ellipse') handleExecuteCommand(new SetEllipseGeometryCommand(id, { width, height }));
-      else if (object?.type === 'rectangle') handleExecuteCommand(new SetRectangleGeometryCommand(id, { width, height }));
+      if (!object) return;
+      const absWidth = Math.abs(width);
+      const absHeight = Math.abs(height);
+      // Handle negative values as scale flip
+      const currentScaleX = object.transform.scale.x;
+      const currentScaleY = object.transform.scale.y;
+      const newScaleX = width < 0 ? -Math.abs(currentScaleX) : Math.abs(currentScaleX);
+      const newScaleY = height < 0 ? -Math.abs(currentScaleY) : Math.abs(currentScaleY);
+      if (object.type === 'ellipse') handleExecuteCommand(new SetEllipseGeometryCommand(id, { width: absWidth, height: absHeight }));
+      else if (object.type === 'rectangle') handleExecuteCommand(new SetRectangleGeometryCommand(id, { width: absWidth, height: absHeight }));
+      if (newScaleX !== currentScaleX || newScaleY !== currentScaleY) {
+        handleExecuteCommand(new TransformObjectsCommand([id], new Map([[id, { ...object.transform, scale: { x: newScaleX, y: newScaleY } }]])));
+      }
+    },
+    [doc, handleExecuteCommand]
+  );
+
+  /** Scale/rotate all selected objects as a group around a shared pivot (world coords). */
+  const handleUpdateGroupTransform = useCallback(
+    (ids: readonly ObjectId[], scaleX: number, scaleY: number, pivotWorld: Vec2) => {
+      if (!doc) return;
+      const transforms = new Map<ObjectId, import('@vectoria/core').Transform2D>();
+      for (const id of ids) {
+        const obj = doc.objects[id];
+        if (!obj) continue;
+        const bounds = getObjectBounds(obj, doc);
+        const objCx = bounds.x + bounds.width / 2;
+        const objCy = bounds.y + bounds.height / 2;
+        const newCx = pivotWorld.x + (objCx - pivotWorld.x) * scaleX;
+        const newCy = pivotWorld.y + (objCy - pivotWorld.y) * scaleY;
+        transforms.set(id, {
+          ...obj.transform,
+          position: { x: obj.transform.position.x + (newCx - objCx), y: obj.transform.position.y + (newCy - objCy) },
+          scale: { x: obj.transform.scale.x * scaleX, y: obj.transform.scale.y * scaleY },
+        });
+      }
+      handleExecuteCommand(new TransformObjectsCommand([...ids], transforms));
     },
     [doc, handleExecuteCommand]
   );
@@ -453,6 +591,37 @@ export const EditorApp: React.FC = () => {
     if (!object) return;
     handleExecuteCommand(new TransformObjectsCommand([id], new Map([[id, { ...object.transform, rotation: degrees * Math.PI / 180 }]])));
   }, [doc, handleExecuteCommand]);
+
+  const handleRepeatTransform = useCallback(() => {
+    if (!doc || selectedObjectIds.length === 0 || Object.keys(lastTransformRef.current).length === 0) return;
+    handleExecuteCommand(new RepeatTransformCommand(selectedObjectIds, lastTransformRef.current, doc));
+  }, [doc, handleExecuteCommand, selectedObjectIds]);
+
+  const handleUpdatePivot = useCallback((id: ObjectId, pivot: Vec2) => {
+    const object = doc?.objects[id];
+    if (!object) return;
+    handleExecuteCommand(new TransformObjectsCommand([id], new Map([[id, { ...object.transform, pivot }]])));
+  }, [doc, handleExecuteCommand]);
+
+  const handleUpdateSkew = useCallback((id: ObjectId, axis: 'x' | 'y', degrees: number) => {
+    if (!doc) return;
+    handleExecuteCommand(new SkewObjectsCommand([id], axis === 'x' ? 'horizontal' : 'vertical', degrees * Math.PI / 180, doc));
+  }, [doc, handleExecuteCommand]);
+
+  const handleAlign = useCallback((alignment: import('@vectoria/core').Alignment, target: 'selection' | 'artboard' | 'key') => {
+    if (selectedObjectIds.length === 0) return;
+    handleExecuteCommand(new AlignObjectsCommand(selectedObjectIds, alignment, target, selectedObjectIds.at(-1)));
+  }, [handleExecuteCommand, selectedObjectIds]);
+
+  const handleDistribute = useCallback((axis: 'horizontal' | 'vertical') => {
+    if (selectedObjectIds.length < 3) return;
+    handleExecuteCommand(new DistributeObjectsCommand(selectedObjectIds, axis));
+  }, [handleExecuteCommand, selectedObjectIds]);
+
+  const handleReorder = useCallback((direction: import('@vectoria/core').ReorderDirection) => {
+    if (selectedObjectIds.length === 0) return;
+    handleExecuteCommand(new ReorderObjectsCommand(selectedObjectIds, direction));
+  }, [handleExecuteCommand, selectedObjectIds]);
 
   const handleUpdateArtboard = useCallback((width: number, height: number, background?: import('@vectoria/core').Artboard['background']) => {
     if (!doc) return;
@@ -633,10 +802,39 @@ export const EditorApp: React.FC = () => {
     setSelection(emptySelection());
   }, [handleExecuteCommand]);
 
+  const handleRenameArtboard = useCallback((id: string, name: string) => {
+    if (name.trim()) handleExecuteCommand(new RenameArtboardCommand(id, name));
+  }, [handleExecuteCommand]);
+
+  const handleOrientArtboard = useCallback((id: string, orientation: 'portrait' | 'landscape') => {
+    if (doc) handleExecuteCommand(new SetArtboardOrientationCommand(id, orientation, doc));
+  }, [doc, handleExecuteCommand]);
+
+  const handleToggleArtboardVisibility = useCallback((id: string, visible: boolean) => {
+    if (doc) handleExecuteCommand(new UpdateArtboardCommand(id, { visible }));
+  }, [doc, handleExecuteCommand]);
+
+  const handleGroup = useCallback(() => {
+    if (selectedObjectIds.length < 2) return;
+    handleExecuteCommand(new GroupObjectsCommand(selectedObjectIds));
+    setSelection(emptySelection());
+  }, [handleExecuteCommand, selectedObjectIds]);
+
+  const handleUngroup = useCallback(() => {
+    const groups = selectedObjectIds.filter((id) => doc?.objects[id]?.type === 'group');
+    if (groups.length === 0) return;
+    handleExecuteCommand(new UngroupObjectsCommand(groups));
+    setSelection(emptySelection());
+  }, [doc, handleExecuteCommand, selectedObjectIds]);
+
   const handleToggleObject = useCallback((id: ObjectId, field: 'visible' | 'locked') => {
     const object = doc?.objects[id];
     if (object) handleExecuteCommand(new UpdateObjectCommand(id, { [field]: !object[field] }));
   }, [doc, handleExecuteCommand]);
+
+  const handleAddGuide = useCallback((axis: 'horizontal' | 'vertical', position: number) => {
+    handleExecuteCommand(new AddGuideCommand({ id: generateId(), axis, position, visible: true, locked: false }));
+  }, [handleExecuteCommand]);
 
   // Global Keyboard Shortcuts
   useEffect(() => {
@@ -671,6 +869,13 @@ export const EditorApp: React.FC = () => {
           handleExecuteCommand(new CreateObjectsCommand(duplicates, doc.activeLayerId));
           handleSelectObjects(duplicates.map((object) => object.id));
         }
+      } else if (cmdKey && e.key.toLowerCase() === 'g') {
+        e.preventDefault();
+        if (e.shiftKey) handleUngroup();
+        else handleGroup();
+      } else if (cmdKey && e.shiftKey && e.key.toLowerCase() === 'r') {
+        e.preventDefault();
+        handleRepeatTransform();
       } else if (cmdKey && e.key.toLowerCase() === 'z') {
         e.preventDefault();
         if (e.shiftKey) {
@@ -694,6 +899,8 @@ export const EditorApp: React.FC = () => {
              setActiveTool('select');
             } else if (e.key.toLowerCase() === 'a') {
               setActiveTool('direct-select');
+            } else if (e.key.toLowerCase() === 'o') {
+              setActiveTool(e.shiftKey ? 'node-lasso' : 'lasso');
            } else if (e.key.toLowerCase() === 'r') {
              setActiveTool('rectangle');
             } else if (e.key.toLowerCase() === 'l') {
@@ -730,11 +937,11 @@ export const EditorApp: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [doc, selectedObjectId, selectedObjectIds, handleExecuteCommand, handleUndo, handleRedo, handleZoom100, handleFitArtboard, handleSelectObjects]);
+  }, [doc, selectedObjectId, selectedObjectIds, handleExecuteCommand, handleUndo, handleRedo, handleZoom100, handleFitArtboard, handleSelectObjects, handleGroup, handleUngroup, handleRepeatTransform]);
 
   // Center / Fit artboard on initial load once ready
   useEffect(() => {
-    if (doc && bootstrapState.status === 'ready') {
+    if (doc && (bootstrapState.status === 'ready' || bootstrapState.status === 'recovery-available' || bootstrapState.status === 'recovery-error')) {
       // Delay slightly to let viewport mount
       const timer = setTimeout(() => {
         handleFitArtboard();
@@ -777,10 +984,14 @@ export const EditorApp: React.FC = () => {
   const toolHint =
     activeTool === 'select'
       ? selectedObjectId
-        ? 'Drag to move · Click empty to deselect · Delete to remove'
-        : 'Click object to select · Space+Drag to pan · Wheel to zoom'
+         ? 'Drag to move · Alt+click cycles overlap · Delete to remove'
+         : 'Click object to select · Alt+click cycles overlap · Space+Drag to pan'
        : activeTool === 'direct-select'
        ? 'Click node to select · Shift+click adds nodes'
+       : activeTool === 'lasso'
+       ? 'Draw around objects to select · Shift adds to selection'
+       : activeTool === 'node-lasso'
+       ? 'Draw around nodes to select · Shift adds to selection'
        : activeTool === 'rectangle'
       ? 'Drag to draw rectangle · Hold Shift for square'
       : activeTool === 'ellipse'
@@ -836,7 +1047,8 @@ export const EditorApp: React.FC = () => {
          onToggleRightDock={() => setRightDockOpen((open) => !open)}
          onNewDocument={() => setNewDocumentOpen(true)}
          onExportPng={handleExportPng}
-         onFitDrawing={handleFitDrawing}
+          onFitDrawing={handleFitDrawing}
+          onFitSelection={handleFitSelection}
          onImportSvg={handleImportSvg}
           showGrid={doc.grid.visible}
           snapToGrid={doc.snap.enabled}
@@ -848,7 +1060,10 @@ export const EditorApp: React.FC = () => {
          onShowPanel={handleShowPanel}
          selectedObjectIds={selectedObjectIds}
          onConvertToCurves={(objectIds) => handleGeometryAction({ type: 'expand', objectIds })}
-         onOpenCleanup={handleOpenCleanup}
+          onOpenCleanup={handleOpenCleanup}
+          onGroup={handleGroup}
+          onUngroup={handleUngroup}
+          onRepeatTransform={handleRepeatTransform}
         />
 
       {bootstrapState.status === 'recovery-error' && (
@@ -856,6 +1071,9 @@ export const EditorApp: React.FC = () => {
           message="Nie udało się odczytać poprzedniego dokumentu. Uruchomiono nowy dokument lokalny." 
           details={bootstrapState.error?.toString()} 
         />
+      )}
+      {bootstrapState.status === 'recovery-available' && (
+        <RecoveryBanner message="Wykryto dokument po niezamkniętej sesji." details="Wybierz, czy zachować ostatni autosave, czy przywrócić ostatnią poprawną wersję." onRestore={handleRestoreRecovery} onDiscard={handleDiscardRecovery} />
       )}
 
       <ContextualControlBar
@@ -877,9 +1095,7 @@ export const EditorApp: React.FC = () => {
 
         {/* Center Canvas */}
         <div className="canvas-workspace" data-testid="canvas-workspace">
-          <div className="ruler-corner" aria-hidden="true" />
-          <div className="ruler ruler-horizontal" aria-hidden="true"><span>0</span><span>100</span><span>200</span><span>300</span><span>400</span><span>500</span></div>
-          <div className="ruler ruler-vertical" aria-hidden="true"><span>0</span><span>100</span><span>200</span><span>300</span><span>400</span></div>
+          <CanvasRulers camera={camera} unit={doc?.unit ?? 'px'} onAddGuide={handleAddGuide} />
          <CanvasViewport
             document={doc}
             activeTool={activeTool}
@@ -905,51 +1121,64 @@ export const EditorApp: React.FC = () => {
           document={doc}
           selectedObjectId={selectedObjectId}
           selectedObjectIds={selectedObjectIds}
-           history={history.history}
-        historyCursor={history.cursor}
-           onHistoryJump={handleHistoryJump}
-           activePanel={activeDockPanel}
-           onPanelChange={setActiveDockPanel}
-           onSelectObject={handleSelectObject}
-           onSelectObjects={handleSelectObjects}
+          history={history.history}
+          historyCursor={history.cursor}
+          onHistoryJump={handleHistoryJump}
+          versions={documentVersions}
+          onSaveVersion={handleSaveVersion}
+          onRestoreVersion={handleRestoreVersion}
+          onSelectObject={handleSelectObject}
+          onSelectObjects={handleSelectObjects}
           onUpdatePosition={handleUpdatePosition}
-           onUpdateDimensions={handleUpdateDimensions}
-           onUpdateLineEndpoint={handleUpdateLineEndpoint}
-           onUpdateCornerRadius={handleUpdateCornerRadius}
-            onUpdateFill={handleUpdateFill}
-            onUpdateObjectStyle={handleUpdateObjectStyle}
-           onUpdateRotation={handleUpdateRotation}
-            onUpdateArtboard={handleUpdateArtboard}
-            onUpdateUnit={handleUpdateUnit}
-             gridSettings={doc.grid}
-              onUpdateGridSettings={handleUpdateGridSettings}
-            onToggleObject={handleToggleObject}
-            onSelectArtboard={handleSelectArtboard}
-            onCreateArtboard={handleCreateArtboard}
-            onDuplicateArtboard={handleDuplicateArtboard}
-            onDeleteArtboard={handleDeleteArtboard}
-             selection={selection}
-             onUpdatePathNode={handleUpdatePathNode}
-             onUpdatePathNodeKind={handleUpdatePathNodeKind}
-              onUpdatePathClosed={handleUpdatePathClosed}
-              onPathAction={handlePathAction}
-              geometryPreview={geometryPreview}
-              onGeometryAction={handleGeometryAction}
-              onApplyGeometryPreview={() => handleApplyGeometryPreview()}
-              onCancelGeometryPreview={handleCancelGeometryPreview}
-              onOpenCleanup={handleOpenCleanup}
-              cleanupPlan={cleanupPlan}
-              onCleanupSelectionChange={setCleanupSelectedFindingIds}
-              onApplyCleanup={handleApplyCleanup}
-              onCancelCleanup={handleCancelCleanup}
-               open={rightDockOpen}
+          onUpdateDimensions={handleUpdateDimensions}
+          onUpdateGroupTransform={handleUpdateGroupTransform}
+          onUpdateLineEndpoint={handleUpdateLineEndpoint}
+          onUpdateCornerRadius={handleUpdateCornerRadius}
+          onUpdateFill={handleUpdateFill}
+          onUpdateObjectStyle={handleUpdateObjectStyle}
+          onUpdateRotation={handleUpdateRotation}
+          onUpdatePivot={handleUpdatePivot}
+          onUpdateSkew={handleUpdateSkew}
+          onAlign={handleAlign}
+          onDistribute={handleDistribute}
+          onReorder={handleReorder}
+          onUpdateArtboard={handleUpdateArtboard}
+          onUpdateUnit={handleUpdateUnit}
+          gridSettings={doc.grid}
+          onUpdateGridSettings={handleUpdateGridSettings}
+          selection={selection}
+          onUpdatePathNode={handleUpdatePathNode}
+          onUpdatePathNodeKind={handleUpdatePathNodeKind}
+          onUpdatePathClosed={handleUpdatePathClosed}
+          onPathAction={handlePathAction}
+          geometryPreview={geometryPreview}
+          onGeometryAction={handleGeometryAction}
+          onApplyGeometryPreview={handleApplyGeometryPreview}
+          onCancelGeometryPreview={handleCancelGeometryPreview}
+          onOpenCleanup={handleOpenCleanup}
+          cleanupPlan={cleanupPlan}
+          onCleanupSelectionChange={setCleanupSelectedFindingIds}
+          onApplyCleanup={handleApplyCleanup}
+          onCancelCleanup={handleCancelCleanup}
+          onToggleObject={handleToggleObject}
+          onSelectArtboard={handleSelectArtboard}
+          onCreateArtboard={handleCreateArtboard}
+          onDuplicateArtboard={handleDuplicateArtboard}
+          onDeleteArtboard={handleDeleteArtboard}
+          onRenameArtboard={handleRenameArtboard}
+          onOrientArtboard={handleOrientArtboard}
+          onToggleArtboardVisibility={handleToggleArtboardVisibility}
+          activePanel={activeDockPanel}
+          onPanelChange={setActiveDockPanel}
+          open={rightDockOpen}
+          isDirty={revision !== savedRevision}
          />
       </div>
 
       {/* Status Bar */}
       <StatusBar
         toolHint={toolHint}
-         activeTool={activeTool === 'select' ? 'Select' : activeTool === 'direct-select' ? 'Direct Select' : activeTool === 'rectangle' ? 'Rectangle' : activeTool === 'ellipse' ? 'Ellipse' : activeTool === 'line' ? 'Line' : activeTool === 'pen' ? 'Pen' : activeTool === 'pencil' ? 'Pencil' : activeTool === 'brush' ? 'Brush' : activeTool === 'smooth' ? 'Smooth' : activeTool === 'corner' ? 'Corner' : activeTool === 'eraser' ? 'Eraser' : activeTool === 'knife' ? 'Knife' : activeTool === 'scissors' ? 'Scissors' : activeTool === 'width' ? 'Width' : activeTool === 'hand' ? 'Hand' : 'Zoom'}
+         activeTool={activeTool === 'select' ? 'Select' : activeTool === 'direct-select' ? 'Direct Select' : activeTool === 'lasso' ? 'Lasso' : activeTool === 'node-lasso' ? 'Node Lasso' : activeTool === 'rectangle' ? 'Rectangle' : activeTool === 'ellipse' ? 'Ellipse' : activeTool === 'line' ? 'Line' : activeTool === 'pen' ? 'Pen' : activeTool === 'pencil' ? 'Pencil' : activeTool === 'brush' ? 'Brush' : activeTool === 'smooth' ? 'Smooth' : activeTool === 'corner' ? 'Corner' : activeTool === 'eraser' ? 'Eraser' : activeTool === 'knife' ? 'Knife' : activeTool === 'scissors' ? 'Scissors' : activeTool === 'width' ? 'Width' : activeTool === 'hand' ? 'Hand' : 'Zoom'}
         selectedObjectName={selectedObjectId ? doc.objects[selectedObjectId]?.name ?? null : null}
         selectedObjectCount={selectedObjectIds.length}
         cursorWorld={cursorWorld}

@@ -5,6 +5,9 @@ import {
   DuplicateObjectsCommand,
   ReorderObjectsCommand,
   SkewObjectsCommand,
+  GroupObjectsCommand,
+  UngroupObjectsCommand,
+  RepeatTransformCommand,
   TransformObjectsCommand,
   createDefaultDocument,
   createTransform,
@@ -59,5 +62,24 @@ describe('EPIC-03 command contracts', () => {
     expect(skewed.objects.one!.transform.skew).toEqual({ x: Math.PI / 6, y: 0 });
     const restored = history.undo(skewed)!;
     expect(restored.objects.one!.transform).toEqual(original.objects.one!.transform);
+  });
+
+  it('groups and ungroups layer-owned objects without orphaning children', () => {
+    const original = documentWithRectangles();
+    const history = new CommandHistory();
+    const grouped = history.execute(new GroupObjectsCommand(['one', 'two']), original);
+    const groupId = grouped.layers[grouped.activeLayerId]!.objectIds.find((id) => grouped.objects[id]?.type === 'group');
+    expect(groupId).toBeDefined();
+    expect(grouped.objects[groupId!]?.type).toBe('group');
+    expect(grouped.layers[grouped.activeLayerId]!.objectIds).toEqual([groupId, 'three']);
+    expect(history.execute(new UngroupObjectsCommand([groupId!]), grouped).layers[grouped.activeLayerId]!.objectIds).toEqual(['one', 'two', 'three']);
+    expect(history.undo(history.execute(new UngroupObjectsCommand([groupId!]), grouped))!.objects[groupId!]?.type).toBe('group');
+  });
+
+  it('repeats the last deterministic transform delta', () => {
+    const original = documentWithRectangles();
+    const moved = new TransformObjectsCommand(['one'], new Map([['one', { ...original.objects.one!.transform, position: { x: 30, y: 30 } }]])).execute(original);
+    const repeated = new RepeatTransformCommand(['one'], { position: { x: 10, y: 5 } }, moved).execute(moved);
+    expect(repeated.objects.one!.transform.position).toEqual({ x: 40, y: 35 });
   });
 });

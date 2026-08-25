@@ -187,12 +187,17 @@ export interface PathObject extends SceneObjectBase {
   readonly fillRule?: 'nonzero' | 'evenodd';
 }
 
+export interface GroupObject extends SceneObjectBase {
+  readonly type: 'group';
+  readonly childIds: readonly ObjectId[];
+}
+
 export interface WidthPoint {
   readonly t: number;
   readonly width: number;
 }
 
-export type SceneObject = RectangleObject | EllipseObject | LineObject | PathObject;
+export type SceneObject = RectangleObject | EllipseObject | LineObject | PathObject | GroupObject;
 
 // Selection stays multi-object capable even while the MVP UI exposes one
 // active editing context at a time.
@@ -226,6 +231,7 @@ export interface Artboard {
   readonly height: number;
   readonly background: ArtboardBackground;
   readonly visible: boolean;
+  readonly orientation?: 'portrait' | 'landscape';
   /** Preferred world-space frame. x/y remain as legacy aliases during schema v1. */
   readonly frame?: { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
 }

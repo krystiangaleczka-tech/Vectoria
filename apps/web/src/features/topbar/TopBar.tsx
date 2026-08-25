@@ -14,6 +14,7 @@ export interface TopBarProps {
   onRedo: () => void;
   onFitArtboard: () => void;
   onFitDrawing: () => void;
+  onFitSelection: () => void;
   onZoom100: () => void;
   onExportSvg: () => void;
   onExportPng: () => void;
@@ -32,6 +33,9 @@ export interface TopBarProps {
   selectedObjectIds: readonly ObjectId[];
   onConvertToCurves: (objectIds: readonly ObjectId[]) => void;
   onOpenCleanup: () => void;
+  onGroup: () => void;
+  onUngroup: () => void;
+  onRepeatTransform: () => void;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -44,6 +48,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   onRedo,
   onFitArtboard,
   onFitDrawing,
+  onFitSelection,
   onZoom100,
   onExportSvg,
   onExportPng,
@@ -62,6 +67,9 @@ export const TopBar: React.FC<TopBarProps> = ({
   selectedObjectIds,
   onConvertToCurves,
   onOpenCleanup,
+  onGroup,
+  onUngroup,
+  onRepeatTransform,
 }) => {
   return (
     <header
@@ -84,6 +92,7 @@ export const TopBar: React.FC<TopBarProps> = ({
         onRedo={onRedo}
         onFitArtboard={onFitArtboard}
         onFitDrawing={onFitDrawing}
+        onFitSelection={onFitSelection}
         onZoom100={onZoom100}
         onExportSvg={onExportSvg}
         onExportPng={onExportPng}
@@ -102,6 +111,9 @@ export const TopBar: React.FC<TopBarProps> = ({
         selectedObjectIds={selectedObjectIds}
         onConvertToCurves={onConvertToCurves}
         onOpenCleanup={onOpenCleanup}
+        onGroup={onGroup}
+        onUngroup={onUngroup}
+        onRepeatTransform={onRepeatTransform}
       />
       <DocumentTabs documentName={documentName} dirty={saveStatus !== 'saved-locally'} />
     </header>

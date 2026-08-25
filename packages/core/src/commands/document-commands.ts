@@ -16,6 +16,7 @@ import type {
   SnapSettings,
   CornerRadii,
   StrokeStyle,
+  GroupObject,
 } from '../model/types.js';
 import { isValidTransform } from '../model/transform.js';
 import { getObjectBounds } from '../model/bounds.js';
@@ -191,8 +192,8 @@ export class TransformObjectsCommand implements Command {
   private previousTransforms: Map<ObjectId, Transform2D> = new Map();
 
   constructor(
-    private readonly objectIds: readonly ObjectId[],
-    private readonly newTransforms: ReadonlyMap<ObjectId, Transform2D>,
+    public readonly objectIds: readonly ObjectId[],
+    public readonly newTransforms: ReadonlyMap<ObjectId, Transform2D>,
   ) {}
 
   execute(doc: DocumentModel): DocumentModel {
@@ -262,6 +263,104 @@ export class SkewObjectsCommand extends TransformObjectsCommand {
       transforms.set(id, { ...object.transform, skew: { ...skew, [axis === 'horizontal' ? 'x' : 'y']: angle } });
     }
     super(objectIds, transforms);
+  }
+}
+
+/** Group selected objects into one layer-owned hierarchy entry. */
+export class GroupObjectsCommand implements Command {
+  readonly type = 'GroupObjects';
+  readonly description = 'Group objects';
+  private group: GroupObject | null = null;
+  private layerId: LayerId | null = null;
+  private originalIds: readonly ObjectId[] = [];
+
+  constructor(private readonly objectIds: readonly ObjectId[]) {}
+
+  execute(doc: DocumentModel): DocumentModel {
+    const ids = [...new Set(this.objectIds)];
+    if (ids.length < 2) return doc;
+    const objects = ids.map((id) => doc.objects[id]);
+    const layerId = objects[0]?.layerId;
+    if (!layerId || objects.some((object) => !object || object.layerId !== layerId || object.locked)) return doc;
+    const layer = doc.layers[layerId];
+    if (!layer || layer.locked || ids.some((id) => !layer.objectIds.includes(id))) return doc;
+    const groupId = this.group?.id ?? generateId();
+    const group: GroupObject = this.group ?? {
+      type: 'group', id: groupId, name: 'Group', layerId, visible: true, locked: false,
+      transform: { position: { x: 0, y: 0 }, rotation: 0, scale: { x: 1, y: 1 }, pivot: { x: 0, y: 0 } },
+      style: { fill: { type: 'none' }, stroke: null, opacity: 1, blendMode: 'normal' }, childIds: ids,
+    };
+    this.group = group;
+    this.layerId = layerId;
+    this.originalIds = layer.objectIds;
+    const firstIndex = Math.min(...ids.map((id) => layer.objectIds.indexOf(id)));
+    const nextIds = layer.objectIds.filter((id) => !ids.includes(id));
+    nextIds.splice(firstIndex, 0, group.id);
+    return { ...doc, objects: { ...doc.objects, [group.id]: group }, layers: { ...doc.layers, [layerId]: { ...layer, objectIds: nextIds } }, updatedAt: new Date().toISOString() };
+  }
+
+  undo(doc: DocumentModel): DocumentModel {
+    if (!this.group || !this.layerId) return doc;
+    const layer = doc.layers[this.layerId];
+    if (!layer) return doc;
+    const objects = { ...doc.objects };
+    delete objects[this.group.id];
+    return { ...doc, objects, layers: { ...doc.layers, [this.layerId]: { ...layer, objectIds: this.originalIds } }, updatedAt: new Date().toISOString() };
+  }
+}
+
+/** Remove selected groups while restoring their children at the original z-order. */
+export class UngroupObjectsCommand implements Command {
+  readonly type = 'UngroupObjects';
+  readonly description = 'Ungroup objects';
+  private previous: { group: GroupObject; layerId: LayerId; objectIds: readonly ObjectId[] }[] = [];
+
+  constructor(private readonly groupIds: readonly ObjectId[]) {}
+
+  execute(doc: DocumentModel): DocumentModel {
+    const objects = { ...doc.objects };
+    const layers = { ...doc.layers };
+    this.previous = [];
+    for (const groupId of this.groupIds) {
+      const group = doc.objects[groupId];
+      const layer = group?.type === 'group' ? doc.layers[group.layerId] : undefined;
+      if (!group || group.type !== 'group' || !layer || layer.locked || !layer.objectIds.includes(groupId)) continue;
+      this.previous.push({ group, layerId: layer.id, objectIds: layer.objectIds });
+      delete objects[groupId];
+      layers[layer.id] = { ...layer, objectIds: layer.objectIds.flatMap((id) => id === groupId ? group.childIds : [id]) };
+    }
+    return this.previous.length === 0 ? doc : { ...doc, objects, layers, updatedAt: new Date().toISOString() };
+  }
+
+  undo(doc: DocumentModel): DocumentModel {
+    if (this.previous.length === 0) return doc;
+    const objects = { ...doc.objects };
+    const layers = { ...doc.layers };
+    for (const item of this.previous) {
+      const layer = layers[item.layerId];
+      if (!layer) continue;
+      objects[item.group.id] = item.group;
+      layers[item.layerId] = { ...layer, objectIds: item.objectIds };
+    }
+    return { ...doc, objects, layers, updatedAt: new Date().toISOString() };
+  }
+}
+
+/** Replace active document atomically so version restore remains undoable. */
+export class ReplaceDocumentCommand implements Command {
+  readonly type = 'ReplaceDocument';
+  readonly description = 'Restore document version';
+  private previous: DocumentModel | null = null;
+
+  constructor(private readonly replacement: DocumentModel) {}
+
+  execute(doc: DocumentModel): DocumentModel {
+    this.previous = doc;
+    return this.replacement;
+  }
+
+  undo(doc: DocumentModel): DocumentModel {
+    return this.previous ?? doc;
   }
 }
 
@@ -367,15 +466,16 @@ export class AlignObjectsCommand implements Command {
   readonly description = 'Align objects';
   private previous = new Map<ObjectId, Transform2D>();
 
-  constructor(private readonly objectIds: readonly ObjectId[], private readonly alignment: Alignment, private readonly target: 'selection' | 'artboard' = 'selection') {}
+  constructor(private readonly objectIds: readonly ObjectId[], private readonly alignment: Alignment, private readonly target: 'selection' | 'artboard' | 'key' = 'selection', private readonly keyObjectId?: ObjectId) {}
 
   execute(doc: DocumentModel): DocumentModel {
     const objects = { ...doc.objects };
     const selected = this.objectIds.map((id) => doc.objects[id]).filter((object): object is SceneObject => Boolean(object));
     if (selected.length === 0) return doc;
-    const bounds = selected.map(getObjectBounds);
+    const bounds = selected.map((object) => getObjectBounds(object, doc));
     const artboard = doc.artboards[doc.activeArtboardId];
-    const target = this.target === 'artboard' && artboard ? { x: artboard.x, y: artboard.y, width: artboard.width, height: artboard.height } : {
+    const keyObject = this.target === 'key' ? doc.objects[this.keyObjectId ?? ''] : undefined;
+    const target = this.target === 'artboard' && artboard ? { x: artboard.x, y: artboard.y, width: artboard.width, height: artboard.height } : keyObject ? getObjectBounds(keyObject, doc) : {
       x: Math.min(...bounds.map((bound) => bound.x)), y: Math.min(...bounds.map((bound) => bound.y)),
       width: Math.max(...bounds.map((bound) => bound.x + bound.width)) - Math.min(...bounds.map((bound) => bound.x)),
       height: Math.max(...bounds.map((bound) => bound.y + bound.height)) - Math.min(...bounds.map((bound) => bound.y)),
@@ -1068,7 +1168,7 @@ export class ConvertObjectToPathCommand implements Command {
 
   execute(doc: DocumentModel): DocumentModel {
     const object = doc.objects[this.objectId];
-    if (!object || object.locked || object.type === 'path') return doc;
+    if (!object || object.locked || object.type === 'path' || object.type === 'group') return doc;
     const nodes: PathNode[] = object.type === 'rectangle'
       ? [createPathNode({ x: 0, y: 0 }), createPathNode({ x: object.width, y: 0 }), createPathNode({ x: object.width, y: object.height }), createPathNode({ x: 0, y: object.height })]
       : object.type === 'ellipse'
@@ -1095,6 +1195,7 @@ export class ConvertStrokeToPathCommand implements Command {
   execute(doc: DocumentModel): DocumentModel {
     const object = doc.objects[this.objectId];
     if (!object || object.locked || !object.style.stroke) return doc;
+    if (object.type === 'group') return doc;
     const centerline = object.type === 'path'
       ? samplePath(object.nodes, object.closed)
       : object.type === 'line'
@@ -1182,11 +1283,11 @@ function ellipsePathNodes(width: number, height: number): PathNode[] {
 export class UpdateArtboardCommand implements Command {
   readonly type = 'UpdateArtboard';
   readonly description = 'Change artboard';
-  private previous: Partial<Pick<import('../model/types.js').Artboard, 'name' | 'width' | 'height' | 'background' | 'visible' | 'frame'>> | null = null;
+  private previous: Partial<Pick<import('../model/types.js').Artboard, 'name' | 'width' | 'height' | 'background' | 'visible' | 'frame' | 'orientation'>> | null = null;
 
   constructor(
     private readonly artboardId: ArtboardId,
-    private readonly patch: Partial<Pick<import('../model/types.js').Artboard, 'name' | 'width' | 'height' | 'background' | 'visible' | 'frame'>>,
+    private readonly patch: Partial<Pick<import('../model/types.js').Artboard, 'name' | 'width' | 'height' | 'background' | 'visible' | 'frame' | 'orientation'>>,
   ) {}
 
   execute(doc: DocumentModel): DocumentModel {
@@ -1195,7 +1296,7 @@ export class UpdateArtboardCommand implements Command {
     const width = this.patch.width ?? artboard.width;
     const height = this.patch.height ?? artboard.height;
     if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return doc;
-    this.previous = { name: artboard.name, width: artboard.width, height: artboard.height, background: artboard.background, visible: artboard.visible, frame: artboard.frame };
+    this.previous = { name: artboard.name, width: artboard.width, height: artboard.height, background: artboard.background, visible: artboard.visible, frame: artboard.frame, orientation: artboard.orientation };
     return { ...doc, artboards: { ...doc.artboards, [this.artboardId]: { ...artboard, ...this.patch, width, height, frame: { x: artboard.x, y: artboard.y, width, height } } }, updatedAt: new Date().toISOString() };
   }
 
@@ -1203,6 +1304,25 @@ export class UpdateArtboardCommand implements Command {
     const artboard = doc.artboards[this.artboardId];
     return this.previous && artboard ? { ...doc, artboards: { ...doc.artboards, [this.artboardId]: { ...artboard, ...this.previous } }, updatedAt: new Date().toISOString() } : doc;
   }
+}
+
+/** Rename an artboard without changing its geometry or active selection. */
+export class RenameArtboardCommand extends UpdateArtboardCommand {
+  constructor(artboardId: ArtboardId, name: string) { super(artboardId, { name: name.trim().slice(0, 120) }); }
+}
+
+/** Set artboard orientation by swapping dimensions only when orientation changes. */
+export class SetArtboardOrientationCommand extends UpdateArtboardCommand {
+  constructor(artboardId: ArtboardId, orientation: 'portrait' | 'landscape', doc: DocumentModel) {
+    const artboard = doc.artboards[artboardId];
+    const shouldSwap = Boolean(artboard && ((orientation === 'portrait' && artboard.width > artboard.height) || (orientation === 'landscape' && artboard.height > artboard.width)));
+    super(artboardId, { ...(shouldSwap && artboard ? { width: artboard.height, height: artboard.width } : {}), orientation });
+  }
+}
+
+/** Update artboard background through the document command boundary. */
+export class UpdateArtboardBackgroundCommand extends UpdateArtboardCommand {
+  constructor(artboardId: ArtboardId, background: Artboard['background']) { super(artboardId, { background }); }
 }
 
 export class SetDocumentUnitCommand implements Command {
@@ -1275,6 +1395,7 @@ export class CreateArtboardCommand implements Command {
       height: this.options.height ?? 1080,
       background: this.options.background ?? { type: 'color', color: '#ffffff' },
       visible: true,
+      orientation: (this.options.height ?? 1080) >= (this.options.width ?? 1920) ? 'portrait' : 'landscape',
       frame: { x: this.options.x ?? position.x, y: this.options.y ?? position.y, width: this.options.width ?? 1920, height: this.options.height ?? 1080 },
     };
     if (!Number.isFinite(board.x) || !Number.isFinite(board.y) || !Number.isFinite(board.width) || !Number.isFinite(board.height) || board.width <= 0 || board.height <= 0) return doc;
@@ -1487,3 +1608,4 @@ export class UpdateObjectCommand implements Command {
     return this.previous && object ? { ...doc, objects: { ...doc.objects, [this.objectId]: { ...object, ...this.previous } }, updatedAt: new Date().toISOString() } : doc;
   }
 }
+

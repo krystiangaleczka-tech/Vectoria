@@ -1,6 +1,14 @@
 import { z } from 'zod';
 import type { DocumentModel } from '@vectoria/core';
 
+export const DOCUMENT_LIMITS = {
+  maxObjects: 100_000,
+  maxLayers: 10_000,
+  maxArtboards: 1_000,
+  maxGuides: 10_000,
+  maxPathNodes: 1_000_000,
+} as const;
+
 export const Vec2Schema = z.object({
   x: z.number().refine(Number.isFinite, { message: 'x must be finite' }),
   y: z.number().refine(Number.isFinite, { message: 'y must be finite' }),
@@ -127,10 +135,22 @@ export const PathObjectSchema = z.object({
   locked: z.boolean(),
   transform: Transform2DSchema,
   style: ObjectStyleSchema,
-  nodes: z.array(PathNodeSchema),
+  nodes: z.array(PathNodeSchema).max(DOCUMENT_LIMITS.maxPathNodes),
   closed: z.boolean(),
   compoundChildren: z.array(z.array(PathNodeSchema)).optional(),
   fillRule: z.enum(['nonzero', 'evenodd']).optional(),
+});
+
+export const GroupObjectSchema = z.object({
+  type: z.literal('group'),
+  id: z.string().min(1),
+  name: z.string(),
+  layerId: z.string().min(1),
+  visible: z.boolean(),
+  locked: z.boolean(),
+  transform: Transform2DSchema,
+  style: ObjectStyleSchema,
+  childIds: z.array(z.string().min(1)),
 });
 
 export const SceneObjectSchema = z.discriminatedUnion('type', [
@@ -138,6 +158,7 @@ export const SceneObjectSchema = z.discriminatedUnion('type', [
   EllipseObjectSchema,
   LineObjectSchema,
   PathObjectSchema,
+  GroupObjectSchema,
 ]);
 
 const PaletteColorSchema = z.object({ id: z.string().min(1), name: z.string(), color: z.string() });
@@ -170,6 +191,7 @@ export const ArtboardSchema = z.object({
     return background;
   }),
   visible: z.boolean().default(true),
+  orientation: z.enum(['portrait', 'landscape']).optional(),
   frame: z.object({ x: z.number().finite(), y: z.number().finite(), width: z.number().positive().finite(), height: z.number().positive().finite() }).optional(),
 });
 
@@ -203,6 +225,7 @@ export const PersistedDocumentSchema = z.object({
   document: z.unknown(),
   revision: z.number().int().nonnegative(),
   savedAt: z.string(),
+  status: z.enum(['pending', 'saving', 'saved', 'error', 'recovery']).optional(),
 });
 
 export interface PersistedDocument {
@@ -211,6 +234,7 @@ export interface PersistedDocument {
   readonly document: DocumentModel;
   readonly revision: number;
   readonly savedAt: string;
+  readonly status?: 'pending' | 'saving' | 'saved' | 'error' | 'recovery';
 }
 
 const DEFAULT_SNAP_SOURCES = { grid: true, guide: true, node: true, edge: true, center: true, intersection: true, pixel: false } as const;
@@ -229,6 +253,8 @@ export function parseAndMigrateDocument(raw: unknown): DocumentModel {
   }
   const schemaVersion = rawRecord['schemaVersion'];
 
+  assertDocumentLimits(rawRecord);
+
   if (schemaVersion === 1) {
     const parsed = DocumentV1Schema.parse(raw);
     const artboards = Object.fromEntries(Object.entries(parsed.artboards).map(([id, artboard]) => [id, {
@@ -243,6 +269,47 @@ export function parseAndMigrateDocument(raw: unknown): DocumentModel {
   }
 
   throw new Error(`Unsupported schema version: ${String(schemaVersion)}`);
+}
+
+function assertDocumentLimits(raw: Record<string, unknown>): void {
+  const count = (value: unknown): number => value && typeof value === 'object' ? Object.keys(value).length : 0;
+  if (count(raw.objects) > DOCUMENT_LIMITS.maxObjects) throw new Error(`Document exceeds ${DOCUMENT_LIMITS.maxObjects} object limit`);
+  if (count(raw.layers) > DOCUMENT_LIMITS.maxLayers) throw new Error(`Document exceeds ${DOCUMENT_LIMITS.maxLayers} layer limit`);
+  if (count(raw.artboards) > DOCUMENT_LIMITS.maxArtboards) throw new Error(`Document exceeds ${DOCUMENT_LIMITS.maxArtboards} artboard limit`);
+  if (Array.isArray(raw.guides) && raw.guides.length > DOCUMENT_LIMITS.maxGuides) throw new Error(`Document exceeds ${DOCUMENT_LIMITS.maxGuides} guide limit`);
+  
+  const objects = raw.objects && typeof raw.objects === 'object' ? Object.values(raw.objects) : [];
+  let pathNodes = 0;
+  
+  // Track nesting depth
+  const checkNesting = (objectId: string, depth: number, visited: Set<string> = new Set()) => {
+    if (depth > 50) throw new Error('Document exceeds maximum group nesting depth of 50');
+    if (visited.has(objectId)) throw new Error('Cycle detected in group hierarchy');
+    visited.add(objectId);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const obj = (raw.objects as Record<string, any>)[objectId];
+    if (obj && obj.type === 'group' && Array.isArray(obj.childIds)) {
+      for (const childId of obj.childIds) {
+        checkNesting(childId, depth + 1, new Set(visited));
+      }
+    }
+  };
+
+  for (const object of objects) {
+    if (object && typeof object === 'object') {
+      const rec = object as Record<string, unknown>;
+      if (rec.type === 'path' && Array.isArray(rec.nodes)) {
+        const nodesLength = rec.nodes.length;
+        if (nodesLength > 100_000) throw new Error('Individual path exceeds maximum complexity of 100,000 nodes');
+        pathNodes += nodesLength;
+      }
+      if (rec.type === 'group' && Array.isArray(rec.childIds)) {
+        checkNesting(String(rec.id), 1);
+      }
+    }
+  }
+  
+  if (pathNodes > DOCUMENT_LIMITS.maxPathNodes) throw new Error(`Document exceeds ${DOCUMENT_LIMITS.maxPathNodes} path node limit`);
 }
 
 /**

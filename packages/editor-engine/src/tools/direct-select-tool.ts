@@ -3,6 +3,7 @@ import type { Vec2 } from '@vectoria/shared';
 import { getObjectBounds } from '@vectoria/core';
 import { getTransformMatrix } from '@vectoria/core';
 import { mat3TransformPoint } from '@vectoria/shared';
+import { pointInPolygon } from '@vectoria/shared';
 
 export interface NodeHit {
   readonly objectId: string;
@@ -62,5 +63,14 @@ export class DirectSelectTool {
         : [nodeId]
       : [];
     return { objectIds: hit ? [hit.objectId] : selection.objectIds, nodeIds, mode: 'node' };
+  }
+
+  /** Select transformed path nodes enclosed by a lasso polygon. */
+  lasso(context: { document: DocumentModel; selection: SelectionState; polygon: readonly Vec2[]; objectId: string; additive?: boolean }): SelectionState {
+    const object = context.document.objects[context.objectId];
+    if (object?.type !== 'path' || context.polygon.length < 3) return { ...context.selection, mode: 'node' };
+    const matrix = getTransformMatrix(object.transform);
+    const ids = object.nodes.map((node, index) => pointInPolygon(mat3TransformPoint(matrix, node.point), context.polygon) ? `${object.id}:${index}` : null).filter((id): id is string => id !== null);
+    return { objectIds: [object.id], nodeIds: context.additive ? [...new Set([...context.selection.nodeIds, ...ids])] : ids, mode: 'node' };
   }
 }

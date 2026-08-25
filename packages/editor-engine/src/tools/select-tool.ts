@@ -11,6 +11,7 @@ export interface SelectToolContext {
   zoom: number;
   additive?: boolean;
   visibleWorldRect?: Rect;
+  allowedObjectIds?: ReadonlySet<string>;
 }
 
 /** Select tool policy: top-most hit first, additive Shift selection, no React state. */
@@ -28,6 +29,7 @@ export class SelectTool {
       tolerancePx: 6,
       zoom: context.zoom,
       visibleWorldRect: context.visibleWorldRect,
+      allowedObjectIds: context.allowedObjectIds,
     });
     const key = `${Math.round(context.screenPoint.x)}:${Math.round(context.screenPoint.y)}`;
     if (key !== this.lastCycleKey) this.cycleIndex = 0;
