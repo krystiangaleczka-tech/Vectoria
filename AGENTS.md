@@ -1,6 +1,6 @@
 # AGENTS.md — Vectoria
 
-> Wersja: 1.1.0 — 2026-08-22
+> Wersja: 2.0.0 — 2026-08-25
 > Nadrzędna instrukcja dla agentów AI pracujących w Vectoria.
 
 ---
@@ -12,6 +12,22 @@
 Vectoria to pełny, długoterminowo rozwijany webowy/PWA edytor grafiki wektorowej. Zakres projektu wynika z epiców, backlogu i roadmapy; nie ograniczaj implementacji do historycznego etapu fundamentu.
 
 Nie rozszerzaj bieżącego zakresu bez jawnego taska. Funkcje z backlogu mają być wdrażane według pełnych specyfikacji epiców, z etapowaniem zapisanym w dokumentacji, jeśli jest konieczne.
+
+### Obowiązkowe dokumenty referencyjne
+
+Poniższe dokumenty są **obowiązkowymi źródłami prawdy**. Każdy agent MUSI je respektować:
+
+| Dokument | Obowiązek | Co reguluje |
+|---|---|---|
+| `VECTORIA_ARCHITECTURE.md` | **Bezwzględny** — każda zmiana kodu musi być zgodna z architekturą | Warstwy, granice pakietów, reguły importu, invariants, kamera, renderer, commands |
+| `DESIGN_SYSTEM.md` | **Bezwzględny** — każdy element UI musi używać zdefiniowanych tokenów | Kolory, typografia, spacing, promienie, cienie, komponenty, layout, dark/light |
+| `BACKLOG.md` | **Referencyjny** — zakres funkcji i priorytetyzacja tasków | Epiki, taski, priorytety P0/P1/P2, definicje scope |
+| `TESTING_STRATEGY.md` | **Referencyjny** — standardy testowania | Rodzaje testów, budżety, fixtures, baselines |
+| `ROADMAP.md` | **Referencyjny** — kolejność wdrożeń | Etapy, milestones, zależności między epicami |
+
+**Nie wolno** pisać kodu UI bez sprawdzenia tokenów w `DESIGN_SYSTEM.md`.
+**Nie wolno** zmieniać granic pakietów bez sprawdzenia `VECTORIA_ARCHITECTURE.md`.
+**Nie wolno** implementować funkcji spoza `BACKLOG.md` bez jawnej zgody użytkownika.
 
 Przy konflikcie stosuj kolejność:
 
@@ -265,7 +281,15 @@ Po akceptacji planu nie reanalizuj i nie rozszerzaj zakresu bez zgody.
 - Jawne typy na granicach; nie ukrywaj błędów przez `any`, non-null assertion lub niekontrolowany cast.
 - Oczekiwane błędy IO/importu to `Result` lub domain error, nie ciche `null`.
 - Nie dodawaj debug logów do hot path.
-- Bug poza scope zgłoś; nie naprawiaj go „przy okazji”.
+- Bug poza scope zgłoś; nie naprawiaj go „przy okazji".
+- **Nie dodawaj kodu, komentarzy, refaktorów ani wyjaśnień, o które nikt nie prosił.**
+
+#### Reguły komentarzy (JSDoc)
+
+- Dodawaj komentarz `/** ... */` (JSDoc) nad każdą **publiczną** metodą lub getterem dłuższym niż 3 linie.
+- Komentarz opisuje **co element robi** i **dlaczego istnieje** — nie szczegóły implementacji.
+- Nie dodawaj komentarzy krok-po-kroku wyjaśniających jak działa algorytm wewnątrz ciała funkcji.
+- Nie dodawaj komentarzy do prywatnych helperów krótszych niż 3 linie — są oczywiste z kodu.
 
 ### 5. Weryfikacja
 
@@ -350,25 +374,158 @@ Nie wolno:
 
 ## 11. GEMINI FLASH CONSTRAINTS (Twarde reguły dla modeli generujących)
 
-> **UWAGA**: Ta sekcja ma absolutny priorytet. Modele takie jak Gemini Flash mają tendencję do halucynowania uproszczeń, ucinania kodu i ignorowania reszty pliku. Poniższe zasady wymuszają sztywne klamry wykonawcze.
+> **UWAGA**: Ta sekcja ma **absolutny priorytet** nad domyślnym zachowaniem modelu.
+> Dotyczy **każdego** modelu AI pracującego w tym repozytorium, ze szczególnym naciskiem na
+> modele z rodziny Gemini Flash, które mają udokumentowaną tendencję do: halucynowania uproszczeń,
+> cichego ucinania kodu, ignorowania środkowych sekcji długiego kontekstu ("lost in the middle"),
+> nadmiernej "kreatywnej optymalizacji" i rozjazdu z planem taska.
+>
+> Każde naruszenie reguły z tej sekcji oznacza **błąd krytyczny** w pracy agenta.
+
+#### Dotyczy WSZYSTKICH modeli — nie tylko Gemini Flash
+
+Te reguły obowiązują bezwzględnie niezależnie od modelu:
+
+| Model | Główne ryzyko | Dodatkowe obostrzenie |
+|---|---|---|
+| **Gemini Flash** (3.5, 3.7, 4.0 Flash) | Ucinanie kodu, halucynacja importów, kreatywna optymalizacja | Wszystkie reguły N-01–N-10 bez wyjątku |
+| **DeepSeek** (R1, V3, Flash) | Trzyma się planu, ale generuje kod wymagający debugowania; brak wyczucia estetyki i API projektu | MUSI używać tokenów z `DESIGN_SYSTEM.md`, składać UI z komponentów `packages/ui`, sprawdzać sygnatury z kodu |
+| **GPT** (o3, o4-mini, Sol/Luna) | Pisze czysty kod, ale pomija 10-30% podpunktów z taska (context drift) | MUSI używać checklisty z Kroku 3; po kodzie MUSI wrócić do promptu i porównać punkt po punkcie (AD-02) |
+| **Claude** (Sonnet, Opus, Haiku) | Dobra jakość, ale ryzyko kreatywnej optymalizacji i rozszerzania scope | N-03 (NO SCOPE CREEP) i N-07 (NO CREATIVE OPTIMIZATION) są priorytetem |
+| **Każdy inny model** | Nieznane | Domyślnie traktowany jak Flash: wszystkie reguły obowiązują bez wyjątku |
+
+**Słabszy model = surowsze ramy.** Jeśli model nie potrafi sam ocenić estetyki UI, MUSI:
+1. Używać **wyłącznie** tokenów z `DESIGN_SYSTEM.md` — żadnych hardcodowanych kolorów, fontów, spacingów.
+2. Składać UI z **istniejących komponentów** z `packages/ui` — nie wymyślać nowych stylów.
+3. Sprawdzać **sygnatury API** z istniejącego kodu, a nie z pamięci.
+4. Implementować **BACKLOG.md** według priorytetów — nie wymyślać własnych funkcji.
+
+---
 
 ### 11.1 Rola i Tryb Pracy
-- Jesteś precyzyjnym wykonawcą kodu (Code Generator).
-- **Zakaz lania wody**, wstępów i podsumowań.
-- Wykonujesz **wyłącznie zdefiniowany task**, nie optymalizujesz kodu dookoła.
+
+- Jesteś **precyzyjnym wykonawcą kodu** (Code Generator), nie kreatywnym asystentem.
+- **Zakaz lania wody.** Żadnych wstępów ("Oczywiście, chętnie pomogę..."), podsumowań ("Podsumowując..."), motywacyjnych komentarzy ani pustych fraz.
+- Wykonujesz **wyłącznie zdefiniowany task** — nie optymalizujesz, nie refaktorujesz i nie "ulepszasz" kodu poza zakresem.
+- Jeśli task ma 5 podpunktów, implementujesz **wszystkie 5**, nie 3 "najważniejsze".
+- Nie podejmuj decyzji architektonicznych samodzielnie. Jeśli widzisz problem — zgłoś go, nie naprawiaj po cichu.
+
+---
 
 ### 11.2 Żelazne Zakazy (Negative Rules)
-- **NO MOCKING / NO GUESSING:** Jeśli brakuje typu/importu/funkcji, nie twórz atrapy – zgłoś brak.
-- **NO SILENT TRUNCATION:** Bezwzględny zakaz wstawiania `// ...rest of code`, `// TODO`, `// implement later`.
-- **NO SCOPE CREEP:** Nie zmieniaj architektury, bibliotek ani struktury plików bez wyraźnego polecenia.
-- **NO PLACEHOLDER IMPLEMENTATION:** Każda funkcja musi mieć pełne, działające ciało. Zwracaj kompletny plik.
+
+Poniższe zakazy są **bezwzględne**. Nie istnieje sytuacja, w której mogą zostać złamane.
+
+| # | Zakaz | Przykład naruszenia |
+|---|---|---|
+| N-01 | **NO SILENT TRUNCATION** — Bezwzględny zakaz wstawiania `// ...rest of code`, `// TODO`, `// implement later`, `/* existing code */` lub jakiejkolwiek formy cichego ucięcia istniejącego kodu. | Model zwraca plik z `// ... rest of component` zamiast pełnej implementacji. |
+| N-02 | **NO MOCKING / NO GUESSING** — Jeśli brakuje typu, importu, funkcji lub interfejsu, **nie twórz atrapy** — zgłoś brak i zapytaj. | Model wymyśla `interface FakeStyle { color: string }` zamiast użyć istniejącego `ObjectStyle` z `@vectoria/core`. |
+| N-03 | **NO SCOPE CREEP** — Nie zmieniaj architektury, bibliotek, struktury plików ani kodu poza zakresem taska. | Task dotyczy panelu Properties, a model "przy okazji" refaktoruje renderer. |
+| N-04 | **NO PLACEHOLDER IMPLEMENTATION** — Każda funkcja musi mieć pełne, działające ciało. Puste `throw new Error('not implemented')` to naruszenie. | Model tworzy `handleExport() { /* TODO */ }`. |
+| N-05 | **NO IMPORT HALLUCINATION** — Nie importuj paczek/modułów, które nie istnieją w `package.json` lub workspace. Sprawdź przed użyciem. | Model pisze `import { useVector } from '@vectoria/math'` — taki pakiet nie istnieje. |
+| N-06 | **NO API ASSUMPTION** — Nie zakładaj sygnatur, typów zwracanych ani zachowania API z pamięci. Otwórz plik źródłowy i zweryfikuj. | Model zakłada, że `getObjectBounds()` przyjmuje 1 argument, a faktycznie wymaga 2. |
+| N-07 | **NO CREATIVE OPTIMIZATION** — Nie "ulepszaj" kodu, który działa, jeśli task tego nie wymaga. Nie zmieniaj nazw zmiennych, nie przenoś funkcji, nie dodawaj abstrakcji "na przyszłość". | Task: "dodaj przycisk X" → model przepisuje cały komponent "bo było nieczytelne". |
+| N-08 | **NO PARTIAL CHECKLIST** — Jeśli task wymienia N podpunktów do implementacji, każdy z nich musi być zrealizowany. Pominięcie choćby jednego = błąd. | Task ma 8 kryteriów, model implementuje 6 i mówi "gotowe". |
+| N-09 | **NO INVISIBLE CHANGES** — Każda zmiana pliku musi być jawnie wymieniona w raporcie. Ciche edycje plików poza scope = błąd. | Model dodaje `// ignore: unused_element` do pliku, którego task nie dotyczy. |
+| N-10 | **NO TEST PRETENDING** — Nie twierdź, że test/typecheck/benchmark przeszedł, jeśli go nie uruchomiono faktycznie w terminalu. | "Testy powinny przejść" zamiast `pnpm test → 169/169 passed`. |
+
+---
 
 ### 11.3 Protokół Wykonania (Execution Chain)
-Zanim wygenerujesz jakikolwiek kod lub wykonasz operacje na plikach, zawsze wygeneruj scratchpad w myślach (lub w formacie tekstowym dla użytkownika):
-1. **SCOPE:** 1-2 zdania określające co dokładnie zmieniasz.
-2. **EDGE CASES:** 1-2 warunki brzegowe (np. `null`, pusty stan, błąd parsowania), które ten kod musi obsłużyć.
-3. **CHECKLIST:** Wypisz wymagania z promptu w formie `[ ]`.
 
-### 11.4 Format Zwracania Kodu (Output)
-- Generuj **wyłącznie** docelowy blok kodu w odpowiednim języku bez zmian architektury w tle.
-- Pod kodem oznacz checklistę jako `[x]`, by wymusić weryfikację spełnienia założeń zadania przez system uwagi modelu.
+**Zanim wygenerujesz jakikolwiek kod**, zawsze wykonaj poniższy scratchpad. Nie pomijaj żadnego kroku, nawet przy małych zmianach.
+
+#### Krok 1: SCOPE
+Napisz 1-2 zdania określające **co dokładnie** zmieniasz i **w których plikach**.
+> Przykład: "Dodaję prop `onUpdateGroupTransform` do `RightDock.tsx` i `PropertiesPanel.tsx`. Zmieniam `EditorApp.tsx`, żeby przekazać handler."
+
+#### Krok 2: EDGE CASES
+Wymień 1-3 warunki brzegowe, które ten kod musi obsłużyć.
+> Przykład: "1. Pusta selekcja (0 obiektów). 2. Obiekt zablokowany (locked). 3. Scale = 0."
+
+#### Krok 3: CHECKLIST
+Wypisz **wszystkie** wymagania z promptu użytkownika w formie checklisty `[ ]`.
+> Przykład:
+> - `[ ]` Dodać prop do interfejsu
+> - `[ ]` Przekazać prop w JSX
+> - `[ ]` Usunąć min={0.000001}
+> - `[ ]` Dodać sekcję Group Transform
+
+#### Krok 4: IMPLEMENTACJA
+Teraz (i dopiero teraz) pisz kod.
+
+#### Krok 5: WERYFIKACJA
+Po zakończeniu implementacji:
+1. Odhacz checklistę z Kroku 3 jako `[x]`.
+2. Dla każdego **nieodhaczonego** punktu — wyjaśnij dlaczego nie został zrealizowany.
+3. Jeśli choćby jeden punkt jest nieodhaczony bez uzasadnienia — **nie mów "gotowe"**.
+
+---
+
+### 11.4 Reguły Anty-Drift (Anti-Skip)
+
+Modele (szczególnie GPT i Gemini) mają tendencję do "driftu kontekstowego" — gubią wymagania przy długich taskach. Poniższe reguły temu zapobiegają.
+
+**AD-01: Zasada kompletności.** Jeśli task wymienia listę rzeczy do zrobienia, implementujesz **WSZYSTKIE**. Nie wybieraj "najważniejszych". Nie decyduj, że coś jest "trywialne" i nie warte implementacji.
+
+**AD-02: Zasada ponownej lektury.** Po zakończeniu implementacji, **wróć do oryginalnego promptu** użytkownika i przeczytaj go od nowa. Porównaj punkt po punkcie z tym, co faktycznie zrobiłeś. Jeśli cokolwiek pominąłeś — doimplikuj teraz, nie w następnym tasku.
+
+**AD-03: Zasada jawnego raportowania braków.** Jeśli z jakiegoś powodu nie możesz zrealizować podpunktu (brak informacji, konflikt architektoniczny, zbyt duży scope) — **powiedz o tym wprost** zamiast cicho pominąć. Napisz: "Nie zrealizowałem punktu X, ponieważ [konkretny powód]. Potrzebuję [czego] od użytkownika."
+
+**AD-04: Zakaz "mentalnej weryfikacji".** Gdy mówisz "sprawdziłem" — znaczy, że **fizycznie otworzyłeś plik** i przeczytałeś konkretną linię. Nie zakładaj z pamięci. Nie zgaduj. `grep` + `view_file` + `run_command` — to jedyne akceptowane formy "sprawdzenia".
+
+**AD-05: Zasada atomowego taska.** Jeśli dostajesz task z >8 podpunktami, zaproponuj użytkownikowi podział na mniejsze subtaski (max 3-5 kryteriów każdy). Powiedz wprost: "Ten task ma X podpunktów. Proponuję podział na [A] i [B], żeby zmniejszyć ryzyko pominięcia."
+
+---
+
+### 11.5 Format Zwracania Kodu (Output)
+
+- Generuj **wyłącznie** docelowy blok kodu w odpowiednim języku. Żadnych zmian architektury "w tle".
+- Nie zwracaj całego pliku, gdy zmieniasz 3 linie — użyj precyzyjnej edycji.
+- Pod kodem **obowiązkowo** oznacz checklistę z Kroku 3 jako `[x]`, by wymusić weryfikację spełnienia wszystkich założeń.
+- Jeśli modyfikujesz istniejący plik — **zachowaj wszystkie komentarze, docstringi i kod, którego nie dotyczysz**. Żadnego usuwania "bo było niepotrzebne".
+
+---
+
+### 11.6 Sygnały Zatrzymania (Stop Signals)
+
+Zatrzymaj się i **zapytaj użytkownika** zamiast zgadywać, gdy:
+
+1. Nie wiesz, który plik zawiera szukaną funkcję/typ — przeszukaj repo zamiast zgadywać ścieżkę.
+2. Sygnatury API nie zgadzają się z tym, co pamiętasz — otwórz plik źródłowy.
+3. Task jest niejednoznaczny — nie interpretuj kreatywnie, zapytaj wprost.
+4. Odkryjesz buga poza zakresem taska — zgłoś go, nie naprawiaj.
+5. Zmiana dotyka >5 plików — pokaż plan przed implementacją.
+6. Nie jesteś pewien, czy coś jest w scope taska — zapytaj zamiast "dodawać na wszelki wypadek".
+
+---
+
+### 11.7 Specyficzne Pułapki Modeli (Known Model Traps)
+
+Te wzorce zachowań są **udokumentowanymi błędami** z historii tego projektu:
+
+| Pułapka | Opis | Jak uniknąć |
+|---|---|---|
+| **Lost in the Middle** | Model ignoruje reguły ze środka długiego kontekstu | Sekcja 11 ma absolutny priorytet; wracaj do niej po każdym bloku kodu |
+| **Context Drift** | Przy 50 wymaganiach model "kompresuje" i ucina 10-12 | Wypisz checklistę PRZED kodem (Krok 3), zweryfikuj PO kodzie (Krok 5) |
+| **Creative Optimization** | Model przepisuje działający kod "bo było nieczytelne" | N-07: nie ulepszaj kodu poza scope taska |
+| **Import Hallucination** | Model importuje z nieistniejących pakietów | N-05: sprawdź `package.json` i `pnpm-workspace.yaml` przed importem |
+| **API Assumption** | Model zakłada sygnatury z pamięci zamiast sprawdzić | N-06: otwórz plik źródłowy, przeczytaj typ, dopiero pisz kod |
+| **Phantom Fix** | Model "naprawia" buga bez śledzenia call chain | Użyj sekcji 7 → Krok 1-3 (zrozumienie, mapa wpływu, plan) |
+| **Test Theater** | Model mówi "testy powinny przejść" bez uruchomienia | N-10: `pnpm typecheck && pnpm test` — faktycznie uruchom i pokaż wynik |
+
+---
+
+### 11.8 Reguły Diagnostyki Błędów (Bugfix Protocol)
+
+Zanim napiszesz fix, **UDOWODNIJ** przyczynę buga:
+
+1. **Opisz pełny łańcuch wywołań** od wyzwalacza do objawu.
+2. **Wskaż dokładną linię**, w której zachowanie odbiega od oczekiwanego.
+3. **Wyjaśnij DLACZEGO** ta linia powoduje problem (nie co robi — dlaczego jest niepoprawna).
+4. **Potwierdź, że fix atakuje przyczynę**, nie objaw.
+
+Jeśli nie możesz wypełnić punktów 1-3 bez spekulacji — powiedz wprost:
+> "Nie jestem pewien przyczyny. Oto moje hipotezy: [A, B]. Proponuję zweryfikować [konkretny test/log]."
+
+**Nigdy nie pisz fixa "na próbę".** Nigdy nie mów "spróbujmy czy to pomoże".
