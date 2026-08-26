@@ -389,20 +389,43 @@ function hitTestPath(obj: PathObject, worldPoint: Vec2, toleranceWorld: number):
 
   // Flatten all Bézier segments into line segments for hit-testing
   const flatPoints = flattenPath(obj);
+  const childLoops = obj.compoundChildren ?? [];
+  // Evenodd parity must count every loop of a compound path together.
+  const allLoops: Vec2[][] = childLoops.length > 0
+    ? [flatPoints, ...childLoops.map((nodes) => nodes.map((node) => node.point))]
+    : [flatPoints];
 
   if (hasFill && obj.closed && flatPoints.length >= 3) {
-    return pointInPolygon(local, flatPoints);
+    return childLoops.length > 0 ? pointInPolygonEvenOdd(local, allLoops) : pointInPolygon(local, flatPoints);
   }
 
   const strokeWidth = obj.style.stroke?.width ?? 1;
   const tolerance = Math.max(strokeWidth / 2, toleranceWorld);
 
-  for (let i = 0; i < flatPoints.length - (obj.closed ? 0 : 1); i++) {
-    const a = flatPoints[i]!;
-    const b = flatPoints[(i + 1) % flatPoints.length]!;
-    if (distancePointToSegment(local, a, b) <= tolerance) return true;
+  for (const loop of allLoops) {
+    for (let i = 0; i < loop.length - (obj.closed && loop === flatPoints ? 0 : 1); i++) {
+      const a = loop[i]!;
+      const b = loop[(i + 1) % loop.length]!;
+      if (distancePointToSegment(local, a, b) <= tolerance) return true;
+    }
   }
   return false;
+}
+
+/** Evenodd parity across multiple closed loops (compound paths with holes). */
+function pointInPolygonEvenOdd(point: Vec2, loops: readonly Vec2[][]): boolean {
+  let inside = false;
+  for (const loop of loops) {
+    for (let i = 0, j = loop.length - 1; i < loop.length; j = i++) {
+      const yi = loop[i]!.y;
+      const yj = loop[j]!.y;
+      const xi = loop[i]!.x;
+      const xj = loop[j]!.x;
+      const intersect = yi > point.y !== yj > point.y && point.x < ((xj - xi) * (point.y - yi)) / (yj - yi) + xi;
+      if (intersect) inside = !inside;
+    }
+  }
+  return inside;
 }
 
 /** Number of samples per Bézier segment for flattening. */

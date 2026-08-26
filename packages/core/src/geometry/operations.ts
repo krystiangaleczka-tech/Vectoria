@@ -220,6 +220,18 @@ export function scanCleanup(doc: DocumentModel): CleanupPlan {
     if (object.type === 'path' && object.nodes.length < (object.closed ? 3 : 2)) {
       findings.push({ id: `orphan-point:${object.id}`, kind: 'orphan-point', targetIds: [object.id], severity: 'warning', reason: 'Path has too few nodes.', proposedFix: 'Remove invalid path.' });
     }
+    if (object.type === 'group' && object.childIds.length === 0) {
+      findings.push({ id: `empty-group:${object.id}`, kind: 'empty-group', targetIds: [object.id], severity: 'info', reason: 'Group contains no children.', proposedFix: 'Remove empty group.' });
+    }
+  }
+
+  // Saved styles are matched by value: applying copies the style into objects,
+  // so a saved entry is "used" only while some object still carries an equal one.
+  for (const saved of doc.objectStyles ?? []) {
+    const used = Object.values(doc.objects).some((object) => JSON.stringify(object.style) === JSON.stringify(saved.style));
+    if (!used) {
+      findings.push({ id: `unused-style:${saved.id}`, kind: 'unused-style', targetIds: [`style:${saved.id}`], severity: 'info', reason: `Saved style "${saved.name}" matches no object.`, proposedFix: 'Remove saved style.' });
+    }
   }
 
   const objects = Object.values(doc.objects);

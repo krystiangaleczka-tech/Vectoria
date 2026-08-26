@@ -181,6 +181,7 @@ export class CleanUpCommand implements Command {
   readonly type = 'CleanUp';
   readonly description = 'Clean up document';
   private deleted: { layerId: string; objects: DeletedCleanupObject[] }[] = [];
+  private previousStyles: readonly import('../model/types.js').SavedObjectStyle[] | null = null;
 
   constructor(private readonly plan: CleanupPlan) {}
 
@@ -188,9 +189,22 @@ export class CleanUpCommand implements Command {
     const selected = new Set(this.plan.selectedFindingIds);
     const targetIds = new Set(this.plan.findings.filter((finding) => selected.has(finding.id)).flatMap((finding) => finding.targetIds));
     if (targetIds.size === 0) return doc;
+    // Style findings use a "style:" prefix and prune doc.objectStyles instead
+    // of touching scene objects.
+    const styleTargets = new Set([...targetIds].filter((id) => id.startsWith('style:')).map((id) => id.slice('style:'.length)));
+    for (const id of styleTargets) targetIds.delete(`style:${id}`);
     const objects = { ...doc.objects };
     const layers = { ...doc.layers };
     this.deleted = [];
+    this.previousStyles = null;
+    let nextStyles = doc.objectStyles;
+    if (styleTargets.size > 0 && nextStyles) {
+      const filtered = nextStyles.filter((saved) => !styleTargets.has(saved.id));
+      if (filtered.length !== nextStyles.length) {
+        this.previousStyles = nextStyles;
+        nextStyles = filtered;
+      }
+    }
     for (const layerId of doc.layerIds) {
       const layer = doc.layers[layerId];
       if (!layer || layer.locked) continue;
@@ -206,11 +220,12 @@ export class CleanUpCommand implements Command {
         layers[layerId] = { ...layer, objectIds: layer.objectIds.filter((id) => !targetIds.has(id)) };
       }
     }
-    return this.deleted.length === 0 ? doc : { ...doc, objects, layers, updatedAt: new Date().toISOString() };
+    if (this.deleted.length === 0 && this.previousStyles === null) return doc;
+    return { ...doc, objects, layers, ...(this.previousStyles ? { objectStyles: nextStyles } : {}), updatedAt: new Date().toISOString() };
   }
 
   undo(doc: DocumentModel): DocumentModel {
-    if (this.deleted.length === 0) return doc;
+    if (this.deleted.length === 0 && this.previousStyles === null) return doc;
     const objects = { ...doc.objects };
     const layers = { ...doc.layers };
     for (const group of this.deleted) {
@@ -223,7 +238,7 @@ export class CleanUpCommand implements Command {
       }
       layers[group.layerId] = { ...layer, objectIds: ids };
     }
-    return { ...doc, objects, layers, updatedAt: new Date().toISOString() };
+    return { ...doc, objects, layers, ...(this.previousStyles ? { objectStyles: this.previousStyles } : {}), updatedAt: new Date().toISOString() };
   }
 }
 

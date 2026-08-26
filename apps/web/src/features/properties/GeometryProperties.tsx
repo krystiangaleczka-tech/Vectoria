@@ -12,6 +12,7 @@ export type GeometryAction =
   | { type: 'close'; objectId: ObjectId }
   | { type: 'reverse'; objectId: ObjectId }
   | { type: 'simplify-preview'; objectId: ObjectId; accuracy: number }
+  | { type: 'expand-appearance'; objectId: ObjectId }
   | { type: 'boolean'; operation: 'unite' | 'subtract' | 'intersect' | 'exclude' | 'divide' | 'crop'; objectIds: readonly ObjectId[] }
   | { type: 'compound'; objectIds: readonly ObjectId[] };
 
@@ -76,6 +77,7 @@ export const GeometryProperties: React.FC<GeometryPropertiesProps> = ({ document
             <Button size="sm" variant="ghost" disabled={path.closed} onClick={() => onAction({ type: 'close', objectId: path.id })}>Close path</Button>
             <Button size="sm" variant="ghost" onClick={() => onAction({ type: 'reverse', objectId: path.id })}>Reverse direction</Button>
             <Button size="sm" variant="ghost" disabled={!path.style.stroke} onClick={() => onAction({ type: 'outline', objectId: path.id })}>Outline stroke</Button>
+            <Button size="sm" variant="ghost" disabled={!path.widthProfile || !path.style.stroke} data-testid="expand-appearance" onClick={() => onAction({ type: 'expand-appearance', objectId: path.id })}>Expand appearance</Button>
           </div>
         </>
       )}

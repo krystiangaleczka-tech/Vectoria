@@ -2,7 +2,7 @@ import type { Camera } from '@vectoria/editor-engine';
 import type { Vec2 } from '@vectoria/shared';
 import type { DocumentModel, Artboard, RectangleObject, EllipseObject, LineObject, PathObject, ObjectId, Transform2D, LinearGradientFill, RadialGradientFill, AngularGradientFill, PatternFill, GeometryPreview, SceneObject, PolygonObject, StarObject, ArcObject, PieObject, RingObject, SpiralObject, CalloutObject, PolylineObject, StrokeStyle, ArrowheadStyle } from '@vectoria/core';
 import type { SnapResult } from '@vectoria/editor-engine';
-import { getTransformMatrix, getObjectBounds, rectsIntersect, normalizeCornerRadii, flattenPath, widthAtT, getPolygonVertices, getStarVertices, getSpiralVertices, getCalloutVertices, getArrowheadVertices } from '@vectoria/core';
+import { getTransformMatrix, getObjectBounds, rectsIntersect, normalizeCornerRadii, flattenPath, widthAtT, getPolygonVertices, getStarVertices, getSpiralVertices, getCalloutVertices, getArrowheadVertices, expandObject } from '@vectoria/core';
 import { mat3TransformPoint } from '@vectoria/shared';
 import { RenderMetrics } from './metrics.js';
 export { RenderQualityPolicy, type RenderQuality } from './quality.js';
@@ -252,6 +252,15 @@ export function renderScene(
     y: canvasHeight / dpr,
   });
 
+  // Masked content renders through offscreen compositing below; the mask shape
+  // itself is only drawn as the clip/alpha source, never as a plain object.
+  const masks = Object.values(doc.maskGroups ?? {});
+  const maskedIds = new Set<ObjectId>();
+  for (const group of masks) {
+    maskedIds.add(group.maskId);
+    for (const id of group.contentIds) maskedIds.add(id);
+  }
+
   // Render objects in z-order
   for (const layerId of doc.layerIds) {
     const layer = doc.layers[layerId];
@@ -260,6 +269,7 @@ export function renderScene(
     for (const objectId of layer.objectIds) {
       let obj = doc.objects[objectId];
       if (!obj?.visible) continue;
+      if (maskedIds.has(objectId)) continue;
 
       if (options?.previewTransforms?.[objectId]) {
         obj = { ...obj, transform: options.previewTransforms[objectId]! };
@@ -313,14 +323,167 @@ export function renderScene(
          case 'group':
            for (const childId of obj.childIds) {
              const child = doc.objects[childId];
-             if (child?.visible) renderSceneObject(ctx, child, doc);
+             if (child?.visible && !maskedIds.has(childId)) renderSceneObject(ctx, child, doc);
            }
            break;
       }
     }
   }
 
+  if (masks.length > 0) compositeMasks(ctx, camera, doc, masks, canvasWidth, canvasHeight, options?.previewTransforms);
+
   ctx.restore();
+}
+
+/**
+ * Render each mask group through an offscreen canvas: clip mode clips content
+ * with the mask shape's world geometry; opacity mode multiplies content alpha
+ * (directly, or via luminance for `luminance` mode). Offscreen isolation keeps
+ * the scene loop free of per-object compositing state.
+ */
+function compositeMasks(
+  ctx: CanvasRenderingContext2D,
+  camera: Camera,
+  doc: DocumentModel,
+  masks: readonly import('@vectoria/core').MaskGroup[],
+  canvasWidth: number,
+  canvasHeight: number,
+  previewTransforms?: Record<string, import('@vectoria/core').Transform2D>,
+): void {
+  const dpr = window.devicePixelRatio || 1;
+  for (const group of masks) {
+    const maskObject = doc.objects[group.maskId];
+    if (!maskObject?.visible) continue;
+    const loops = maskGeometryLoops(maskObject);
+    if (!loops || loops.length === 0) continue;
+
+    const offscreen = createOffscreen(canvasWidth, canvasHeight);
+    if (!offscreen) continue;
+    const octx = offscreen.getContext('2d');
+    if (!octx) continue;
+
+    octx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    octx.translate(camera.pan.x, camera.pan.y);
+    octx.scale(camera.zoom, camera.zoom);
+
+    if (group.mode === 'clip') {
+      octx.save();
+      octx.clip(buildMaskPath2D(loops));
+      for (const id of group.contentIds) drawMaskContent(octx, doc, id, camera, previewTransforms);
+      octx.restore();
+    } else {
+      for (const id of group.contentIds) drawMaskContent(octx, doc, id, camera, previewTransforms);
+      const maskCanvas = createOffscreen(canvasWidth, canvasHeight);
+      if (maskCanvas) {
+        const mctx = maskCanvas.getContext('2d');
+        if (mctx) {
+          mctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          mctx.translate(camera.pan.x, camera.pan.y);
+          mctx.scale(camera.zoom, camera.zoom);
+          mctx.fillStyle = '#ffffff';
+          mctx.strokeStyle = '#ffffff';
+          mctx.fill(buildMaskPath2D(loops), 'evenodd');
+          if (group.opacityMode === 'alpha') applyAlphaMask(offscreen, maskCanvas, canvasWidth, canvasHeight, dpr);
+          else applyLuminanceMask(offscreen, maskCanvas, canvasWidth, canvasHeight, dpr);
+        }
+      }
+    }
+
+    ctx.save();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.drawImage(offscreen, 0, 0);
+    ctx.restore();
+  }
+}
+
+function createOffscreen(width: number, height: number): HTMLCanvasElement | null {
+  if (typeof document === 'undefined') return null;
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  return canvas;
+}
+
+/** Draw one masked object honouring its layer opacity and any drag preview. */
+function drawMaskContent(
+  ctx: CanvasRenderingContext2D,
+  doc: DocumentModel,
+  objectId: ObjectId,
+  camera: Camera,
+  previewTransforms?: Record<string, Transform2D>,
+): void {
+  let object = doc.objects[objectId];
+  if (!object?.visible) return;
+  const layer = Object.values(doc.layers).find((candidate) => candidate.objectIds.includes(objectId));
+  if (!layer || !layer.visible || layer.opacity === 0) return;
+  if (previewTransforms?.[objectId]) object = { ...object, transform: previewTransforms[objectId]! };
+  if (layer.opacity !== 1) object = { ...object, style: { ...object.style, opacity: object.style.opacity * layer.opacity } };
+  if (!rectsIntersect(getObjectBounds(object, doc), camera.getVisibleWorldRect({ x: ctx.canvas.width / (window.devicePixelRatio || 1), y: ctx.canvas.height / (window.devicePixelRatio || 1) }))) return;
+  renderSceneObject(ctx, object, doc);
+}
+
+/** World-space outline loops of the mask shape; null when unsupported. */
+function maskGeometryLoops(maskObject: SceneObject): Vec2[][] | null {
+  const toWorld = (object: SceneObject, points: readonly Vec2[]): Vec2[] => {
+    const matrix = getTransformMatrix(object.transform);
+    return points.map((point) => ({
+      x: matrix[0]! * point.x + matrix[3]! * point.y + matrix[6]!,
+      y: matrix[1]! * point.x + matrix[4]! * point.y + matrix[7]!,
+    }));
+  };
+  if (maskObject.type === 'path') {
+    const main = toWorld(maskObject, flattenPath(maskObject));
+    const children = (maskObject.compoundChildren ?? []).map((nodes) => toWorld(maskObject, nodes.map((node) => node.point)));
+    return [main, ...children];
+  }
+  const expanded = expandObject(maskObject);
+  if (expanded?.type === 'path' && expanded.nodes.length >= 2) return [toWorld(expanded, flattenPath(expanded))];
+  return null;
+}
+
+/** Clip/alpha source as a single evenodd Path2D covering every mask loop. */
+function buildMaskPath2D(loops: readonly Vec2[][]): Path2D {
+  const path = new Path2D();
+  for (const loop of loops) {
+    loop.forEach((point, index) => {
+      if (index === 0) path.moveTo(point.x, point.y);
+      else path.lineTo(point.x, point.y);
+    });
+    path.closePath();
+  }
+  return path;
+}
+
+/** Keep content pixels only where the mask canvas is opaque. */
+function applyAlphaMask(content: HTMLCanvasElement, mask: HTMLCanvasElement, width: number, height: number, dpr: number): void {
+  const cctx = content.getContext('2d');
+  if (!cctx) return;
+  cctx.save();
+  cctx.setTransform(1, 0, 0, 1, 0, 0);
+  cctx.globalCompositeOperation = 'destination-in';
+  cctx.drawImage(mask, 0, 0, width / dpr, height / dpr);
+  cctx.restore();
+}
+
+/** Convert the mask canvas to a luminance map, then multiply into content alpha. */
+function applyLuminanceMask(content: HTMLCanvasElement, mask: HTMLCanvasElement, width: number, height: number, dpr: number): void {
+  const mctx = mask.getContext('2d');
+  const cctx = content.getContext('2d');
+  if (!mctx || !cctx) return;
+  try {
+    const image = mctx.getImageData(0, 0, mask.width, mask.height);
+    const data = image.data;
+    for (let i = 0; i < data.length; i += 4) {
+      const alpha = data[i + 3]!;
+      if (alpha === 0) continue;
+      const luminance = (0.2126 * data[i]! + 0.7152 * data[i + 1]! + 0.0722 * data[i + 2]!) / 255;
+      data[i + 3] = alpha * luminance;
+    }
+    mctx.putImageData(image, 0, 0);
+  } catch {
+    // Tainted canvas (foreign content) cannot be read; fall back to alpha-only.
+  }
+  applyAlphaMask(content, mask, width, height, dpr);
 }
 
 

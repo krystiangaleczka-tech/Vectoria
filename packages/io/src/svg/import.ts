@@ -180,7 +180,88 @@ export function importSvgToDocument(svgText: string, name = 'Imported SVG'): Doc
       objectIds.push(id);
     }
   }
-  return { ...doc, objects, layers: { ...doc.layers, [layerId]: { ...doc.layers[layerId]!, objectIds } }, updatedAt: new Date().toISOString() };
+
+  // Clip paths and masks become MaskGroups: the first shape inside the def is
+  // the mask geometry, elements referencing it via clip-path/mask are content.
+  const defShapes = Array.from(root.querySelectorAll('clipPath, mask')).filter((def) => !def.closest('clipPath, mask'));
+  const referenced = new Map<string, string[]>();
+  for (const element of elements) {
+    for (const attributeName of ['clip-path', 'mask']) {
+      const reference = element.getAttribute(attributeName)?.match(/^url\(#(.+)\)$/)?.[1];
+      if (reference) referenced.set(reference, [...(referenced.get(reference) ?? []), element.getAttribute('id') ?? '']);
+    }
+  }
+  const importedMasks: import('@vectoria/core').MaskGroup[] = [];
+  for (const def of defShapes) {
+    const defId = def.getAttribute('id');
+    if (!defId) continue;
+    const memberNames = new Set(referenced.get(defId) ?? []);
+    if (memberNames.size === 0) continue;
+    const firstShape = def.querySelector('path, rect, circle, ellipse, polygon');
+    if (!firstShape) continue;
+    const points = parseDefShapeGeometry(firstShape);
+    if (!points || points.length < 3) continue;
+    const maskNodeId = generateId();
+    objects[maskNodeId] = {
+      id: maskNodeId,
+      name: `${def.nodeName} ${objectIds.length + 1}`,
+      layerId,
+      visible: true,
+      locked: false,
+      type: 'path',
+      transform: createTransform({ x: 0, y: 0 }),
+      nodes: points.map((point, index) => ({ id: `${maskNodeId}-node-${index + 1}`, point, inHandle: null, outHandle: null, kind: 'corner' as const })),
+      closed: true,
+      style: { ...defaultObjectStyle, fill: { type: 'none' }, stroke: defaultStroke },
+    };
+    objectIds.push(maskNodeId);
+    const isAlpha = def.nodeName.toLowerCase() === 'mask' && (def.getAttribute('style') ?? '').includes('alpha');
+    importedMasks.push({
+      id: generateId(),
+      mode: def.nodeName.toLowerCase() === 'clippath' ? 'clip' : 'opacity',
+      maskId: maskNodeId,
+      contentIds: objectIds.filter((id) => id !== maskNodeId && memberNames.has(objects[id]?.name ?? '')),
+      ...(isAlpha ? { opacityMode: 'alpha' as const } : {}),
+    });
+  }
+  const usableMasks = importedMasks.filter((group) => group.contentIds.length > 0);
+  const maskMap = Object.fromEntries(usableMasks.map((group) => [group.id, group]));
+
+  return { ...doc, objects, layers: { ...doc.layers, [layerId]: { ...doc.layers[layerId]!, objectIds } }, ...(usableMasks.length > 0 ? { maskGroups: maskMap } : {}), updatedAt: new Date().toISOString() };
+}
+
+/** Minimal geometry reader for shapes nested inside clipPath/mask defs. */
+function parseDefShapeGeometry(element: Element): { x: number; y: number }[] | null {
+  const tag = element.nodeName.toLowerCase();
+  if (tag === 'circle') {
+    const cx = number(element, 'cx');
+    const cy = number(element, 'cy');
+    const r = Math.max(0.01, number(element, 'r', 1));
+    return Array.from({ length: 24 }, (_, index) => {
+      const angle = (Math.PI * 2 * index) / 24;
+      return { x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) };
+    });
+  }
+  if (tag === 'ellipse') {
+    const cx = number(element, 'cx');
+    const cy = number(element, 'cy');
+    const rx = Math.max(0.01, number(element, 'rx', 1));
+    const ry = Math.max(0.01, number(element, 'ry', 1));
+    return Array.from({ length: 24 }, (_, index) => {
+      const angle = (Math.PI * 2 * index) / 24;
+      return { x: cx + rx * Math.cos(angle), y: cy + ry * Math.sin(angle) };
+    });
+  }
+  if (tag === 'rect') {
+    const x = number(element, 'x');
+    const y = number(element, 'y');
+    const width = Math.max(0.01, number(element, 'width', 1));
+    const height = Math.max(0.01, number(element, 'height', 1));
+    return [{ x, y }, { x: x + width, y }, { x: x + width, y: y + height }, { x, y: y + height }];
+  }
+  if (tag === 'polygon' || tag === 'polyline') return parsePointsData(element.getAttribute('points') || '');
+  if (tag === 'path') return parsePathData(element.getAttribute('d') || '').map((node) => node.point);
+  return null;
 }
 
 export async function rasterizeSvgToPng(svg: string, width: number, height: number): Promise<Blob> {

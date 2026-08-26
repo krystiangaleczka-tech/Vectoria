@@ -63,7 +63,29 @@ function booleanPolygons(operation: BooleanOperation, polygons: readonly Polygon
     if (value) filled.add(`${x}:${y}`);
   }
   const loops = traceLoops(xValues, yValues, filled);
-  return loops.map((points, index) => makeResultPath(source, points, index === 0 ? source.id : `${source.id}-boolean-${index + 1}`));
+  // Holes fall out of the grid trace as separate inner loops; emitting them as
+  // standalone filled paths would paint the hole shut. Glue every loop into one
+  // evenodd compound so containment semantics survive rendering and export.
+  if (loops.length === 0) return [];
+  if (loops.length === 1) return [makeResultPath(source, loops[0]!, source.id)];
+  const [outer, ...inner] = sortLoopsByAreaDesc(loops);
+  if (!outer) return [];
+  const compound = makeResultPath(source, outer, source.id);
+  return [{
+    ...compound,
+    name: `${source.name} Boolean`,
+    fillRule: 'evenodd',
+    compoundChildren: inner.map((points) => points.map((point) => createPathNode(point))),
+  }];
+}
+
+/** Outer loop first (largest signed extent), holes after — stable evenodd order. */
+function sortLoopsByAreaDesc(loops: readonly Point[][]): Point[][] {
+  const area = (loop: readonly Point[]): number => loop.reduce((sum, point, index) => {
+    const next = loop[(index + 1) % loop.length]!;
+    return sum + point.x * next.y - next.x * point.y;
+  }, 0);
+  return [...loops].sort((a, b) => Math.abs(area(b)) - Math.abs(area(a)));
 }
 
 function cellsForPolygon(polygon: Polygon, xs: readonly number[], ys: readonly number[]): Set<string> {

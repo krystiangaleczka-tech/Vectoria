@@ -1,5 +1,5 @@
-import type { DocumentModel, SceneObject, RectangleObject, EllipseObject, LineObject, PathObject, StrokeStyle, FillStyle, LinearGradientFill, RadialGradientFill, PatternFill, PolygonObject, StarObject, ArcObject, PieObject, RingObject, SpiralObject, CalloutObject, PolylineObject, ArrowheadStyle } from '@vectoria/core';
-import { getTransformMatrix, normalizeCornerRadii, getPolygonVertices, getStarVertices, getSpiralVertices, getCalloutVertices } from '@vectoria/core';
+import type { DocumentModel, SceneObject, ObjectId, RectangleObject, EllipseObject, LineObject, PathObject, StrokeStyle, FillStyle, LinearGradientFill, RadialGradientFill, PatternFill, PolygonObject, StarObject, ArcObject, PieObject, RingObject, SpiralObject, CalloutObject, PolylineObject, ArrowheadStyle } from '@vectoria/core';
+import { getTransformMatrix, normalizeCornerRadii, getPolygonVertices, getStarVertices, getSpiralVertices, getCalloutVertices, expandObject, getCubicSegment, evaluateCubic } from '@vectoria/core';
 
 export function escapeXml(unsafe: string): string {
   return unsafe
@@ -30,6 +30,17 @@ export function exportArtboardToSvg(doc: DocumentModel, artboardId?: string): st
   const markerDefs: string[] = [];
   const markerMap = new Map<string, string>();
 
+  // Mask groups: content objects are wrapped in <g clip-path|mask>, the mask
+  // shape itself is emitted into defs as geometry only.
+  const maskDefs: string[] = [];
+  const masks = Object.values(doc.maskGroups ?? {});
+  const maskedIds = new Set<ObjectId>();
+  for (const group of masks) {
+    maskedIds.add(group.maskId);
+    for (const id of group.contentIds) maskedIds.add(id);
+  }
+  const maskContentBuffers = new Map<string, string[]>();
+
   const elements: string[] = [];
 
   // Render objects in global z-order
@@ -51,10 +62,35 @@ export function exportArtboardToSvg(doc: DocumentModel, artboardId?: string): st
         }
       }
 
+      // Mask shapes are consumed by their group's def, not drawn directly.
+      if (maskedIds.has(objectId) && masks.some((group) => group.maskId === objectId)) continue;
+
       const elementSvg = renderSceneObjectToSvg(obj, gradientMap, markerMap, markerDefs);
-      if (elementSvg) {
+      if (!elementSvg) continue;
+      const owningMask = masks.find((group) => group.contentIds.includes(objectId));
+      if (owningMask) {
+        const buffer = maskContentBuffers.get(owningMask.id) ?? [];
+        buffer.push(elementSvg);
+        maskContentBuffers.set(owningMask.id, buffer);
+      } else {
         elements.push(elementSvg);
       }
+    }
+  }
+
+  for (const group of masks) {
+    const loops = maskGeometryLoopsForExport(doc.objects[group.maskId]);
+    if (!loops) continue;
+    const d = loops.map((loop) => 'M ' + loop.map((point) => `${round2(point.x)} ${round2(point.y)}`).join(' L ') + ' Z').join(' ');
+    const refAttr = group.mode === 'clip' ? ` clip-path="url(#mask-${escapeXml(group.id)})"` : ` mask="url(#mask-${escapeXml(group.id)})"`;
+    const body = maskContentBuffers.get(group.id) ?? [];
+    elements.push(`<g${refAttr}>${body.map((el) => el).join('')}</g>`);
+    const maskTypeAttr = group.mode === 'opacity' && group.opacityMode === 'alpha' ? ' style="mask-type:alpha"' : '';
+    if (group.mode === 'clip') {
+      maskDefs.push(`<clipPath id="mask-${escapeXml(group.id)}"><path d="${d}" clip-rule="evenodd" /></clipPath>`);
+    } else {
+      const fill = group.opacityMode === 'alpha' ? '#000000' : '#ffffff';
+      maskDefs.push(`<mask id="mask-${escapeXml(group.id)}"${maskTypeAttr}><path d="${d}" fill="${fill}" fill-rule="evenodd" /></mask>`);
     }
   }
 
@@ -64,6 +100,7 @@ export function exportArtboardToSvg(doc: DocumentModel, artboardId?: string): st
     `    </clipPath>`,
     ...gradientDefs.map((d) => `    ${d}`),
     ...markerDefs.map((d) => `    ${d}`),
+    ...maskDefs.map((d) => `    ${d}`),
   ].join('\n');
 
   const svgContent = `<?xml version="1.0" encoding="UTF-8"?>
@@ -302,25 +339,40 @@ function renderPathToSvg(obj: PathObject, gradientMap: Map<FillStyle, string>): 
   const matrix = getTransformMatrix(obj.transform);
   const transformAttr = `matrix(${matrix[0]} ${matrix[1]} ${matrix[3]} ${matrix[4]} ${matrix[6]} ${matrix[7]})`;
 
-  const segments = obj.nodes.map((node, i) => {
+  const buildSubpath = (nodes: readonly import('@vectoria/core').PathNode[]): string[] => nodes.map((node, i) => {
     if (i === 0) return `M ${node.point.x} ${node.point.y}`;
-    const prev = obj.nodes[i - 1]!;
+    const prev = nodes[i - 1]!;
     const cp1 = prev.outHandle ?? prev.point;
     const cp2 = node.inHandle ?? node.point;
     return `C ${cp1.x} ${cp1.y}, ${cp2.x} ${cp2.y}, ${node.point.x} ${node.point.y}`;
   });
+
+  const segments = buildSubpath(obj.nodes);
   if (obj.closed && obj.nodes.length > 1) {
     const last = obj.nodes[obj.nodes.length - 1]!;
     const first = obj.nodes[0]!;
     segments.push(`C ${last.outHandle?.x ?? last.point.x} ${last.outHandle?.y ?? last.point.y}, ${first.inHandle?.x ?? first.point.x} ${first.inHandle?.y ?? first.point.y}, ${first.point.x} ${first.point.y}`);
   }
-  const d = segments.join(' ') + (obj.closed ? ' Z' : '');
+  // Compound children become extra subpaths; evenodd keeps their holes hollow.
+  const isCompound = (obj.compoundChildren?.length ?? 0) > 0;
+  for (const child of obj.compoundChildren ?? []) {
+    const sub = buildSubpath(child);
+    if (obj.closed && child.length > 1) {
+      const last = child[child.length - 1]!;
+      const first = child[0]!;
+      sub.push(`C ${last.outHandle?.x ?? last.point.x} ${last.outHandle?.y ?? last.point.y}, ${first.inHandle?.x ?? first.point.x} ${first.inHandle?.y ?? first.point.y}, ${first.point.x} ${first.point.y}`);
+    }
+    segments.push(...sub);
+  }
+  let d = segments.join(' ') + (obj.closed ? ' Z' : '');
+  if (isCompound) d += ' Z';
 
   const fillAttr = obj.closed ? resolveFillAttr(obj.style.fill, gradientMap) : 'fill="none"';
+  const fillRuleAttr = isCompound ? ` fill-rule="${obj.fillRule ?? 'evenodd'}"` : '';
   const strokeAttr = obj.style.stroke ? buildStrokeAttr(obj.style.stroke) : '';
   const opacityAttr = obj.style.opacity < 1 ? ` opacity="${obj.style.opacity}"` : '';
 
-   return `<path d="${d}" transform="${transformAttr}" ${fillAttr}${strokeAttr}${opacityAttr}${blendAttr(obj.style.blendMode)} />`;
+   return `<path d="${d}"${fillRuleAttr} transform="${transformAttr}" ${fillAttr}${strokeAttr}${opacityAttr}${blendAttr(obj.style.blendMode)} />`;
 }
 
 function blendAttr(mode: import('@vectoria/core').BlendMode | undefined): string {
@@ -390,4 +442,33 @@ export function downloadSvg(svgContent: string, filename = 'export.svg'): void {
   link.click();
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
+}
+
+/** World-space outline loops of a mask shape; mirrors renderer compositing input. */
+function maskGeometryLoopsForExport(maskObject: SceneObject | undefined): { x: number; y: number }[][] | null {
+  if (!maskObject) return null;
+  const toWorld = (object: SceneObject, points: readonly { x: number; y: number }[]): { x: number; y: number }[] => {
+    const matrix = getTransformMatrix(object.transform);
+    return points.map((point) => ({ x: matrix[0]! * point.x + matrix[3]! * point.y + matrix[6]!, y: matrix[1]! * point.x + matrix[4]! * point.y + matrix[7]! }));
+  };
+  if (maskObject.type === 'path') {
+    const main = toWorld(maskObject, flattenPathLocal(maskObject));
+    const children = (maskObject.compoundChildren ?? []).map((nodes) => toWorld(maskObject, nodes.map((node) => node.point)));
+    return [main, ...children];
+  }
+  const expanded = expandObject(maskObject);
+  if (expanded?.type === 'path' && expanded.nodes.length >= 2) return [toWorld(expanded, flattenPathLocal(expanded))];
+  return null;
+}
+
+/** Local flatten without importing engine helpers (core flattenPath is local already). */
+function flattenPathLocal(object: import('@vectoria/core').PathObject): { x: number; y: number }[] {
+  const points: { x: number; y: number }[] = [];
+  const segments = object.closed ? object.nodes.length : object.nodes.length - 1;
+  for (let index = 0; index < segments; index += 1) {
+    const segment = getCubicSegment(object.nodes, index, object.closed);
+    if (!segment) continue;
+    for (let step = index === 0 ? 0 : 1; step <= 12; step += 1) points.push(evaluateCubic(segment, step / 12));
+  }
+  return points;
 }

@@ -15,9 +15,14 @@ export const CleanupPanel: React.FC<CleanupPanelProps> = ({ plan, onChangeSelect
     <div className="dock-panel-content cleanup-panel" data-testid="cleanup-panel">
       <div className="panel-section-heading"><span>Clean Up review</span><span className="panel-count">{plan.findings.length}</span></div>
       {plan.findings.length === 0 ? (
-        <div className="panel-empty-state"><strong>Document is clean</strong><span>No invalid paths or duplicate geometry found.</span></div>
+        <div className="panel-empty-state"><strong>Document is clean</strong><span>No invalid paths, empty groups, unused styles or duplicate geometry found.</span></div>
       ) : (
         <>
+          <div className="cleanup-categories" role="group" aria-label="Finding categories">
+            {Object.entries(plan.findings.reduce<Record<string, number>>((counts, finding) => ({ ...counts, [finding.kind]: (counts[finding.kind] ?? 0) + 1 }), {})).map(([kind, count]) => (
+              <span key={kind} className={`cleanup-category cleanup-category-${kind}`}>{kind} <strong>{count}</strong></span>
+            ))}
+          </div>
           <div className="cleanup-list" role="listbox" aria-label="Cleanup findings" aria-multiselectable="true">
             {plan.findings.map((finding) => {
               const selected = plan.selectedFindingIds.includes(finding.id);

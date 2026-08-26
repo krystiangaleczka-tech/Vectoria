@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createDefaultDocument, createTransform, defaultObjectStyle, defaultStroke, type DocumentModel, type PolygonObject, type StarObject, type PolylineObject, type LineObject, type EllipseObject } from '@vectoria/core';
+import { createDefaultDocument, createTransform, defaultObjectStyle, defaultStroke, type DocumentModel, type PolygonObject, type StarObject, type PolylineObject, type LineObject, type EllipseObject, type RectangleObject, type MaskGroup } from '@vectoria/core';
 import { exportArtboardToSvg, importSvgToDocument } from '../src/index.js';
 
 function docWith(objects: Record<string, import('@vectoria/core').SceneObject>): DocumentModel {
@@ -83,4 +83,35 @@ describe('EPIC-04 SVG export/import', () => {
     expect(line).toBeDefined();
     expect(line!.style.stroke?.markerEnd?.type).toBe('triangle');
   });
+
+  it('exports mask groups as defs + wrapped content and compound paths with fill-rule', () => {
+    const id = base().activeLayerId;
+    const maskShape: RectangleObject = { type: 'rectangle', id: 'm1', name: 'm1', layerId: id, visible: true, locked: false, transform: createTransform({ x: 0, y: 0 }), style: defaultObjectStyle, width: 100, height: 100, cornerRadius: 0 };
+    const content: PolylineObject = { type: 'polyline', id: 'c1', name: 'c1', layerId: id, visible: true, locked: false, transform: createTransform({ x: 10, y: 10 }), style: { ...defaultObjectStyle, fill: { type: 'none' }, stroke: defaultStroke }, points: [{ x: 0, y: 0 }, { x: 50, y: 50 }] };
+    const group: MaskGroup = { id: 'mg1', mode: 'clip', maskId: 'm1', contentIds: ['c1'] };
+    const svg = exportArtboardToSvg({ ...docWith({ m1: maskShape, c1: content }), maskGroups: { mg1: group } });
+
+    expect(svg).toContain('<clipPath id="mask-mg1">');
+    expect(svg).toContain('clip-path="url(#mask-mg1)"');
+    // Mask shape is not drawn directly; exactly one polyline (the wrapped
+    // content) and no standalone rect reach the body.
+    expect(svg.match(/<polyline/g)).toHaveLength(1);
+    // Two clipPaths total: the artboard clip plus the mask geometry def.
+    expect(svg.match(/<clipPath/g)).toHaveLength(2);
+    expect(svg).toContain('clip-rule="evenodd"');
+
+    const holeOuter = {
+      type: 'path' as const, id: 'ho', name: 'ho', layerId: id, visible: true, locked: false,
+      transform: createTransform({ x: 0, y: 0 }), style: defaultObjectStyle,
+      closed: true, fillRule: 'evenodd' as const,
+      nodes: [createNode(0, 0), createNode(100, 0), createNode(100, 100), createNode(0, 100)],
+      compoundChildren: [[createNode(40, 40), createNode(60, 40), createNode(60, 60), createNode(40, 60)]],
+    };
+    const svgHole = exportArtboardToSvg(docWith({ ho: holeOuter as unknown as DocumentModel['objects'][string] }));
+    expect(svgHole).toContain('fill-rule="evenodd"');
+  });
 });
+
+function createNode(x: number, y: number) {
+  return { id: `n-${x}-${y}`, point: { x, y }, inHandle: null, outHandle: null, kind: 'corner' as const };
+}

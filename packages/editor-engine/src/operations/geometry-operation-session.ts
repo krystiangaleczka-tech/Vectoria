@@ -3,6 +3,7 @@ import {
   CleanUpCommand,
   ConvertToCurvesCommand,
   CornerPathCommand,
+  ExpandAppearanceCommand,
   OffsetPathCommand,
   OutlineStrokeCommand,
   SimplifyPathCommand,
@@ -17,7 +18,7 @@ import {
   type OffsetOptions,
 } from '@vectoria/core';
 
-export type GeometrySessionOperation = 'expand' | 'corners' | 'offset' | 'outline-stroke' | 'simplify' | 'cleanup';
+export type GeometrySessionOperation = 'expand' | 'corners' | 'offset' | 'outline-stroke' | 'simplify' | 'expand-appearance' | 'cleanup';
 
 export class GeometryOperationSession {
   private current: { readonly preview: GeometryPreview; readonly command: Command } | null = null;
@@ -60,6 +61,24 @@ export class GeometryOperationSession {
       ? [{ ...object, nodes }]
       : [];
     return this.set('simplify', proposed, proposed.length === 0 ? ['Nothing to simplify at this accuracy.'] : [], new SimplifyPathCommand(objectId, accuracy, this.document));
+  }
+
+  /**
+   * Destructive appearance bake: variable-width strokes become filled
+   * outlines. Preview shows the exact geometry Apply would commit.
+   */
+  previewExpandAppearance(objectId: ObjectId): GeometryPreview {
+    const object = this.document.objects[objectId];
+    if (object?.type !== 'path' || !object.widthProfile || !object.style.stroke) {
+      return this.set('expand-appearance', [], ['Expand Appearance requires a path with a variable width stroke.'], new ExpandAppearanceCommand([objectId]));
+    }
+    const result = outlineStroke(object, object.style.stroke);
+    return this.set(
+      'expand-appearance',
+      result.path ? [{ ...result.path, name: `${object.name} expanded` }] : [],
+      result.warning ? [result.warning] : [],
+      new ExpandAppearanceCommand([objectId]),
+    );
   }
 
   previewCleanup(plan: CleanupPlan): GeometryPreview {

@@ -297,43 +297,43 @@ Wymóg stopniowego rozszerzania artboardu o 10% wynika bezpośrednio z potrzeby 
 
 ## EPIC-07: Edycja geometrii
 
-- [ ] **EDIT-001** Edytować parametry shape bez destrukcyjnej konwersji
-- [ ] **EDIT-002** Dodać Convert to Curves/Expand
-- [ ] **EDIT-003** Zaimplementować Corner Tool
-- [ ] **EDIT-004** Dodać rounded corners
-- [ ] **EDIT-005** Dodać chamfer corners
-- [ ] **EDIT-006** Dodać inverted corners
-- [ ] **EDIT-007** Zaimplementować Offset Path do środka
-- [ ] **EDIT-008** Zaimplementować Offset Path na zewnątrz
-- [ ] **EDIT-009** Zaimplementować Outline Stroke
-- [ ] **EDIT-010** Zaimplementować Join Paths
-- [ ] **EDIT-011** Zaimplementować Close Path
-- [ ] **EDIT-012** Zaimplementować Reverse Path Direction
-- [ ] **EDIT-013** Zaimplementować Clean Up document
-- [ ] **EDIT-014** Wykrywać puste grupy
-- [ ] **EDIT-015** Wykrywać samotne punkty
-- [ ] **EDIT-016** Wykrywać zduplikowane elementy
-- [ ] **EDIT-017** Wykrywać nieużywane style
-- [ ] **EDIT-018** Dodać panel wyników Clean Up z możliwością zatwierdzenia zmian
+- [x] **EDIT-001** Edytować parametry shape bez destrukcyjnej konwersji
+- [x] **EDIT-002** Dodać Convert to Curves/Expand
+- [x] **EDIT-003** Zaimplementować Corner Tool
+- [x] **EDIT-004** Dodać rounded corners
+- [x] **EDIT-005** Dodać chamfer corners
+- [x] **EDIT-006** Dodać inverted corners
+- [x] **EDIT-007** Zaimplementować Offset Path do środka
+- [x] **EDIT-008** Zaimplementować Offset Path na zewnątrz
+- [x] **EDIT-009** Zaimplementować Outline Stroke
+- [x] **EDIT-010** Zaimplementować Join Paths
+- [x] **EDIT-011** Zaimplementować Close Path
+- [x] **EDIT-012** Zaimplementować Reverse Path Direction
+- [x] **EDIT-013** Zaimplementować Clean Up document
+- [x] **EDIT-014** Wykrywać puste grupy
+- [x] **EDIT-015** Wykrywać samotne punkty
+- [x] **EDIT-016** Wykrywać zduplikowane elementy
+- [x] **EDIT-017** Wykrywać nieużywane style
+- [x] **EDIT-018** Dodać panel wyników Clean Up z możliwością zatwierdzenia zmian
 
 ## EPIC-08: Boolean, maski i compositing
 
-- [ ] **BOOL-001** Zaimplementować Unite/Weld
-- [ ] **BOOL-002** Zaimplementować Subtract/Trim
-- [ ] **BOOL-003** Zaimplementować Intersect
-- [ ] **BOOL-004** Zaimplementować Exclude
-- [ ] **BOOL-005** Zaimplementować Divide
-- [ ] **BOOL-006** Zaimplementować Crop
-- [ ] **BOOL-007** Zaimplementować Compound Path
-- [ ] **BOOL-008** Obsłużyć dziury w compound path
-- [ ] **BOOL-009** Zaimplementować Clipping Mask
-- [ ] **BOOL-010** Edytować zawartość clipping mask
-- [ ] **BOOL-011** Zaimplementować Opacity Mask
-- [ ] **BOOL-012** Zaimplementować Isolate Mode dla grup
-- [ ] **BOOL-013** Zaimplementować Isolate Mode dla masek
-- [ ] **BOOL-014** Zaimplementować Expand Appearance
-- [ ] **BOOL-015** Dodać preview Boolean przed zatwierdzeniem dla ciężkich obiektów
-- [ ] **BOOL-016** Dodać testy poprawności Boolean dla krzywych i compound paths
+- [x] **BOOL-001** Zaimplementować Unite/Weld
+- [x] **BOOL-002** Zaimplementować Subtract/Trim
+- [x] **BOOL-003** Zaimplementować Intersect
+- [x] **BOOL-004** Zaimplementować Exclude
+- [x] **BOOL-005** Zaimplementować Divide
+- [x] **BOOL-006** Zaimplementować Crop
+- [x] **BOOL-007** Zaimplementować Compound Path
+- [x] **BOOL-008** Obsłużyć dziury w compound path
+- [x] **BOOL-009** Zaimplementować Clipping Mask
+- [x] **BOOL-010** Edytować zawartość clipping mask
+- [x] **BOOL-011** Zaimplementować Opacity Mask
+- [x] **BOOL-012** Zaimplementować Isolate Mode dla grup
+- [x] **BOOL-013** Zaimplementować Isolate Mode dla masek
+- [x] **BOOL-014** Zaimplementować Expand Appearance
+- [x] **BOOL-015** Dodać preview Boolean przed zatwierdzeniem dla ciężkich obiektów
+- [x] **BOOL-016** Dodać testy poprawności Boolean dla krzywych i compound paths
 
 ## EPIC-09: Fill, stroke, kolor i style
 

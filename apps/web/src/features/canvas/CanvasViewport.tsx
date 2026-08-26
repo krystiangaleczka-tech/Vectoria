@@ -670,6 +670,17 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
 
       const isDoublePick = hit && lastGroupPickRef.current?.id === hit.objectId && e.timeStamp - lastGroupPickRef.current.timestamp < 400;
       lastGroupPickRef.current = hit ? { id: hit.objectId, timestamp: e.timeStamp } : null;
+      if (isDoublePick && hit) {
+        const owningMask = Object.values(doc.maskGroups ?? {}).find((group) => group.maskId === hit.objectId);
+        if (owningMask) {
+          // Double-click on a mask shape enters mask isolation: content becomes
+          // the editable scope, Escape leaves through the existing breadcrumb.
+          isolationRef.current.enterMask(owningMask);
+          setIsolationVersion((version) => version + 1);
+          onSelectObjects?.(owningMask.contentIds);
+          return;
+        }
+      }
       if (isDoublePick && hit && doc.objects[hit.objectId]?.type === 'group') {
         const group = doc.objects[hit.objectId];
         if (!group || group.type !== 'group') return;

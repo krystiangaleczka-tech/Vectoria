@@ -749,7 +749,9 @@ export const EditorApp: React.FC = () => {
           ? session.previewOffset(action.objectId, { direction: action.direction, distance: action.distance })
           : action.type === 'simplify-preview'
             ? session.previewSimplify(action.objectId, action.accuracy)
-            : session.previewOutline(action.objectId);
+            : action.type === 'expand-appearance'
+              ? session.previewExpandAppearance(action.objectId)
+              : session.previewOutline(action.objectId);
     geometrySessionRef.current = session;
     setGeometryPreview(preview);
     if (action.type === 'expand') setDestructiveGeometryConfirmOpen(true);
