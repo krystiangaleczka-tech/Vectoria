@@ -25,3 +25,6 @@ Figury (Arc, Pie, Ring, Star, Spiral, Callout, Polygon, Polyline) będą zdefini
 - Złożenie renderowania na Canvas 2D wymaga utrzymywania dedykowanych funkcji renderujących w `packages/renderer`.
 - Dla manipulacji na pojedynczych wierzchołkach będzie konieczne istnienie opcji konwersji / komendy w stylu `ConvertObjectToPathCommand` (zgodnie z `VECTORIA_ARCHITECTURE.md`), co bezpowrotnie straci dane parametryczne kształtu i nada mu charakter `PathObject`.
 - Ogon dymka czy promień gwiazdy wymagają rygorystycznej definicji niezmienników w `invariants.ts`, by uchronić UI przed niebezpiecznymi wejściami.
+
+## Doprecyzowanie: Ring jest okręgiem
+`RingObject` przechowuje wyłącznie `outerRadius` i `innerRadius` — bez pary `radiusX/radiusY`. Ring jest więc z definicji okręgiem, a nie elipsą: hit-test (`hitTestRing`) używa odległości euklidesowej `Math.hypot`, renderer i eksport SVG traktują go jako dwa koncentryczne okręgi z `fill-rule="evenodd"`. Wsparcie dla pierścienia eliptycznego wymagałoby rozszerzenia kontraktu domenowego o `radiusX/radiusY` (nowy wpis ADR + migracja `.vct`).
