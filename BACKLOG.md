@@ -277,23 +277,23 @@ Wymóg stopniowego rozszerzania artboardu o 10% wynika bezpośrednio z potrzeby 
 
 ## EPIC-06: Rysowanie swobodne i cięcie
 
-- [ ] **DRAW-001** Zaimplementować Pencil Tool
-- [ ] **DRAW-002** Dodać poziom wygładzania Pencil Tool
-- [ ] **DRAW-003** Zaimplementować Brush Tool
-- [ ] **DRAW-004** Dodać szerokość brush stroke
-- [ ] **DRAW-005** Dodać pressure input dla stylusa
-- [ ] **DRAW-006** Dodać style końcówki pędzla
-- [ ] **DRAW-007** Zaimplementować Smooth Tool
-- [ ] **DRAW-008** Umożliwić smooth na żywo przy rysowaniu
-- [ ] **DRAW-009** Umożliwić smooth dla istniejącej ścieżki
-- [ ] **DRAW-010** Zaimplementować Simplify Path
-- [ ] **DRAW-011** Dodać suwak dokładność ↔ liczba węzłów
-- [ ] **DRAW-012** Dodać podgląd przed zatwierdzeniem simplify/smooth
-- [ ] **DRAW-013** Zaimplementować Eraser Tool
-- [ ] **DRAW-014** Zaimplementować Knife Tool
-- [ ] **DRAW-015** Zaimplementować Scissors Tool
-- [ ] **DRAW-016** Zaimplementować Width Tool
-- [ ] **DRAW-017** Zmieniać lokalną szerokość stroke na ścieżce
+- [x] **DRAW-001** Zaimplementować Pencil Tool
+- [x] **DRAW-002** Dodać poziom wygładzania Pencil Tool
+- [x] **DRAW-003** Zaimplementować Brush Tool
+- [x] **DRAW-004** Dodać szerokość brush stroke
+- [x] **DRAW-005** Dodać pressure input dla stylusa
+- [x] **DRAW-006** Dodać style końcówki pędzla
+- [x] **DRAW-007** Zaimplementować Smooth Tool
+- [x] **DRAW-008** Umożliwić smooth na żywo przy rysowaniu
+- [x] **DRAW-009** Umożliwić smooth dla istniejącej ścieżki
+- [x] **DRAW-010** Zaimplementować Simplify Path
+- [x] **DRAW-011** Dodać suwak dokładność ↔ liczba węzłów
+- [x] **DRAW-012** Dodać podgląd przed zatwierdzeniem simplify/smooth
+- [x] **DRAW-013** Zaimplementować Eraser Tool
+- [x] **DRAW-014** Zaimplementować Knife Tool
+- [x] **DRAW-015** Zaimplementować Scissors Tool
+- [x] **DRAW-016** Zaimplementować Width Tool
+- [x] **DRAW-017** Zmieniać lokalną szerokość stroke na ścieżce
 
 ## EPIC-07: Edycja geometrii
 

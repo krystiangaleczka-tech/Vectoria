@@ -200,7 +200,8 @@ function smoothPathNodes(path: PathObject, amount: number): PathNode[] {
   return pointsToNodes(points, path.closed);
 }
 
-function simplifyPathNodes(path: PathObject, accuracy: number): PathNode[] {
+/** Reduce a path to fewer corner nodes; shared by the command and the preview session. */
+export function simplifyPathNodes(path: PathObject, accuracy: number): PathNode[] {
   const tolerance = Math.max(0.05, (100 - Math.min(100, Math.max(0, accuracy))) * 0.08);
   return pointsToNodes(simplifyPolyline(withoutClosingDuplicate(flattenPath(path), path.closed), tolerance), path.closed);
 }

@@ -74,7 +74,6 @@ export function reversePathNodes(nodes: readonly PathNode[]): PathNode[] {
 
 export function applyNodeKind(node: PathNode, kind: PathNode['kind']): PathNode {
   if (kind === 'corner' || kind === 'cusp' || kind === 'auto') return { ...node, kind };
-
   const handle = node.outHandle ?? node.inHandle;
   if (!handle) return { ...node, kind };
 
@@ -109,9 +108,42 @@ export function applyNodeKind(node: PathNode, kind: PathNode['kind']): PathNode 
     : { ...node, kind, inHandle: node.inHandle, outHandle: outgoing };
 }
 
+/**
+ * Recompute handles for an 'auto' node from the tangent of its neighbouring
+ * nodes: direction averaged across both segments, length adaptive to the
+ * shorter adjacent segment. Keeps endpoints and degenerate geometry intact.
+ */
+export function applyAutoSmooth(node: PathNode, previous: PathNode | null, next: PathNode | null): PathNode {
+  if (!previous && !next) return { ...node, kind: 'auto' };
+  // Direction follows the path: averaged across both neighbours when present,
+  // otherwise the single existing segment.
+  const from = previous?.point ?? node.point;
+  const to = next?.point ?? node.point;
+  const tangent = { x: to.x - from.x, y: to.y - from.y };
+  const tangentLength = Math.hypot(tangent.x, tangent.y);
+  if (tangentLength === 0) return { ...node, kind: 'auto' };
+
+  const unit = { x: tangent.x / tangentLength, y: tangent.y / tangentLength };
+  const segmentIn = previous ? distance(previous.point, node.point) : Infinity;
+  const segmentOut = next ? distance(node.point, next.point) : Infinity;
+  const reference = Math.min(segmentIn, segmentOut);
+  if (!Number.isFinite(reference) || reference === 0) return { ...node, kind: 'auto' };
+  const handleLength = reference * 0.3;
+
+  return {
+    ...node,
+    kind: 'auto',
+    inHandle: { x: node.point.x - unit.x * handleLength, y: node.point.y - unit.y * handleLength },
+    outHandle: { x: node.point.x + unit.x * handleLength, y: node.point.y + unit.y * handleLength },
+  };
+}
+
+function distance(a: Vec2, b: Vec2): number {
+  return Math.hypot(b.x - a.x, b.y - a.y);
+}
+
 /** Move one handle while preserving node semantics for smooth/symmetric nodes. */
-export function updatePathNodeHandle(node: PathNode, side: 'in' | 'out', handle: Vec2 | null): PathNode {
-  if (handle !== null && !finite(handle)) return node;
+export function updatePathNodeHandle(node: PathNode, side: 'in' | 'out', handle: Vec2 | null): PathNode {  if (handle !== null && !finite(handle)) return node;
   const next: PathNode = side === 'in' ? { ...node, inHandle: handle } : { ...node, outHandle: handle };
   if ((node.kind !== 'smooth' && node.kind !== 'symmetric') || handle === null) return next;
 

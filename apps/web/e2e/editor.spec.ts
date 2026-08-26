@@ -470,4 +470,69 @@ test.describe('Vectoria MVP Skeleton', () => {
     await page.getByRole('textbox', { name: 'Nazwa Artboard 1' }).press('Enter');
     await expect(page.getByTestId('artboards-panel')).toContainText('Main board');
   });
+
+
+  test('Pen inserts and deletes nodes on a committed path without leaving the tool', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    const canvas = page.getByTestId('canvas-viewport');
+    const box = await canvas.boundingBox();
+    if (!box) throw new Error('Canvas not found');
+    const cy = box.y + box.height / 2;
+
+    await page.getByRole('button', { name: 'Pen Tool' }).click();
+    await page.mouse.click(box.x + box.width / 2 - 90, cy);
+    await page.mouse.click(box.x + box.width / 2 + 90, cy);
+    await page.keyboard.press('Enter');
+    await expect(page.getByTestId('statusbar')).toContainText('1 object');
+
+    // Click the committed segment midpoint → node inserted in-place.
+    await page.mouse.click(box.x + box.width / 2, cy);
+    await page.getByRole('tab', { name: 'Historia' }).click();
+    await expect(page.getByTestId('history-panel')).toContainText('Add path node');
+
+    // Hover the new middle node and delete it with Delete — still in Pen.
+    await page.mouse.move(box.x + box.width / 2, cy);
+    await page.keyboard.press('Delete');
+    await expect(page.getByTestId('history-panel')).toContainText('Remove path node');
+
+    // Draft flow still works afterwards (tool was never switched).
+    await page.mouse.click(box.x + box.width / 2 - 60, cy + 80);
+    await page.mouse.click(box.x + box.width / 2 + 60, cy + 80);
+    await page.keyboard.press('Enter');
+    await expect(page.getByTestId('statusbar')).toContainText('2 objects');
+  });
+
+  test('Simplify preview reduces nodes and Apply commits one command', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    const canvas = page.getByTestId('canvas-viewport');
+    const box = await canvas.boundingBox();
+    if (!box) throw new Error('Canvas not found');
+    const start = { x: box.x + 200, y: box.y + 200 };
+
+    await page.getByRole('button', { name: 'Pencil Tool' }).click();
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    // Gentle arc: many samples, low curvature — low accuracy collapses it.
+    for (let i = 1; i <= 14; i += 1) {
+      const angle = (Math.PI * i) / 14;
+      await page.mouse.move(start.x + Math.cos(angle) * 120 + 120, start.y - Math.sin(angle) * 60, { steps: 2 });
+    }
+    await page.mouse.up();
+    await expect(page.getByTestId('statusbar')).toContainText('1 object');
+
+    await page.getByRole('tab', { name: 'Właściwości' }).click();
+    const estimate = page.getByTestId('simplify-estimate');
+    await expect(estimate).toContainText(/\d+ nodes/);
+
+    await page.getByTestId('simplify-accuracy').fill('10');
+    await page.getByRole('button', { name: 'Preview simplify' }).click();
+    await expect(page.locator('.geometry-preview-status')).toContainText('Preview ready');
+    await page.getByRole('button', { name: 'Apply' }).click();
+
+    await page.getByRole('tab', { name: 'Historia' }).click();
+    await expect(page.getByTestId('history-panel')).toContainText('Simplify path');
+    await expect(page.getByTestId('statusbar')).toContainText('1 object');
+  });
 });

@@ -28,6 +28,7 @@ import {
   SetRectangleGeometryCommand,
   SetEllipseGeometryCommand,
   SetPathGeometryCommand,
+  AddPathNodeCommand,
   RemovePathNodeCommand,
   DeleteObjectsCommand,
   createTransform,
@@ -38,6 +39,9 @@ import {
   getInverseTransformMatrix,
   updatePathNodeHandle,
   createFreehandPath,
+  smoothPolyline,
+  evaluateCubic,
+  getCubicSegment,
   KnifePathCommand,
   EraserPathCommand,
   ScissorsPathCommand,
@@ -153,6 +157,8 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   const polylineToolRef = useRef<PolylineTool | null>(null);
   if (!polylineToolRef.current) polylineToolRef.current = new PolylineTool();
   const [polylineVersion, setPolylineVersion] = useState(0);
+  // Committed node currently hovered with the Pen; enables in-Pen deletion.
+  const penHoverNodeRef = useRef<{ objectId: ObjectId; nodeIndex: number } | null>(null);
   const pencilToolRef = useRef<PencilTool | null>(null);
   const brushToolRef = useRef<BrushTool | null>(null);
   const eraserToolRef = useRef<EraserTool | null>(null);
@@ -361,7 +367,13 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       overlayCtx.restore();
     }
     const freehandTool = freehandOperationRef.current;
-    const samples = activeTool === 'pencil' ? pencilToolRef.current?.preview : activeTool === 'brush' ? brushToolRef.current?.preview : undefined;
+    const rawSamples = activeTool === 'pencil' ? pencilToolRef.current?.preview : activeTool === 'brush' ? brushToolRef.current?.preview : undefined;
+    // Live smoothed curve: the overlay shows the committed smoothing setting
+    // applied on every frame, not the raw sample chain.
+    const samplePoints = rawSamples
+      ? (activeTool === 'pencil' || activeTool === 'brush' ? smoothPolyline(rawSamples.map((sample) => sample.point), freehandSettings.smoothing) : rawSamples.map((sample) => sample.point))
+      : undefined;
+    const samples = samplePoints?.length ? samplePoints : undefined;
     const eraserPreview = activeTool === 'eraser' && freehandCursorRef.current && eraserToolRef.current ? { point: freehandCursorRef.current, radiusPx: eraserToolRef.current.radiusPx } : undefined;
     const cutPreview = activeTool === 'knife' ? knifeToolRef.current?.preview.points : undefined;
     const widthPreview = activeTool === 'width' && selectedObjectId && doc.objects[selectedObjectId]?.type === 'path'
@@ -369,7 +381,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       : undefined;
     if (freehandTool || samples?.length || eraserPreview || cutPreview?.length || widthPreview?.length) {
       renderFreehandOverlay(overlayCtx, camera, overlayCanvas.width, overlayCanvas.height, {
-        points: samples?.map((sample) => sample.point),
+        points: samples,
         strokeWidth: activeTool === 'brush' ? freehandSettings.width : Math.max(1, freehandSettings.width / 2),
         cutLine: cutPreview,
         eraserCursor: eraserPreview,
@@ -573,6 +585,14 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     if (activeTool !== 'pen') (e.target as HTMLElement).setPointerCapture(e.pointerId);
 
     if (activeTool === 'pen') {
+      // In-Pen editing: clicking an existing path segment inserts a node there
+      // without leaving the Pen; the draft stays untouched.
+      const segmentHit = findPathSegmentAt(doc, worldPos, camera.screenToWorldDistance(6));
+      if (segmentHit) {
+        onExecuteCommand(new AddPathNodeCommand(segmentHit.objectId, segmentHit.segmentIndex, segmentHit.t));
+        onSelectObject(segmentHit.objectId);
+        return;
+      }
       const result = penToolRef.current!.pointerDown(
         { screenPoint: screenPos, worldPoint: worldPos, shiftKey: e.shiftKey, altKey: e.altKey },
         camera.screenToWorldDistance(12),
@@ -730,6 +750,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     if (!drag) {
       if (activeTool === 'pen') {
         penToolRef.current?.pointerMove({ screenPoint: screenPos, worldPoint: worldPos, shiftKey: e.shiftKey, altKey: e.altKey });
+        penHoverNodeRef.current = directSelect.hitNode(doc, worldPos, camera.zoom);
         setPenVersion((version) => version + 1);
       }
       if (activeTool === 'corner' && cornerStartScreenRef.current) {
@@ -1128,7 +1149,14 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         setIsSpacePressed(true);
       } else if (activeTool === 'pen' && (e.key === 'Delete' || e.key === 'Backspace')) {
         e.preventDefault();
-        penToolRef.current?.keyDown(e.key);
+        const hovered = penHoverNodeRef.current;
+        if (hovered) {
+          // In-Pen node removal: hovered committed node goes through its command.
+          onExecuteCommand(new RemovePathNodeCommand(hovered.objectId, hovered.nodeIndex));
+          penHoverNodeRef.current = null;
+        } else {
+          penToolRef.current?.keyDown(e.key);
+        }
         setPenVersion((version) => version + 1);
       } else if (activeTool === 'direct-select' && (e.key === 'Delete' || e.key === 'Backspace') && selection.nodeIds.length > 0) {
         e.preventDefault();
@@ -1285,6 +1313,50 @@ function selectNearestPathPoint(path: PathObject, worldPoint: Vec2): { point: Ve
 
 /** Tools whose objects are created by a single press-drag-release gesture. */
 const DRAG_SHAPE_TOOLS: readonly BasicShapeTool[] = ['rectangle', 'ellipse', 'line', 'polygon', 'star', 'arc', 'pie', 'ring', 'spiral', 'callout'];
+
+/**
+ * Locate the closest committed path segment under a world point. Sampling is
+ * done in the object's local space so rotated paths behave correctly.
+ */
+function findPathSegmentAt(
+  doc: DocumentModel,
+  worldPoint: Vec2,
+  toleranceWorld: number,
+): { objectId: ObjectId; segmentIndex: number; t: number } | null {
+  const SEGMENT_SAMPLES = 16;
+  let best: { objectId: ObjectId; segmentIndex: number; t: number; distance: number } | null = null;
+
+  for (let li = doc.layerIds.length - 1; li >= 0; li -= 1) {
+    const layer = doc.layers[doc.layerIds[li]!];
+    if (!layer?.visible || layer.locked) continue;
+    for (let oi = layer.objectIds.length - 1; oi >= 0; oi -= 1) {
+      const object = doc.objects[layer.objectIds[oi]!];
+      if (!object || object.type !== 'path' || !object.visible || object.locked) continue;
+      const inverse = getInverseTransformMatrix(object.transform);
+      if (!inverse) continue;
+      const localPoint = mat3TransformPoint(inverse, worldPoint);
+      const segments = object.closed ? object.nodes.length : object.nodes.length - 1;
+      for (let s = 0; s < segments; s += 1) {
+        const segment = getCubicSegment(object.nodes, s, object.closed);
+        if (!segment) continue;
+        for (let i = 0; i < SEGMENT_SAMPLES; i += 1) {
+          const start = evaluateCubic(segment, i / SEGMENT_SAMPLES);
+          const end = evaluateCubic(segment, (i + 1) / SEGMENT_SAMPLES);
+          const dx = end.x - start.x;
+          const dy = end.y - start.y;
+          const lengthSq = dx * dx + dy * dy;
+          const raw = lengthSq === 0 ? 0 : ((localPoint.x - start.x) * dx + (localPoint.y - start.y) * dy) / lengthSq;
+          const clamped = Math.max(0, Math.min(1, raw));
+          const closest = { x: start.x + dx * clamped, y: start.y + dy * clamped };
+          const distance = Math.hypot(localPoint.x - closest.x, localPoint.y - closest.y);
+          const t = (i + clamped) / SEGMENT_SAMPLES;
+          if (!best || distance < best.distance) best = { objectId: object.id, segmentIndex: s, t: Math.min(0.95, Math.max(0.05, t)), distance };
+        }
+      }
+    }
+  }
+  return best && best.distance <= toleranceWorld ? { objectId: best.objectId, segmentIndex: best.segmentIndex, t: best.t } : null;
+}
 
 function isDragShapeTool(tool: ActiveTool): tool is BasicShapeTool {
   return (DRAG_SHAPE_TOOLS as readonly string[]).includes(tool);

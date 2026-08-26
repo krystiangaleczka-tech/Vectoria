@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import type { DocumentModel, ObjectId, GeometryPreview, PathObject } from '@vectoria/core';
+import { flattenPath, simplifyPolyline } from '@vectoria/core';
 import { Button, NumberInput } from '@vectoria/ui';
 import { convertUnit } from '@vectoria/shared';
 
@@ -10,6 +11,7 @@ export type GeometryAction =
   | { type: 'outline'; objectId: ObjectId }
   | { type: 'close'; objectId: ObjectId }
   | { type: 'reverse'; objectId: ObjectId }
+  | { type: 'simplify-preview'; objectId: ObjectId; accuracy: number }
   | { type: 'boolean'; operation: 'unite' | 'subtract' | 'intersect' | 'exclude' | 'divide' | 'crop'; objectIds: readonly ObjectId[] }
   | { type: 'compound'; objectIds: readonly ObjectId[] };
 
@@ -69,6 +71,7 @@ export const GeometryProperties: React.FC<GeometryPropertiesProps> = ({ document
               <Button size="sm" variant="ghost" onClick={() => onAction({ type: 'offset', objectId: path.id, direction: 'outside', distance: offsetDistance })}>Outside</Button>
             </div>
           </div>
+          <SimplifyCard path={path} previewOperation={preview?.operation ?? null} onPreview={(accuracy) => onAction({ type: 'simplify-preview', objectId: path.id, accuracy })} />
           <div className="property-actions path-actions">
             <Button size="sm" variant="ghost" disabled={path.closed} onClick={() => onAction({ type: 'close', objectId: path.id })}>Close path</Button>
             <Button size="sm" variant="ghost" onClick={() => onAction({ type: 'reverse', objectId: path.id })}>Reverse direction</Button>
@@ -77,5 +80,48 @@ export const GeometryProperties: React.FC<GeometryPropertiesProps> = ({ document
         </>
       )}
     </section>
+  );
+};
+
+/**
+ * Simplify controls with a live node-count estimate and worst-case deviation.
+ * The estimate uses the same RDP tolerance formula as the committed command,
+ * so the numbers shown match what Apply will produce.
+ */
+const SimplifyCard: React.FC<{
+  path: PathObject;
+  previewOperation: string | null;
+  onPreview: (accuracy: number) => void;
+}> = ({ path, previewOperation, onPreview }) => {
+  const [accuracy, setAccuracy] = useState(75);
+  const tolerance = Math.max(0.05, (100 - Math.min(100, Math.max(0, accuracy))) * 0.08);
+  const flattened = flattenPath(path);
+  const estimatedNodes = simplifyPolyline(flattened, tolerance).length;
+  const isActivePreview = previewOperation === 'simplify';
+
+  return (
+    <div className="geometry-operation-card" data-testid="simplify-card">
+      <div className="geometry-operation-title">Simplify</div>
+      <label className="dialog-label">
+        Accuracy
+        <input
+          type="range"
+          data-testid="simplify-accuracy"
+          min={0}
+          max={100}
+          value={accuracy}
+          aria-label="Simplify accuracy"
+          disabled={path.locked}
+          onChange={(event) => setAccuracy(Number(event.target.value))}
+        />
+        <span className="panel-count">{accuracy}%</span>
+      </label>
+      <span className="panel-note" data-testid="simplify-estimate">
+        {path.nodes.length} → {estimatedNodes} nodes · max dev ≈ {tolerance.toFixed(2)} px
+      </span>
+      <Button size="sm" variant="ghost" disabled={path.locked || estimatedNodes >= path.nodes.length} onClick={() => onPreview(accuracy)}>
+        {isActivePreview ? 'Refresh preview' : 'Preview simplify'}
+      </Button>
+    </div>
   );
 };

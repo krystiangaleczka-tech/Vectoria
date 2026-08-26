@@ -22,7 +22,7 @@ import type {
 import { isValidTransform } from '../model/transform.js';
 import { getObjectBounds } from '../model/bounds.js';
 import { normalizeCornerRadii } from '../model/shapes.js';
-import { applyNodeKind, createPathNode, getCubicSegment, isValidPathGeometry, reversePathNodes, splitCubic } from '../model/path.js';
+import { applyAutoSmooth, applyNodeKind, createPathNode, getCubicSegment, isValidPathGeometry, reversePathNodes, splitCubic } from '../model/path.js';
 
 // ─── CreateObjectsCommand ─────────────────────────────────────────────────────
 
@@ -905,8 +905,15 @@ export class UpdatePathNodeCommand implements Command {
 export class SetPathNodeKindCommand extends UpdatePathNodeCommand {
   constructor(objectId: ObjectId, nodeIndex: number, kind: PathNode['kind'], doc: DocumentModel) {
     const object = doc.objects[objectId];
-    const node = object?.type === 'path' ? object.nodes[nodeIndex] : undefined;
-    super(objectId, nodeIndex, node ? applyNodeKind(node, kind) : { kind });
+    if (!object || object.type !== 'path') { super(objectId, nodeIndex, { kind }); return; }
+    const node = object.nodes[nodeIndex];
+    if (!node) { super(objectId, nodeIndex, { kind }); return; }
+    // 'auto' derives handles from neighbouring geometry, so it needs context
+    // the plain applyNodeKind contract cannot see.
+    const nextNode = kind === 'auto'
+      ? applyAutoSmooth(node, object.nodes[nodeIndex - 1] ?? (object.closed ? object.nodes.at(-1) ?? null : null), object.nodes[nodeIndex + 1] ?? (object.closed ? object.nodes[0] ?? null : null))
+      : applyNodeKind(node, kind);
+    super(objectId, nodeIndex, nextNode);
   }
 }
 

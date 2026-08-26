@@ -85,6 +85,7 @@ export {
   ScissorsPathCommand,
   CutPathCommand,
   createFreehandPath,
+  simplifyPathNodes,
 } from './freehand-commands.js';
 export { BooleanCommand, CompoundPathCommand, MaskCommand } from './boolean.js';
 export { ApplyStyleCommand, ApplySavedObjectStyleCommand, ApplyPaletteColorCommand, SaveObjectStyleCommand, UpdateGlobalColorCommand, UpsertPaletteCommand } from './style-commands.js';

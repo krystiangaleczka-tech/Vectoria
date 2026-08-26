@@ -5,17 +5,19 @@ import {
   CornerPathCommand,
   OffsetPathCommand,
   OutlineStrokeCommand,
+  SimplifyPathCommand,
   applyCorners,
   createGeometryPreview,
   expandObject,
   offsetPath,
   outlineStroke,
+  simplifyPathNodes,
   type CleanupPlan,
   type CornerOptions,
   type OffsetOptions,
 } from '@vectoria/core';
 
-export type GeometrySessionOperation = 'expand' | 'corners' | 'offset' | 'outline-stroke' | 'cleanup';
+export type GeometrySessionOperation = 'expand' | 'corners' | 'offset' | 'outline-stroke' | 'simplify' | 'cleanup';
 
 export class GeometryOperationSession {
   private current: { readonly preview: GeometryPreview; readonly command: Command } | null = null;
@@ -45,6 +47,19 @@ export class GeometryOperationSession {
     const object = this.document.objects[objectId];
     const result = object?.style.stroke && object.type === 'path' ? outlineStroke(object, object.style.stroke) : { path: null, warning: 'Outline Stroke requires a stroked path.' };
     return this.set('outline-stroke', result.path ? [result.path] : [], result.warning ? [result.warning] : [], new OutlineStrokeCommand(objectId));
+  }
+
+  /** Preview node reduction before committing; accuracy mirrors the command's tolerance. */
+  previewSimplify(objectId: ObjectId, accuracy: number): GeometryPreview {
+    const object = this.document.objects[objectId];
+    if (object?.type !== 'path') {
+      return this.set('simplify', [], ['Simplify requires a path.'], new SimplifyPathCommand(objectId, accuracy));
+    }
+    const nodes = simplifyPathNodes(object, accuracy);
+    const proposed: readonly SceneObject[] = nodes.length >= (object.closed ? 3 : 2) && nodes.length < object.nodes.length
+      ? [{ ...object, nodes }]
+      : [];
+    return this.set('simplify', proposed, proposed.length === 0 ? ['Nothing to simplify at this accuracy.'] : [], new SimplifyPathCommand(objectId, accuracy, this.document));
   }
 
   previewCleanup(plan: CleanupPlan): GeometryPreview {
