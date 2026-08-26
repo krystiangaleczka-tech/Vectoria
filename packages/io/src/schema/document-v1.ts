@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { DocumentModel } from '@vectoria/core';
+import { normalizeColor } from '@vectoria/shared';
 
 export const DOCUMENT_LIMITS = {
   maxObjects: 100_000,
@@ -7,7 +8,11 @@ export const DOCUMENT_LIMITS = {
   maxArtboards: 1_000,
   maxGuides: 10_000,
   maxPathNodes: 1_000_000,
+  maxPalettes: 256,
+  maxPaletteEntries: 2048,
 } as const;
+
+const ColorSchema = z.string().refine((value) => normalizeColor(value) !== null, { message: 'color must be a supported finite color value' });
 
 export const Vec2Schema = z.object({
   x: z.number().refine(Number.isFinite, { message: 'x must be finite' }),
@@ -27,7 +32,7 @@ export const Transform2DSchema = z.object({
 
 export const SolidFillSchema = z.object({
   type: z.literal('solid'),
-  color: z.string(),
+  color: ColorSchema,
 });
 
 export const NoFillSchema = z.object({
@@ -37,7 +42,7 @@ export const NoFillSchema = z.object({
 export const LinearGradientStopSchema = z.object({
   id: z.string().min(1).optional(),
   offset: z.number().min(0).max(1),
-  color: z.string(),
+  color: ColorSchema,
   opacity: z.number().min(0).max(1),
 });
 
@@ -45,18 +50,44 @@ export const LinearGradientFillSchema = z.object({
   type: z.literal('linear-gradient'),
   start: Vec2Schema,
   end: Vec2Schema,
-  stops: z.array(LinearGradientStopSchema),
+  stops: z.array(LinearGradientStopSchema).min(2),
+});
+
+export const RadialGradientFillSchema = z.object({
+  type: z.literal('radial-gradient'),
+  center: Vec2Schema,
+  radius: z.number().positive().finite(),
+  stops: z.array(LinearGradientStopSchema).min(2),
+});
+
+export const AngularGradientFillSchema = z.object({
+  type: z.literal('angular-gradient'),
+  center: Vec2Schema,
+  angle: z.number().finite(),
+  stops: z.array(LinearGradientStopSchema).min(2),
+});
+
+export const PatternFillSchema = z.object({
+  type: z.literal('pattern'),
+  kind: z.enum(['dots', 'grid', 'hatch']),
+  foreground: ColorSchema,
+  background: ColorSchema,
+  size: z.number().positive().finite(),
 });
 
 export const FillStyleSchema = z.discriminatedUnion('type', [
   SolidFillSchema,
   NoFillSchema,
   LinearGradientFillSchema,
+  RadialGradientFillSchema,
+  AngularGradientFillSchema,
+  PatternFillSchema,
 ]);
 
 export const StrokeStyleSchema = z.object({
-  color: z.string(),
+  color: ColorSchema,
   width: z.number().positive(),
+  align: z.enum(['center', 'inside', 'outside']).default('center'),
   lineCap: z.enum(['butt', 'round', 'square']),
   lineJoin: z.enum(['miter', 'round', 'bevel']),
   miterLimit: z.number().min(1),
@@ -161,8 +192,25 @@ export const SceneObjectSchema = z.discriminatedUnion('type', [
   GroupObjectSchema,
 ]);
 
-const PaletteColorSchema = z.object({ id: z.string().min(1), name: z.string(), color: z.string() });
-const PaletteSchema = z.object({ id: z.string().min(1), name: z.string(), colors: z.array(PaletteColorSchema), scope: z.enum(['document', 'user', 'saved']) });
+export const PaletteColorSchema = z.object({ id: z.string().min(1), name: z.string(), color: ColorSchema });
+export const PaletteSwatchSchema = z.discriminatedUnion('type', [
+  z.object({ id: z.string().min(1), name: z.string(), type: z.literal('solid'), color: ColorSchema }),
+  z.object({ id: z.string().min(1), name: z.string(), type: z.literal('gradient'), fill: z.union([LinearGradientFillSchema, RadialGradientFillSchema, AngularGradientFillSchema]) }),
+  z.object({ id: z.string().min(1), name: z.string(), type: z.literal('pattern'), fill: PatternFillSchema }),
+]);
+export const ColorPaletteSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  colors: z.array(PaletteColorSchema).max(DOCUMENT_LIMITS.maxPaletteEntries),
+  swatches: z.array(PaletteSwatchSchema).max(DOCUMENT_LIMITS.maxPaletteEntries).optional(),
+  scope: z.enum(['document', 'user', 'saved']),
+}).superRefine((palette, context) => {
+  const ids = new Set<string>();
+  for (const entry of [...palette.colors, ...(palette.swatches ?? [])]) {
+    if (ids.has(entry.id)) context.addIssue({ code: z.ZodIssueCode.custom, message: `palette entry ID '${entry.id}' must be unique` });
+    ids.add(entry.id);
+  }
+});
 const SavedObjectStyleSchema = z.object({ id: z.string().min(1), name: z.string(), style: ObjectStyleSchema });
 
 export const LayerSchema = z.object({
@@ -211,7 +259,7 @@ export const DocumentV1Schema = z.object({
   guides: z.array(z.object({ id: z.string().min(1), axis: z.enum(['horizontal', 'vertical']), position: z.number().finite(), visible: z.boolean(), locked: z.boolean() })).default([]),
   grid: z.object({ visible: z.boolean(), size: z.number().positive().finite(), subdivisions: z.number().int().min(1) }).default({ visible: true, size: 10, subdivisions: 1 }),
   snap: z.object({ enabled: z.boolean(), tolerancePx: z.number().nonnegative().finite(), sources: z.record(z.boolean()) }).default({ enabled: false, tolerancePx: 8, sources: { grid: true, guide: true, node: true, edge: true, center: true, intersection: true, pixel: false } }),
-  palettes: z.array(PaletteSchema).default([]),
+  palettes: z.array(ColorPaletteSchema).max(DOCUMENT_LIMITS.maxPalettes).default([]),
   objectStyles: z.array(SavedObjectStyleSchema).default([]),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -264,7 +312,7 @@ export function parseAndMigrateDocument(raw: unknown): DocumentModel {
     const objects = Object.fromEntries(Object.entries(parsed.objects).map(([id, object]) => [id, object.type === 'path'
       ? { ...object, nodes: object.nodes.map((node, index) => ({ ...node, id: node.id ?? `${object.id}-node-${index + 1}` })) }
       : object]));
-    const normalizedObjects = Object.fromEntries(Object.entries(objects).map(([id, object]) => [id, { ...object, style: { ...object.style, blendMode: object.style.blendMode ?? 'normal' } }]));
+    const normalizedObjects = Object.fromEntries(Object.entries(objects).map(([id, object]) => [id, { ...object, style: { ...object.style, blendMode: object.style.blendMode ?? 'normal', stroke: object.style.stroke ? { ...object.style.stroke, align: object.style.stroke.align ?? 'center' } : null } }]));
     return { ...parsed, objects: normalizedObjects, artboards, snap: { ...parsed.snap, sources: { ...DEFAULT_SNAP_SOURCES, ...parsed.snap.sources } }, palettes: parsed.palettes ?? [], objectStyles: parsed.objectStyles ?? [] } as unknown as DocumentModel;
   }
 

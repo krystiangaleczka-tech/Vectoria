@@ -385,7 +385,7 @@ function buildStrokeAttr(
   markerMap?: Map<string, string>,
   markerDefs?: string[],
 ): string {
-  let attr = ` stroke="${escapeXml(stroke.color)}" stroke-width="${stroke.width}" stroke-linecap="${stroke.lineCap}" stroke-linejoin="${stroke.lineJoin}" stroke-miterlimit="${stroke.miterLimit}"`;
+  let attr = ` stroke="${escapeXml(stroke.color)}" stroke-width="${stroke.width}" stroke-linecap="${stroke.lineCap}" stroke-linejoin="${stroke.lineJoin}" stroke-miterlimit="${stroke.miterLimit}" data-vectoria-stroke-align="${stroke.align ?? 'center'}"`;
   if (stroke.dashArray.length > 0) {
     attr += ` stroke-dasharray="${stroke.dashArray.join(',')}"`;
   }

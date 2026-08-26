@@ -337,47 +337,47 @@ Wymóg stopniowego rozszerzania artboardu o 10% wynika bezpośrednio z potrzeby 
 
 ## EPIC-09: Fill, stroke, kolor i style
 
-- [ ] **STYLE-001** Dodać jednolity fill
-- [ ] **STYLE-002** Dodać brak fill
-- [ ] **STYLE-003** Zaimplementować Color Picker
-- [ ] **STYLE-004** Obsłużyć RGB
-- [ ] **STYLE-005** Obsłużyć HEX
-- [ ] **STYLE-006** Obsłużyć HSL
-- [ ] **STYLE-007** Obsłużyć CMYK
-- [ ] **STYLE-008** Dodać ostrzeżenie out-of-gamut dla przygotowania druku
-- [ ] **STYLE-009** Dodać kolor stroke
-- [ ] **STYLE-010** Dodać grubość stroke
-- [ ] **STYLE-011** Dodać pozycję stroke
-- [ ] **STYLE-012** Dodać line caps
-- [ ] **STYLE-013** Dodać line joins
-- [ ] **STYLE-014** Dodać miter limit
-- [ ] **STYLE-015** Dodać dashed stroke
-- [ ] **STYLE-016** Dodać własny wzór dash/gap
-- [ ] **STYLE-017** Zaimplementować gradient liniowy
-- [ ] **STYLE-018** Zaimplementować gradient radialny
-- [ ] **STYLE-019** Zaimplementować gradient kątowy
-- [ ] **STYLE-020** Dodać wiele stopów gradientu
-- [ ] **STYLE-021** Dodać opacity stopów gradientu
-- [ ] **STYLE-022** Edytować gradient uchwytami na canvasie
-- [ ] **STYLE-023** Dodać paletę dokumentu
-- [ ] **STYLE-024** Dodać globalną paletę użytkownika
-- [ ] **STYLE-025** Dodać zapisane palety
-- [ ] **STYLE-026** Dodać import palet
-- [ ] **STYLE-027** Dodać swatches kolorów
-- [ ] **STYLE-028** Dodać swatches gradientów
-- [ ] **STYLE-029** Dodać swatches patternów
-- [ ] **STYLE-030** Dodać global colors
-- [ ] **STYLE-031** Aktualizować wszystkie użycia global color po zmianie
-- [ ] **STYLE-032** Dodać object styles
+- [x] **STYLE-001** Dodać jednolity fill
+- [x] **STYLE-002** Dodać brak fill
+- [x] **STYLE-003** Zaimplementować Color Picker
+- [x] **STYLE-004** Obsłużyć RGB
+- [x] **STYLE-005** Obsłużyć HEX
+- [x] **STYLE-006** Obsłużyć HSL
+- [x] **STYLE-007** Obsłużyć CMYK
+- [x] **STYLE-008** Dodać ostrzeżenie out-of-gamut dla przygotowania druku
+- [x] **STYLE-009** Dodać kolor stroke
+- [x] **STYLE-010** Dodać grubość stroke
+- [x] **STYLE-011** Dodać pozycję stroke
+- [x] **STYLE-012** Dodać line caps
+- [x] **STYLE-013** Dodać line joins
+- [x] **STYLE-014** Dodać miter limit
+- [x] **STYLE-015** Dodać dashed stroke
+- [x] **STYLE-016** Dodać własny wzór dash/gap
+- [x] **STYLE-017** Zaimplementować gradient liniowy
+- [x] **STYLE-018** Zaimplementować gradient radialny
+- [x] **STYLE-019** Zaimplementować gradient kątowy
+- [x] **STYLE-020** Dodać wiele stopów gradientu
+- [x] **STYLE-021** Dodać opacity stopów gradientu
+- [x] **STYLE-022** Edytować gradient uchwytami na canvasie
+- [x] **STYLE-023** Dodać paletę dokumentu
+- [x] **STYLE-024** Dodać globalną paletę użytkownika
+- [x] **STYLE-025** Dodać zapisane palety
+- [x] **STYLE-026** Dodać import palet
+- [x] **STYLE-027** Dodać swatches kolorów
+- [x] **STYLE-028** Dodać swatches gradientów
+- [x] **STYLE-029** Dodać swatches patternów
+- [x] **STYLE-030** Dodać global colors
+- [x] **STYLE-031** Aktualizować wszystkie użycia global color po zmianie
+- [x] **STYLE-032** Dodać object styles
 - [ ] **STYLE-033** Zapisywać fill, stroke, opacity i efekty w stylu
-- [ ] **STYLE-034** Zaimplementować Eyedropper
-- [ ] **STYLE-035** Pobierać wyłącznie kolor lub cały styl
-- [ ] **STYLE-036** Zaimplementować Paint Bucket/Style Paste
-- [ ] **STYLE-037** Dodać opacity obiektu
-- [ ] **STYLE-038** Dodać Normal blend mode
-- [ ] **STYLE-039** Dodać Multiply blend mode
-- [ ] **STYLE-040** Dodać Screen blend mode
-- [ ] **STYLE-041** Dodać Overlay blend mode
+- [x] **STYLE-034** Zaimplementować Eyedropper
+- [x] **STYLE-035** Pobierać wyłącznie kolor lub cały styl
+- [x] **STYLE-036** Zaimplementować Paint Bucket/Style Paste
+- [x] **STYLE-037** Dodać opacity obiektu
+- [x] **STYLE-038** Dodać Normal blend mode
+- [x] **STYLE-039** Dodać Multiply blend mode
+- [x] **STYLE-040** Dodać Screen blend mode
+- [x] **STYLE-041** Dodać Overlay blend mode
 
 ## EPIC-10: Tekst i typografia
 

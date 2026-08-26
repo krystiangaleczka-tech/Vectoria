@@ -20,6 +20,7 @@ import type {
   SpiralObject,
   CalloutObject,
   PolylineObject,
+  SceneObject,
 } from '@vectoria/core';
 import {
   CreateObjectsCommand,
@@ -54,8 +55,8 @@ import {
   SetObjectStyleCommand,
   ApplyStyleCommand,
 } from '@vectoria/core';
-import { Camera, DragSession, SelectTool, DirectSelectTool, PenTool, PencilTool, BrushTool, SmoothTool, CornerTool, EraserTool, KnifeTool, ScissorsTool, WidthTool, SnapService, IsolationService, LassoSession, calculateObjectSnap, ShapeTool, PolylineTool, type GridSettings, type SnapResult, type ObjectSnapResult } from '@vectoria/editor-engine';
-import { mat3TransformPoint } from '@vectoria/shared';
+ import { Camera, DragSession, SelectTool, DirectSelectTool, PenTool, PencilTool, BrushTool, SmoothTool, CornerTool, EraserTool, KnifeTool, ScissorsTool, WidthTool, SnapService, IsolationService, LassoSession, calculateObjectSnap, ShapeTool, PolylineTool, EyedropperTool, PaintBucketTool, type GridSettings, type SnapResult, type ObjectSnapResult, type StyleSampleTarget } from '@vectoria/editor-engine';
+import { mat3TransformPoint, parseColor } from '@vectoria/shared';
 import {
   RenderLoop,
   resizeCanvas,
@@ -88,10 +89,12 @@ export interface CanvasViewportProps {
   gridSettings?: GridSettings;
   freehandSettings?: FreehandSettings;
   geometryPreview?: GeometryPreview | null;
+  styleSampleTarget?: StyleSampleTarget;
+  styleSampleTolerance?: number;
 }
 
 interface DragState {
-  type: 'pan' | 'create-shape' | 'move-object' | 'move-node' | 'move-handle' | 'resize-object' | 'rotate-object' | 'marquee' | 'lasso' | 'node-lasso';
+   type: 'pan' | 'create-shape' | 'move-object' | 'move-node' | 'move-handle' | 'resize-object' | 'rotate-object' | 'gradient-handle' | 'style-sample' | 'marquee' | 'lasso' | 'node-lasso';
   shape?: BasicShapeTool;
   startScreen: Vec2;
   startWorld: Vec2;
@@ -107,6 +110,60 @@ interface DragState {
   handleSide?: 'in' | 'out';
   initialNodes?: readonly import('@vectoria/core').PathNode[];
   lassoPoints?: Vec2[];
+  gradientHandle?: 'start' | 'end' | 'center' | 'radius' | 'angle';
+  initialStyle?: import('@vectoria/core').ObjectStyle;
+  styleTool?: 'eyedropper' | 'bucket';
+}
+
+function gradientHandles(object: SceneObject): readonly { id: DragState['gradientHandle']; point: Vec2 }[] {
+  if (object.style.fill.type !== 'linear-gradient' && object.style.fill.type !== 'radial-gradient' && object.style.fill.type !== 'angular-gradient') return [];
+  const matrix = getTransformMatrix(object.transform);
+  const toWorld = (point: Vec2): Vec2 => mat3TransformPoint(matrix, point);
+  const fill = object.style.fill;
+  if (fill.type === 'linear-gradient') return [{ id: 'start', point: toWorld(fill.start) }, { id: 'end', point: toWorld(fill.end) }];
+  if (fill.type === 'radial-gradient') return [{ id: 'center', point: toWorld(fill.center) }, { id: 'radius', point: toWorld({ x: fill.center.x + fill.radius, y: fill.center.y }) }];
+  return [{ id: 'center', point: toWorld(fill.center) }, { id: 'angle', point: toWorld({ x: fill.center.x + 24, y: fill.center.y }) }];
+}
+
+function gradientHandleAt(object: SceneObject, camera: Camera, screenPoint: Vec2): DragState['gradientHandle'] {
+  for (const handle of gradientHandles(object)) {
+    const screen = camera.worldToScreen(handle.point);
+    if (Math.hypot(screen.x - screenPoint.x, screen.y - screenPoint.y) <= 12) return handle.id;
+  }
+  return undefined;
+}
+
+function sampledStyleColor(style: import('@vectoria/core').ObjectStyle, target: 'fill' | 'stroke'): string | null {
+  if (target === 'stroke') return style.stroke?.color ?? null;
+  return style.fill.type === 'solid' ? style.fill.color : null;
+}
+
+function colorDistancePercent(first: string, second: string): number {
+  const a = parseColor(first)?.rgb;
+  const b = parseColor(second)?.rgb;
+  if (!a || !b) return 100;
+  return Math.sqrt((a.r - b.r) ** 2 + (a.g - b.g) ** 2 + (a.b - b.b) ** 2) / Math.sqrt(3 * 255 ** 2) * 100;
+}
+
+function updateGradientFill(style: import('@vectoria/core').ObjectStyle, handle: NonNullable<DragState['gradientHandle']>, transform: import('@vectoria/core').Transform2D, worldPoint: Vec2): import('@vectoria/core').FillStyle | null {
+  const fill = style.fill;
+  if (fill.type !== 'linear-gradient' && fill.type !== 'radial-gradient' && fill.type !== 'angular-gradient') return null;
+  const inverse = getInverseTransformMatrix(transform);
+  if (!inverse) return null;
+  const localPoint = mat3TransformPoint(inverse, worldPoint);
+  if (fill.type === 'linear-gradient') {
+    if (handle === 'start') return { ...fill, start: localPoint };
+    if (handle === 'end') return { ...fill, end: localPoint };
+  }
+  if (fill.type === 'radial-gradient') {
+    if (handle === 'center') return { ...fill, center: localPoint };
+    if (handle === 'radius') return { ...fill, radius: Math.max(0.01, Math.hypot(localPoint.x - fill.center.x, localPoint.y - fill.center.y)) };
+  }
+  if (fill.type === 'angular-gradient') {
+    if (handle === 'center') return { ...fill, center: localPoint };
+    if (handle === 'angle') return { ...fill, angle: Math.atan2(localPoint.y - fill.center.y, localPoint.x - fill.center.x) };
+  }
+  return null;
 }
 
 export const CanvasViewport: React.FC<CanvasViewportProps> = ({
@@ -127,6 +184,8 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   gridSettings = { visible: true, size: 10, subdivisions: 1 },
   freehandSettings = { smoothing: 20, accuracy: 75, width: 4, pressure: true, cap: 'round', join: 'round', eraserRadius: 12 },
   geometryPreview = null,
+  styleSampleTarget = 'style',
+  styleSampleTolerance = 0,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const bgCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -146,6 +205,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   const dragSessionRef = useRef<DragSession | null>(null);
   const [isSpacePressed, setIsSpacePressed] = React.useState(false);
   const [dragPreview, setDragPreview] = React.useState<Record<string, import('@vectoria/core').Transform2D>>({});
+  const [stylePreview, setStylePreview] = React.useState<Record<string, import('@vectoria/core').ObjectStyle>>({});
   const [pathPreview, setPathPreview] = React.useState<Record<string, readonly import('@vectoria/core').PathNode[]>>({});
   const [cornerPreview, setCornerPreview] = React.useState<import('@vectoria/core').GeometryPreview | null>(null);
   const penToolRef = useRef<PenTool | null>(null);
@@ -167,6 +227,8 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   const widthToolRef = useRef<WidthTool | null>(null);
   const smoothToolRef = useRef<SmoothTool | null>(null);
   const cornerToolRef = useRef<CornerTool | null>(null);
+  const eyedropperToolRef = useRef<EyedropperTool | null>(null);
+  const paintBucketToolRef = useRef<PaintBucketTool | null>(null);
   if (!pencilToolRef.current) pencilToolRef.current = new PencilTool();
   if (!brushToolRef.current) brushToolRef.current = new BrushTool();
   if (!eraserToolRef.current) eraserToolRef.current = new EraserTool();
@@ -175,6 +237,8 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   if (!widthToolRef.current) widthToolRef.current = new WidthTool();
   if (!smoothToolRef.current) smoothToolRef.current = new SmoothTool();
   if (!cornerToolRef.current) cornerToolRef.current = new CornerTool();
+  if (!eyedropperToolRef.current) eyedropperToolRef.current = new EyedropperTool();
+  if (!paintBucketToolRef.current) paintBucketToolRef.current = new PaintBucketTool();
   const freehandOperationRef = useRef<'pencil' | 'brush' | 'smooth' | 'eraser' | 'knife' | 'scissors' | 'width' | null>(null);
   const widthStartScreenRef = useRef<Vec2 | null>(null);
   const smoothStartScreenRef = useRef<Vec2 | null>(null);
@@ -211,6 +275,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
 
     renderScene(sceneCtx, camera, doc, sceneCanvas.width, sceneCanvas.height, {
       previewTransforms: dragPreview,
+      previewStyles: stylePreview,
       quality: qualityPolicyRef.current?.quality,
     });
     renderOverlay(overlayCtx, camera, doc, selectedIds, overlayCanvas.width, overlayCanvas.height, {
@@ -220,6 +285,9 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       nodeSelectionIds: selection.nodeIds,
       pathPreviews: new Map(Object.entries(pathPreview) as [ObjectId, readonly import('@vectoria/core').PathNode[]][]),
       geometryPreview: geometryPreview ?? cornerPreview ?? undefined,
+      gradientHandles: selectedObjectIds.length === 1
+        ? (() => { const object = doc.objects[selectedObjectIds[0]!]; const fill = stylePreview[object?.id ?? '']?.fill ?? object?.style.fill; return object && fill && (fill.type === 'linear-gradient' || fill.type === 'radial-gradient' || fill.type === 'angular-gradient') ? [{ objectId: object.id, fill, transform: object.transform }] : []; })()
+        : [],
       marquee: dragStateRef.current?.type === 'marquee' ? {
         start: dragStateRef.current.startWorld,
         end: dragStateRef.current.currentWorld,
@@ -390,7 +458,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     }
     void penVersion;
     void freehandVersion;
-  }, [doc, camera, selectedIds, dragPreview, pathPreview, geometryPreview, cornerPreview, activeTool, penVersion, polylineVersion, freehandVersion, freehandSettings, showGrid, gridSettings, selection, selectedObjectId]);
+  }, [doc, camera, selectedIds, dragPreview, stylePreview, pathPreview, geometryPreview, cornerPreview, activeTool, penVersion, polylineVersion, freehandVersion, freehandSettings, showGrid, gridSettings, selection, selectedObjectId, selectedObjectIds]);
 
   // Initialize render loop
   useEffect(() => {
@@ -421,7 +489,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   // Invalidate on doc or selection changes
   useEffect(() => {
     renderLoopRef.current?.invalidate();
-  }, [doc, selectedIds, dragPreview, pathPreview, selection, activeTool, penVersion]);
+  }, [doc, selectedIds, dragPreview, stylePreview, pathPreview, selection, activeTool, penVersion]);
 
   // Canvas resize handler
   const handleResize = useCallback(() => {
@@ -518,12 +586,16 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     }
 
     if (activeTool === 'eyedropper' || activeTool === 'bucket') {
-      const hit = selectTool.pick({ document: doc, selection, screenPoint: screenPos, worldPoint: worldPos, zoom: camera.zoom }).hit;
-      const source = hit ? doc.objects[hit.objectId] : undefined;
-      if (source && selectedObjectIds?.length) {
-        const ids = selectedObjectIds;
-        onExecuteCommand(activeTool === 'eyedropper' ? new ApplyStyleCommand(ids, source.style) : new SetObjectStyleCommand(ids, { fill: source.style.fill }));
+      try { (e.target as HTMLElement).setPointerCapture(e.pointerId); } catch { /* synthetic pointer */ }
+      const tool = activeTool === 'eyedropper' ? eyedropperToolRef.current! : paintBucketToolRef.current!;
+      if (activeTool === 'eyedropper') tool.sampleTarget = styleSampleTarget;
+      else {
+        paintBucketToolRef.current!.sampleTarget = styleSampleTarget === 'stroke' ? 'stroke' : 'fill';
+        paintBucketToolRef.current!.tolerance = styleSampleTolerance;
       }
+      tool.pointerDown({ screenPoint: screenPos, worldPoint: worldPos });
+      dragStateRef.current = { type: 'style-sample', startScreen: screenPos, startWorld: worldPos, currentWorld: worldPos, pointerId: e.pointerId, styleTool: activeTool };
+      renderLoopRef.current?.invalidate();
       return;
     }
 
@@ -583,6 +655,16 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
 
     // Pen owns its draft state; pointer capture loss must not cancel completed nodes.
     if (activeTool !== 'pen') (e.target as HTMLElement).setPointerCapture(e.pointerId);
+
+    if (activeTool === 'select' && selectedObjectId && selectedObjectIds.length === 1) {
+      const selected = doc.objects[selectedObjectId];
+      const handle = selected && !selected.locked ? gradientHandleAt(selected, camera, screenPos) : undefined;
+      if (selected && handle) {
+        try { (e.target as HTMLElement).setPointerCapture(e.pointerId); } catch { /* synthetic pointer */ }
+        dragStateRef.current = { type: 'gradient-handle', gradientHandle: handle, startScreen: screenPos, startWorld: worldPos, currentWorld: worldPos, pointerId: e.pointerId, objectIds: [selected.id], initialStyle: selected.style };
+        return;
+      }
+    }
 
     if (activeTool === 'pen') {
       // In-Pen editing: clicking an existing path segment inserts a node there
@@ -741,6 +823,25 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
        renderLoopRef.current?.invalidate();
     }
     freehandCursorRef.current = worldPos;
+
+    if (drag?.type === 'style-sample') {
+      if (drag.styleTool === 'eyedropper') eyedropperToolRef.current?.pointerMove({ screenPoint: screenPos, worldPoint: worldPos });
+      else paintBucketToolRef.current?.pointerMove({ screenPoint: screenPos, worldPoint: worldPos });
+      drag.currentWorld = worldPos;
+      renderLoopRef.current?.invalidate();
+      return;
+    }
+
+    if (drag?.type === 'gradient-handle' && drag.objectIds?.[0] && drag.initialStyle && drag.gradientHandle) {
+      const object = doc.objects[drag.objectIds[0]];
+      if (object) {
+        const fill = updateGradientFill(drag.initialStyle, drag.gradientHandle, object.transform, worldPos);
+        if (fill) setStylePreview({ [object.id]: { ...drag.initialStyle, fill } });
+      }
+      drag.currentWorld = worldPos;
+      renderLoopRef.current?.invalidate();
+      return;
+    }
 
     if (freehandOperation && !drag) {
       if (freehandOperation === 'pencil') pencilToolRef.current?.pointerMove({ screenPoint: screenPos, worldPoint: worldPos, pressure: freehandSettings.pressure ? e.pressure : 1, time: e.timeStamp }, camera.screenToWorldDistance(2));
@@ -923,6 +1024,46 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       // Ignore if capture was already released
     }
 
+    if (drag.type === 'style-sample') {
+      const screenPoint = getPointerScreen(e);
+      const worldPoint = snapWorldPoint(camera.screenToWorld(screenPoint));
+      const hit = selectTool.pick({ document: doc, selection, screenPoint, worldPoint, zoom: camera.zoom }).hit;
+      const result = drag.styleTool === 'eyedropper'
+        ? eyedropperToolRef.current?.pointerUp(hit?.objectId ?? null)
+        : paintBucketToolRef.current?.pointerUp(hit?.objectId ?? null);
+      const source = hit ? doc.objects[hit.objectId] : undefined;
+      if (result?.type === 'commit' && source && selectedObjectIds.length > 0) {
+        if (result.target === 'style') onExecuteCommand(new ApplyStyleCommand(selectedObjectIds, source.style));
+        else {
+          const targetKind = result.target as 'fill' | 'stroke';
+          const tolerance = 'tolerance' in result && typeof result.tolerance === 'number' ? result.tolerance : 0;
+          const sourceColor = sampledStyleColor(source.style, targetKind);
+          const targetIds = selectedObjectIds.filter((id) => {
+            const targetObject = doc.objects[id];
+            if (!targetObject || targetObject.locked) return false;
+            const targetColor = sampledStyleColor(targetObject.style, targetKind);
+            return sourceColor === null || targetColor === null || colorDistancePercent(sourceColor, targetColor) <= tolerance;
+          });
+          if (targetIds.length > 0) onExecuteCommand(targetKind === 'fill' ? new SetObjectStyleCommand(targetIds, { fill: source.style.fill }) : new SetObjectStyleCommand(targetIds, { stroke: source.style.stroke }));
+        }
+      }
+      dragStateRef.current = null;
+      renderLoopRef.current?.invalidate();
+      qualityPolicyRef.current?.endInteraction();
+      return;
+    }
+
+    if (drag.type === 'gradient-handle' && drag.objectIds?.[0]) {
+      const objectId = drag.objectIds[0];
+      const preview = stylePreview[objectId];
+      if (preview) onExecuteCommand(new SetObjectStyleCommand([objectId], preview));
+      setStylePreview({});
+      dragStateRef.current = null;
+      renderLoopRef.current?.invalidate();
+      qualityPolicyRef.current?.endInteraction();
+      return;
+    }
+
     if (drag.type === 'marquee' || drag.type === 'lasso' || drag.type === 'node-lasso') {
       const dx = drag.currentWorld.x - drag.startWorld.x;
       const dy = drag.currentWorld.y - drag.startWorld.y;
@@ -1047,6 +1188,11 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     if (drag.type === 'move-object') {
       setDragPreview({});
     }
+    if (drag.type === 'style-sample') {
+      eyedropperToolRef.current?.cancel();
+      paintBucketToolRef.current?.cancel();
+    }
+    if (drag.type === 'gradient-handle') setStylePreview({});
     if (drag.type === 'move-node' || drag.type === 'move-handle') setPathPreview({});
     if (drag.type === 'create-shape') {
       shapeToolRef.current?.cancel();
@@ -1264,7 +1410,11 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
          cursor:
            isSpacePressed || activeTool === 'hand'
              ? 'grab'
-              : isDragShapeTool(activeTool) || activeTool === 'polyline' || activeTool === 'pen' || activeTool === 'pencil' || activeTool === 'brush' || activeTool === 'corner' || activeTool === 'eraser' || activeTool === 'knife' || activeTool === 'scissors' || activeTool === 'lasso' || activeTool === 'node-lasso'
+             : activeTool === 'eyedropper'
+             ? 'copy'
+             : activeTool === 'bucket'
+             ? 'cell'
+             : isDragShapeTool(activeTool) || activeTool === 'polyline' || activeTool === 'pen' || activeTool === 'pencil' || activeTool === 'brush' || activeTool === 'corner' || activeTool === 'eraser' || activeTool === 'knife' || activeTool === 'scissors' || activeTool === 'lasso' || activeTool === 'node-lasso'
              ? 'crosshair'
              : 'default',
         touchAction: 'none',

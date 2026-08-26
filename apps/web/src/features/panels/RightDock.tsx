@@ -8,9 +8,11 @@ import { PropertiesPanel, type PathAction } from './PropertiesPanel.js';
 import { ArtboardsPanel } from './ArtboardsPanel.js';
 import type { GridSettings } from '@vectoria/editor-engine';
 import { CleanupPanel } from '../cleanup/CleanupPanel.js';
+import { PalettesPanel } from './PalettesPanel.js';
+import { ObjectStylesPanel } from './ObjectStylesPanel.js';
 import type { GeometryAction } from '../properties/GeometryProperties.js';
 
-export type DockPanel = 'properties' | 'layers' | 'artboards' | 'history' | 'cleanup';
+export type DockPanel = 'properties' | 'layers' | 'artboards' | 'history' | 'palettes' | 'object-styles' | 'cleanup';
 
 export interface RightDockProps {
   document: DocumentModel;
@@ -69,6 +71,14 @@ export interface RightDockProps {
   onPanelChange?: (panel: DockPanel) => void;
   open: boolean;
   isDirty?: boolean;
+  libraryPalettes?: readonly import('@vectoria/core').ColorPalette[];
+  onLibraryPalettesChange?: (palettes: readonly import('@vectoria/core').ColorPalette[]) => void;
+  onApplyPaletteFill?: (fill: import('@vectoria/core').FillStyle) => void;
+  onUpsertDocumentPalette?: (palette: import('@vectoria/core').ColorPalette) => void;
+  onDeleteDocumentPalette?: (id: string) => void;
+  onSaveObjectStyle?: (style: import('@vectoria/core').SavedObjectStyle) => void;
+  onApplyObjectStyle?: (style: import('@vectoria/core').ObjectStyle) => void;
+  onDeleteObjectStyle?: (id: string) => void;
 }
 
 const panels: readonly { id: DockPanel; label: string; icon: React.ComponentProps<typeof VectoriaIcon>['name'] }[] = [
@@ -76,10 +86,12 @@ const panels: readonly { id: DockPanel; label: string; icon: React.ComponentProp
   { id: 'layers', label: 'Warstwy', icon: 'layers' },
   { id: 'artboards', label: 'Artboardy', icon: 'grid' },
   { id: 'history', label: 'Historia', icon: 'history' },
+  { id: 'palettes', label: 'Palety', icon: 'grid' },
+  { id: 'object-styles', label: 'Style', icon: 'sliders' as React.ComponentProps<typeof VectoriaIcon>['name'] },
   { id: 'cleanup', label: 'Clean Up', icon: 'check' as React.ComponentProps<typeof VectoriaIcon>['name'] },
 ];
 
- export const RightDock: React.FC<RightDockProps> = ({ document: doc, selectedObjectId, selectedObjectIds = [], history, historyCursor, onHistoryJump, versions, onSaveVersion, onRestoreVersion, onSelectObject, onSelectObjects, onUpdatePosition, onUpdateDimensions, onUpdateGroupTransform, onUpdateParametric, onUpdateArrowheads, onUpdateLineEndpoint, onUpdateCornerRadius, onUpdateFill, onUpdateObjectStyle, onUpdateRotation, onUpdatePivot, onUpdateSkew, onAlign, onDistribute, onReorder, onUpdateArtboard, onUpdateUnit, gridSettings, onUpdateGridSettings, selection, onUpdatePathNode, onUpdatePathNodeKind, onUpdatePathClosed, onPathAction, geometryPreview, onGeometryAction, onApplyGeometryPreview, onCancelGeometryPreview, onOpenCleanup, cleanupPlan, onCleanupSelectionChange, onApplyCleanup, onCancelCleanup, onToggleObject, onSelectArtboard, onCreateArtboard, onDuplicateArtboard, onDeleteArtboard, onRenameArtboard, onOrientArtboard, onToggleArtboardVisibility, activePanel: requestedPanel, onPanelChange, open, isDirty }) => {
+ export const RightDock: React.FC<RightDockProps> = ({ document: doc, selectedObjectId, selectedObjectIds = [], history, historyCursor, onHistoryJump, versions, onSaveVersion, onRestoreVersion, onSelectObject, onSelectObjects, onUpdatePosition, onUpdateDimensions, onUpdateGroupTransform, onUpdateParametric, onUpdateArrowheads, onUpdateLineEndpoint, onUpdateCornerRadius, onUpdateFill, onUpdateObjectStyle, onUpdateRotation, onUpdatePivot, onUpdateSkew, onAlign, onDistribute, onReorder, onUpdateArtboard, onUpdateUnit, gridSettings, onUpdateGridSettings, selection, onUpdatePathNode, onUpdatePathNodeKind, onUpdatePathClosed, onPathAction, geometryPreview, onGeometryAction, onApplyGeometryPreview, onCancelGeometryPreview, onOpenCleanup, cleanupPlan, onCleanupSelectionChange, onApplyCleanup, onCancelCleanup, onToggleObject, onSelectArtboard, onCreateArtboard, onDuplicateArtboard, onDeleteArtboard, onRenameArtboard, onOrientArtboard, onToggleArtboardVisibility, activePanel: requestedPanel, onPanelChange, open, isDirty, libraryPalettes = [], onLibraryPalettesChange, onApplyPaletteFill, onUpsertDocumentPalette, onDeleteDocumentPalette, onSaveObjectStyle, onApplyObjectStyle, onDeleteObjectStyle }) => {
   const [localActivePanel, setLocalActivePanel] = useState<DockPanel>('properties');
   const activePanel = requestedPanel ?? localActivePanel;
   const activeIndex = panels.findIndex((panel) => panel.id === activePanel);
@@ -103,7 +115,9 @@ const panels: readonly { id: DockPanel; label: string; icon: React.ComponentProp
           {activePanel === 'properties' && <PropertiesPanel document={doc} selectedObjectId={selectedObjectId} selectedObjectIds={selectedObjectIds} selection={selection} onUpdatePosition={onUpdatePosition} onUpdateDimensions={onUpdateDimensions} onUpdateGroupTransform={onUpdateGroupTransform} onUpdateParametric={onUpdateParametric} onUpdateArrowheads={onUpdateArrowheads} onUpdateLineEndpoint={onUpdateLineEndpoint} onUpdateCornerRadius={onUpdateCornerRadius} onUpdateFill={onUpdateFill} onUpdateObjectStyle={onUpdateObjectStyle} onUpdateRotation={onUpdateRotation} onUpdatePivot={onUpdatePivot} onUpdateSkew={onUpdateSkew} onAlign={onAlign} onDistribute={onDistribute} onReorder={onReorder} onUpdateArtboard={onUpdateArtboard} onUpdateUnit={onUpdateUnit} gridSettings={gridSettings} onUpdateGridSettings={onUpdateGridSettings} onUpdatePathNode={onUpdatePathNode} onUpdatePathNodeKind={onUpdatePathNodeKind} onUpdatePathClosed={onUpdatePathClosed} onPathAction={onPathAction} geometryPreview={geometryPreview} onGeometryAction={onGeometryAction} onApplyGeometryPreview={onApplyGeometryPreview} onCancelGeometryPreview={onCancelGeometryPreview} onOpenCleanup={onOpenCleanup} />}
          {activePanel === 'layers' && <LayersPanel document={doc} selectedObjectId={selectedObjectId} selectedObjectIds={selectedObjectIds} onSelectObject={onSelectObject} onSelectObjects={onSelectObjects} onToggleObject={onToggleObject} />}
             {activePanel === 'artboards' && onSelectArtboard && onCreateArtboard && onDuplicateArtboard && onDeleteArtboard && onRenameArtboard && onOrientArtboard && <ArtboardsPanel document={doc} onSelect={onSelectArtboard} onCreate={onCreateArtboard} onDuplicate={onDuplicateArtboard} onDelete={onDeleteArtboard} onRename={onRenameArtboard} onOrientation={onOrientArtboard} onVisibilityToggle={onToggleArtboardVisibility} />}
-            {activePanel === 'history' && <HistoryPanel entries={history} cursor={historyCursor} onJump={onHistoryJump} versions={versions} onSaveVersion={onSaveVersion} onRestoreVersion={onRestoreVersion} isDirty={isDirty} />}
+          {activePanel === 'history' && <HistoryPanel entries={history} cursor={historyCursor} onJump={onHistoryJump} versions={versions} onSaveVersion={onSaveVersion} onRestoreVersion={onRestoreVersion} isDirty={isDirty} />}
+          {activePanel === 'palettes' && onLibraryPalettesChange && onApplyPaletteFill && onUpsertDocumentPalette && onDeleteDocumentPalette && <PalettesPanel documentPalettes={doc.palettes ?? []} libraryPalettes={libraryPalettes} hasSelection={selectedObjectIds.length > 0} onApplyFill={onApplyPaletteFill} onUpsertDocumentPalette={onUpsertDocumentPalette} onDeleteDocumentPalette={onDeleteDocumentPalette} onLibraryChange={onLibraryPalettesChange} />}
+          {activePanel === 'object-styles' && onSaveObjectStyle && onApplyObjectStyle && onDeleteObjectStyle && <ObjectStylesPanel styles={doc.objectStyles ?? []} selectedStyle={selectedObjectId ? doc.objects[selectedObjectId]?.style ?? null : null} hasSelection={selectedObjectIds.length > 0} onSave={onSaveObjectStyle} onApply={onApplyObjectStyle} onDelete={onDeleteObjectStyle} />}
            {activePanel === 'cleanup' && cleanupPlan && <CleanupPanel plan={cleanupPlan} onChangeSelection={onCleanupSelectionChange ?? (() => undefined)} onApply={onApplyCleanup ?? (() => undefined)} onCancel={onCancelCleanup ?? (() => undefined)} />}
       </div>
     </aside>

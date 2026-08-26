@@ -98,6 +98,8 @@ export interface ArrowheadStyle {
 export interface StrokeStyle {
   readonly color: string;
   readonly width: number;
+  /** Defaults to centered stroke for legacy schema-v1 values. */
+  readonly align?: 'center' | 'inside' | 'outside';
   readonly lineCap: 'butt' | 'round' | 'square';
   readonly lineJoin: 'miter' | 'round' | 'bevel';
   readonly miterLimit: number;
@@ -124,10 +126,16 @@ export interface PaletteColor {
   readonly color: string;
 }
 
+export type PaletteSwatch =
+  | { readonly id: string; readonly name: string; readonly type: 'solid'; readonly color: string }
+  | { readonly id: string; readonly name: string; readonly type: 'gradient'; readonly fill: LinearGradientFill | RadialGradientFill | AngularGradientFill }
+  | { readonly id: string; readonly name: string; readonly type: 'pattern'; readonly fill: PatternFill };
+
 export interface ColorPalette {
   readonly id: string;
   readonly name: string;
   readonly colors: readonly PaletteColor[];
+  readonly swatches?: readonly PaletteSwatch[];
   readonly scope: 'document' | 'user' | 'saved';
 }
 

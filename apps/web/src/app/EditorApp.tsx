@@ -29,6 +29,11 @@ import {
   type ArrowheadStyle,
   type CornerRadii,
   SetObjectStyleCommand,
+  DeletePaletteCommand,
+  DeleteObjectStyleCommand,
+  SaveObjectStyleCommand,
+  ApplySavedObjectStyleCommand,
+  UpsertPaletteCommand,
   UpdateArtboardCommand,
   SetDocumentUnitCommand,
   SetGridSettingsCommand,
@@ -81,6 +86,8 @@ import {
   importSvgToDocument,
   saveDocumentVersion,
   listDocumentVersions,
+  loadPaletteLibrary,
+  savePaletteLibrary,
   markSessionOpen,
   markSessionClosed,
   type BootstrapState,
@@ -129,12 +136,15 @@ export const EditorApp: React.FC = () => {
   const [revision, setRevision] = useState(0);
   const [savedRevision, setSavedRevision] = useState(0);
   const [documentVersions, setDocumentVersions] = useState<readonly import('@vectoria/io').DocumentVersion[]>([]);
+  const [libraryPalettes, setLibraryPalettes] = useState<readonly import('@vectoria/core').ColorPalette[]>([]);
   const lastTransformRef = useRef<Partial<import('@vectoria/core').Transform2D>>({});
   const [cursorWorld, setCursorWorld] = useState<Vec2 | null>(null);
   const [zoomPercent, setZoomPercent] = useState(100);
   const [newDocumentOpen, setNewDocumentOpen] = useState(false);
   const [theme, setTheme] = useState<'dark' | 'light'>(() => localStorage.getItem('vectoria-theme') === 'light' ? 'light' : 'dark');
   const [freehandSettings, setFreehandSettings] = useState<FreehandSettings>({ smoothing: 20, accuracy: 75, width: 4, pressure: true, cap: 'round', join: 'round', eraserRadius: 12 });
+  const [styleSampleTarget, setStyleSampleTarget] = useState<import('@vectoria/editor-engine').StyleSampleTarget>('style');
+  const [styleSampleTolerance, setStyleSampleTolerance] = useState(0);
   const [geometryPreview, setGeometryPreview] = useState<GeometryPreview | null>(null);
   const [cleanupSelectedFindingIds, setCleanupSelectedFindingIds] = useState<readonly string[]>([]);
   const [destructiveGeometryConfirmOpen, setDestructiveGeometryConfirmOpen] = useState(false);
@@ -157,6 +167,10 @@ export const EditorApp: React.FC = () => {
     const closeSession = () => markSessionClosed();
     window.addEventListener('pagehide', closeSession);
     return () => { window.removeEventListener('pagehide', closeSession); markSessionClosed(); };
+  }, []);
+
+  useEffect(() => {
+    void loadPaletteLibrary().then(setLibraryPalettes).catch(() => setLibraryPalettes([]));
   }, []);
 
   const handleSelectObject = useCallback((id: ObjectId | null, additive = false) => {
@@ -610,6 +624,36 @@ export const EditorApp: React.FC = () => {
     handleExecuteCommand(new SetObjectStyleCommand([id], patch));
   }, [handleExecuteCommand]);
 
+  const handleLibraryPalettesChange = useCallback((palettes: readonly import('@vectoria/core').ColorPalette[]) => {
+    const bounded = palettes.slice(0, 256);
+    setLibraryPalettes(bounded);
+    void savePaletteLibrary(bounded).catch(() => setSaveStatus('error'));
+  }, []);
+
+  const handleUpsertDocumentPalette = useCallback((palette: import('@vectoria/core').ColorPalette) => {
+    handleExecuteCommand(new UpsertPaletteCommand(palette));
+  }, [handleExecuteCommand]);
+
+  const handleDeleteDocumentPalette = useCallback((id: string) => {
+    handleExecuteCommand(new DeletePaletteCommand(id));
+  }, [handleExecuteCommand]);
+
+  const handleApplyPaletteFill = useCallback((fill: import('@vectoria/core').FillStyle) => {
+    if (selectedObjectIds.length > 0) handleExecuteCommand(new SetObjectStyleCommand(selectedObjectIds, { fill }));
+  }, [handleExecuteCommand, selectedObjectIds]);
+
+  const handleSaveObjectStyle = useCallback((style: import('@vectoria/core').SavedObjectStyle) => {
+    handleExecuteCommand(new SaveObjectStyleCommand(style));
+  }, [handleExecuteCommand]);
+
+  const handleApplyObjectStyle = useCallback((style: ObjectStyle) => {
+    if (selectedObjectIds.length > 0) handleExecuteCommand(new ApplySavedObjectStyleCommand(selectedObjectIds, { id: 'inline-style', name: 'Inline style', style }));
+  }, [handleExecuteCommand, selectedObjectIds]);
+
+  const handleDeleteObjectStyle = useCallback((id: string) => {
+    handleExecuteCommand(new DeleteObjectStyleCommand(id));
+  }, [handleExecuteCommand]);
+
   const handleUpdateRotation = useCallback((id: ObjectId, degrees: number) => {
     if (!doc || !Number.isFinite(degrees)) return;
     const object = doc.objects[id];
@@ -1043,9 +1087,13 @@ export const EditorApp: React.FC = () => {
        ? 'Drag a cut line across a path'
        : activeTool === 'scissors'
        ? 'Click a path segment to split it'
-       : activeTool === 'width'
-       ? 'Select a brush path to edit local width'
-       : activeTool === 'zoom'
+        : activeTool === 'width'
+        ? 'Select a brush path to edit local width'
+        : activeTool === 'eyedropper'
+        ? 'Click source object to sample fill, stroke or whole style'
+        : activeTool === 'bucket'
+        ? 'Click source object to paste vector fill into selection'
+        : activeTool === 'zoom'
       ? 'Click to zoom in · Wheel to zoom at cursor'
       : 'Drag to pan view';
 
@@ -1114,7 +1162,11 @@ export const EditorApp: React.FC = () => {
           onUpdateLineEndpoint={handleUpdateLineEndpoint}
           onUpdateFill={handleUpdateFill}
           freehandSettings={freehandSettings}
-          onFreehandSettingsChange={setFreehandSettings}
+           onFreehandSettingsChange={setFreehandSettings}
+            styleSampleTarget={styleSampleTarget}
+            onStyleSampleTargetChange={setStyleSampleTarget}
+            styleSampleTolerance={styleSampleTolerance}
+            onStyleSampleToleranceChange={setStyleSampleTolerance}
       />
 
       {/* Main Workspace Area */}
@@ -1142,7 +1194,9 @@ export const EditorApp: React.FC = () => {
             snapToGrid={doc.snap.enabled}
              gridSettings={doc.grid}
              freehandSettings={freehandSettings}
-             geometryPreview={geometryPreview}
+              geometryPreview={geometryPreview}
+              styleSampleTarget={styleSampleTarget}
+              styleSampleTolerance={styleSampleTolerance}
            />
         </div>
 
@@ -1198,8 +1252,16 @@ export const EditorApp: React.FC = () => {
           onDeleteArtboard={handleDeleteArtboard}
           onRenameArtboard={handleRenameArtboard}
           onOrientArtboard={handleOrientArtboard}
-          onToggleArtboardVisibility={handleToggleArtboardVisibility}
-          activePanel={activeDockPanel}
+           onToggleArtboardVisibility={handleToggleArtboardVisibility}
+           libraryPalettes={libraryPalettes}
+           onLibraryPalettesChange={handleLibraryPalettesChange}
+           onApplyPaletteFill={handleApplyPaletteFill}
+           onUpsertDocumentPalette={handleUpsertDocumentPalette}
+           onDeleteDocumentPalette={handleDeleteDocumentPalette}
+           onSaveObjectStyle={handleSaveObjectStyle}
+           onApplyObjectStyle={handleApplyObjectStyle}
+           onDeleteObjectStyle={handleDeleteObjectStyle}
+           activePanel={activeDockPanel}
           onPanelChange={setActiveDockPanel}
           open={rightDockOpen}
           isDirty={revision !== savedRevision}
@@ -1209,7 +1271,7 @@ export const EditorApp: React.FC = () => {
       {/* Status Bar */}
       <StatusBar
         toolHint={toolHint}
-         activeTool={activeTool === 'select' ? 'Select' : activeTool === 'direct-select' ? 'Direct Select' : activeTool === 'lasso' ? 'Lasso' : activeTool === 'node-lasso' ? 'Node Lasso' : activeTool === 'rectangle' ? 'Rectangle' : activeTool === 'ellipse' ? 'Ellipse' : activeTool === 'line' ? 'Line' : activeTool === 'pen' ? 'Pen' : activeTool === 'pencil' ? 'Pencil' : activeTool === 'brush' ? 'Brush' : activeTool === 'smooth' ? 'Smooth' : activeTool === 'corner' ? 'Corner' : activeTool === 'eraser' ? 'Eraser' : activeTool === 'knife' ? 'Knife' : activeTool === 'scissors' ? 'Scissors' : activeTool === 'width' ? 'Width' : activeTool === 'hand' ? 'Hand' : 'Zoom'}
+          activeTool={activeTool === 'select' ? 'Select' : activeTool === 'direct-select' ? 'Direct Select' : activeTool === 'lasso' ? 'Lasso' : activeTool === 'node-lasso' ? 'Node Lasso' : activeTool === 'rectangle' ? 'Rectangle' : activeTool === 'ellipse' ? 'Ellipse' : activeTool === 'line' ? 'Line' : activeTool === 'pen' ? 'Pen' : activeTool === 'pencil' ? 'Pencil' : activeTool === 'brush' ? 'Brush' : activeTool === 'smooth' ? 'Smooth' : activeTool === 'corner' ? 'Corner' : activeTool === 'eraser' ? 'Eraser' : activeTool === 'knife' ? 'Knife' : activeTool === 'scissors' ? 'Scissors' : activeTool === 'width' ? 'Width' : activeTool === 'eyedropper' ? 'Eyedropper' : activeTool === 'bucket' ? 'Bucket' : activeTool === 'hand' ? 'Hand' : 'Zoom'}
         selectedObjectName={selectedObjectId ? doc.objects[selectedObjectId]?.name ?? null : null}
         selectedObjectCount={selectedObjectIds.length}
         cursorWorld={cursorWorld}

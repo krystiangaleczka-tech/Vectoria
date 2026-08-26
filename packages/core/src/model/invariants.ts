@@ -1,4 +1,5 @@
-import type { DocumentModel } from './types.js';
+import { normalizeColor } from '@vectoria/shared';
+import type { DocumentModel, PaletteSwatch } from './types.js';
 
 export interface InvariantViolation {
   readonly code: string;
@@ -176,6 +177,7 @@ export function validateInvariants(doc: DocumentModel): InvariantViolation[] {
         // ── Stroke validation ──────────────────────────────────────────────
         if (obj.style.stroke) {
           const s = obj.style.stroke;
+          if (s.align !== undefined && !['center', 'inside', 'outside'].includes(s.align)) violations.push({ code: 'INVALID_STROKE_ALIGN', message: `Object '${objectId}' has an unsupported stroke alignment.` });
           if (!Number.isFinite(s.width) || s.width < 0) {
             violations.push({ code: 'INVALID_STROKE_WIDTH', message: `Object '${objectId}' has negative or non-finite stroke width.` });
           }
@@ -343,5 +345,46 @@ export function validateInvariants(doc: DocumentModel): InvariantViolation[] {
     if (group.contentIds.length === 0 || group.contentIds.some((id) => !doc.objects[id] || id === group.maskId)) violations.push({ code: 'INVALID_MASK_CONTENT', message: `Mask '${group.id}' has missing or empty content references.` });
   }
 
+  for (const palette of doc.palettes ?? []) {
+    registerId(palette.id, 'DUPLICATE_PALETTE_ID');
+    if (!palette.name.trim()) violations.push({ code: 'INVALID_PALETTE_NAME', message: `Palette '${palette.id}' has an empty name.` });
+    const paletteColorIds = new Set<string>();
+    for (const color of palette.colors) {
+      if (paletteColorIds.has(color.id)) violations.push({ code: 'DUPLICATE_PALETTE_COLOR_ID', message: `Palette '${palette.id}' contains duplicate color '${color.id}'.` });
+      registerId(color.id, 'DUPLICATE_PALETTE_COLOR_ID');
+      paletteColorIds.add(color.id);
+      if (!color.name.trim() || !normalizeColor(color.color)) violations.push({ code: 'INVALID_PALETTE_COLOR', message: `Palette '${palette.id}' contains an empty color name or invalid value.` });
+    }
+    const swatchIds = new Set<string>();
+    for (const swatch of palette.swatches ?? []) {
+      if (swatchIds.has(swatch.id)) violations.push({ code: 'DUPLICATE_SWATCH_ID', message: `Palette '${palette.id}' contains duplicate swatch '${swatch.id}'.` });
+      registerId(swatch.id, 'DUPLICATE_SWATCH_ID');
+      swatchIds.add(swatch.id);
+      if (!swatch.name.trim()) violations.push({ code: 'INVALID_SWATCH_NAME', message: `Palette '${palette.id}' contains an unnamed swatch.` });
+      validateSwatch(swatch, palette.id, violations);
+    }
+  }
+  for (const style of doc.objectStyles ?? []) {
+    registerId(style.id, 'DUPLICATE_OBJECT_STYLE_ID');
+    if (!style.name.trim()) violations.push({ code: 'INVALID_OBJECT_STYLE_NAME', message: `Object style '${style.id}' has an empty name.` });
+  }
+
   return violations;
+}
+
+function validateSwatch(swatch: PaletteSwatch, paletteId: string, violations: InvariantViolation[]): void {
+  if (swatch.type === 'solid') {
+    if (!normalizeColor(swatch.color)) violations.push({ code: 'INVALID_SWATCH_COLOR', message: `Palette '${paletteId}' contains a swatch with an invalid color.` });
+    return;
+  }
+  if (swatch.type === 'pattern') {
+    if (!normalizeColor(swatch.fill.foreground) || !normalizeColor(swatch.fill.background) || !Number.isFinite(swatch.fill.size) || swatch.fill.size <= 0) violations.push({ code: 'INVALID_SWATCH_PATTERN', message: `Palette '${paletteId}' contains an invalid pattern swatch.` });
+    return;
+  }
+  if (swatch.fill.stops.length < 2) violations.push({ code: 'INVALID_SWATCH_GRADIENT', message: `Palette '${paletteId}' contains a gradient with fewer than two stops.` });
+  for (const stop of swatch.fill.stops) {
+    if (!normalizeColor(stop.color) || !Number.isFinite(stop.offset) || stop.offset < 0 || stop.offset > 1 || !Number.isFinite(stop.opacity) || stop.opacity < 0 || stop.opacity > 1) violations.push({ code: 'INVALID_SWATCH_GRADIENT_STOP', message: `Palette '${paletteId}' contains an invalid gradient stop.` });
+  }
+  if (swatch.fill.type === 'linear-gradient' && swatch.fill.start.x === swatch.fill.end.x && swatch.fill.start.y === swatch.fill.end.y) violations.push({ code: 'INVALID_SWATCH_GRADIENT_GEOMETRY', message: `Palette '${paletteId}' contains a degenerate linear gradient.` });
+  if (swatch.fill.type === 'radial-gradient' && (!Number.isFinite(swatch.fill.radius) || swatch.fill.radius <= 0)) violations.push({ code: 'INVALID_SWATCH_GRADIENT_GEOMETRY', message: `Palette '${paletteId}' contains an invalid radial gradient radius.` });
 }

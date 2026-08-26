@@ -37,3 +37,5 @@ export { RingTool } from './tools/ring-tool.js';
 export { SpiralTool } from './tools/spiral-tool.js';
 export { CalloutTool } from './tools/callout-tool.js';
 export { PolylineTool, type PolylineToolResult } from './tools/polyline-tool.js';
+export { EyedropperTool, type EyedropperResult, type EyedropperState, type StyleSampleTarget, type StyleToolPointerEvent } from './tools/eyedropper-tool.js';
+export { PaintBucketTool, type PaintBucketResult, type PaintBucketState } from './tools/paint-bucket-tool.js';

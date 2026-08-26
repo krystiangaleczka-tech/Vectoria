@@ -1,4 +1,4 @@
-import { createDefaultDocument, createTransform, defaultObjectStyle, defaultStroke, type DocumentModel, type SceneObject, type PathNode, type ArrowheadStyle } from '@vectoria/core';
+import { createDefaultDocument, createTransform, defaultObjectStyle, defaultStroke, type DocumentModel, type SceneObject, type PathNode, type ArrowheadStyle, type StrokeStyle } from '@vectoria/core';
 import { generateId } from '@vectoria/shared';
 
 const number = (element: Element, name: string, fallback = 0) => {
@@ -22,10 +22,12 @@ const fill = (element: Element, definitions: ReadonlyMap<string, import('@vector
   return definition ?? { type: 'solid' as const, color: value || '#cccccc' };
 };
 
-const stroke = (element: Element, markers?: ReadonlyMap<string, ArrowheadStyle>) => {
+const stroke = (element: Element, markers?: ReadonlyMap<string, ArrowheadStyle>): StrokeStyle | null => {
   const color = element.getAttribute('stroke');
   if (!color || color === 'none') return null;
-  const base = { ...defaultStroke, color, width: Math.max(0.01, number(element, 'stroke-width', 1)) };
+  const align = element.getAttribute('data-vectoria-stroke-align');
+  const strokeAlign: StrokeStyle['align'] = align === 'inside' || align === 'outside' ? align : 'center';
+  const base: StrokeStyle = { ...defaultStroke, color, width: Math.max(0.01, number(element, 'stroke-width', 1)), align: strokeAlign };
   if (!markers) return base;
   const resolveMarker = (attributeName: string): ArrowheadStyle | undefined => {
     const reference = element.getAttribute(attributeName)?.match(/^url\(#(.+)\)$/)?.[1];

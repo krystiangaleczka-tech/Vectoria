@@ -1,6 +1,6 @@
 import type { Camera } from '@vectoria/editor-engine';
 import type { Vec2 } from '@vectoria/shared';
-import type { DocumentModel, Artboard, RectangleObject, EllipseObject, LineObject, PathObject, ObjectId, Transform2D, LinearGradientFill, RadialGradientFill, AngularGradientFill, PatternFill, GeometryPreview, SceneObject, PolygonObject, StarObject, ArcObject, PieObject, RingObject, SpiralObject, CalloutObject, PolylineObject, StrokeStyle, ArrowheadStyle } from '@vectoria/core';
+import type { DocumentModel, Artboard, RectangleObject, EllipseObject, LineObject, PathObject, ObjectId, Transform2D, LinearGradientFill, RadialGradientFill, AngularGradientFill, PatternFill, GeometryPreview, SceneObject, PolygonObject, StarObject, ArcObject, PieObject, RingObject, SpiralObject, CalloutObject, PolylineObject, StrokeStyle, ArrowheadStyle, FillStyle } from '@vectoria/core';
 import type { SnapResult } from '@vectoria/editor-engine';
 import { getTransformMatrix, getObjectBounds, rectsIntersect, normalizeCornerRadii, flattenPath, widthAtT, getPolygonVertices, getStarVertices, getSpiralVertices, getCalloutVertices, getArrowheadVertices, expandObject } from '@vectoria/core';
 import { mat3TransformPoint } from '@vectoria/shared';
@@ -225,6 +225,7 @@ export function renderScene(
   canvasHeight: number,
   options?: {
     previewTransforms?: Record<string, import('@vectoria/core').Transform2D>;
+    previewStyles?: Record<string, import('@vectoria/core').ObjectStyle>;
     showGrid?: boolean;
     quality?: import('./quality.js').RenderQuality;
   }
@@ -273,6 +274,9 @@ export function renderScene(
 
       if (options?.previewTransforms?.[objectId]) {
         obj = { ...obj, transform: options.previewTransforms[objectId]! };
+      }
+      if (options?.previewStyles?.[objectId]) {
+        obj = { ...obj, style: options.previewStyles[objectId]! };
       }
       if (layer.opacity !== 1) {
         obj = { ...obj, style: { ...obj.style, opacity: obj.style.opacity * layer.opacity } };
@@ -586,16 +590,18 @@ function renderRectangle(
   const radii = normalizeCornerRadii(obj.cornerRadius, obj.width, obj.height);
   const hasRoundedCorners = radii.topLeft > 0 || radii.topRight > 0 || radii.bottomRight > 0 || radii.bottomLeft > 0;
 
-  // Fill
-  if (obj.style.fill.type !== 'none') {
-    ctx.fillStyle = resolveFill(ctx, obj.style.fill);
-    if (hasRoundedCorners) {
-      roundRect(ctx, 0, 0, obj.width, obj.height, radii);
-      ctx.fill();
-    } else {
-      ctx.fillRect(0, 0, obj.width, obj.height);
-    }
-  }
+   const drawPath = (): void => {
+     if (hasRoundedCorners) roundRect(ctx, 0, 0, obj.width, obj.height, radii);
+     else ctx.rect(0, 0, obj.width, obj.height);
+   };
+
+   // Fill
+   if (obj.style.fill.type !== 'none') {
+     ctx.fillStyle = resolveFill(ctx, obj.style.fill);
+     ctx.beginPath();
+     drawPath();
+     ctx.fill();
+   }
 
   // Stroke
   if (obj.style.stroke) {
@@ -609,12 +615,7 @@ function renderRectangle(
     }
     ctx.globalAlpha = obj.style.opacity * obj.style.stroke.opacity;
 
-    if (hasRoundedCorners) {
-      roundRect(ctx, 0, 0, obj.width, obj.height, radii);
-      ctx.stroke();
-    } else {
-      ctx.strokeRect(0, 0, obj.width, obj.height);
-    }
+     strokeClosedPath(ctx, obj.style.stroke, drawPath);
   }
 
   ctx.restore();
@@ -634,11 +635,13 @@ function renderEllipse(
   const ry = obj.height / 2;
 
   // Fill
-  if (obj.style.fill.type !== 'none') {
-    ctx.fillStyle = resolveFill(ctx, obj.style.fill);
-    ctx.beginPath();
-    ctx.ellipse(rx, ry, rx, ry, 0, 0, Math.PI * 2);
-    ctx.fill();
+   const drawPath = (): void => { ctx.ellipse(rx, ry, rx, ry, 0, 0, Math.PI * 2); };
+
+   if (obj.style.fill.type !== 'none') {
+     ctx.fillStyle = resolveFill(ctx, obj.style.fill);
+     ctx.beginPath();
+     drawPath();
+     ctx.fill();
   }
 
   // Stroke
@@ -652,9 +655,7 @@ function renderEllipse(
       ctx.setLineDash([...obj.style.stroke.dashArray]);
     }
     ctx.globalAlpha = obj.style.opacity * obj.style.stroke.opacity;
-    ctx.beginPath();
-    ctx.ellipse(rx, ry, rx, ry, 0, 0, Math.PI * 2);
-    ctx.stroke();
+     strokeClosedPath(ctx, obj.style.stroke, drawPath);
   }
 
   ctx.restore();
@@ -706,7 +707,6 @@ function renderPath(
   ctx.transform(matrix[0], matrix[1], matrix[3], matrix[4], matrix[6], matrix[7]);
   ctx.globalAlpha = obj.style.opacity;
 
-  ctx.beginPath();
   const drawSubpath = (nodes: PathObject['nodes']): void => {
     nodes.forEach((node, i) => {
     if (i === 0) {
@@ -732,10 +732,14 @@ function renderPath(
     ctx.closePath();
     }
   };
-  drawSubpath(obj.nodes);
-  obj.compoundChildren?.forEach((nodes) => drawSubpath(nodes));
+  const drawPath = (): void => {
+    drawSubpath(obj.nodes);
+    obj.compoundChildren?.forEach((nodes) => drawSubpath(nodes));
+  };
 
   if (obj.style.fill.type !== 'none' && obj.closed) {
+    ctx.beginPath();
+    drawPath();
     ctx.fillStyle = resolveFill(ctx, obj.style.fill);
     ctx.fill(obj.fillRule ?? 'nonzero');
   }
@@ -749,8 +753,15 @@ function renderPath(
       ctx.setLineDash([...obj.style.stroke.dashArray]);
     }
     ctx.globalAlpha = obj.style.opacity * obj.style.stroke.opacity;
-    if (obj.widthProfile && obj.widthProfile.length > 1 && !obj.closed) renderVariableWidthStroke(ctx, obj);
-    else ctx.stroke();
+    if (obj.widthProfile && obj.widthProfile.length > 1 && !obj.closed) {
+      renderVariableWidthStroke(ctx, obj);
+    } else if (obj.closed) {
+      strokeClosedPath(ctx, obj.style.stroke, drawPath);
+    } else {
+      ctx.beginPath();
+      drawPath();
+      ctx.stroke();
+    }
   }
 
   ctx.restore();
@@ -791,19 +802,20 @@ function renderParametric(ctx: CanvasRenderingContext2D, obj: ParametricObject):
     obj.type === 'polygon' || obj.type === 'star' || obj.type === 'pie' ||
     obj.type === 'ring' || obj.type === 'callout' || (obj.type === 'arc' && obj.closed);
 
-  if (obj.style.fill.type !== 'none' && fillable) {
-    ctx.beginPath();
-    traceParametricPath(ctx, obj);
-    ctx.fillStyle = resolveFill(ctx, obj.style.fill);
+   const drawPath = (): void => { traceParametricPath(ctx, obj); };
+
+   if (obj.style.fill.type !== 'none' && fillable) {
+     ctx.beginPath();
+     drawPath();
+     ctx.fillStyle = resolveFill(ctx, obj.style.fill);
     if (obj.type === 'ring') ctx.fill('evenodd');
     else ctx.fill();
   }
 
-  if (obj.style.stroke) {
-    applyLocalStroke(ctx, obj.style.stroke, obj.style.opacity);
-    ctx.beginPath();
-    traceParametricPath(ctx, obj);
-    ctx.stroke();
+   if (obj.style.stroke) {
+     applyLocalStroke(ctx, obj.style.stroke, obj.style.opacity);
+      if (fillable) strokeClosedPath(ctx, obj.style.stroke, drawPath);
+      else { ctx.beginPath(); drawPath(); ctx.stroke(); }
   }
 
   if (obj.style.stroke && obj.type === 'polyline') {
@@ -822,6 +834,26 @@ function applyLocalStroke(ctx: CanvasRenderingContext2D, stroke: StrokeStyle, ba
   ctx.miterLimit = stroke.miterLimit;
   if (stroke.dashArray.length > 0) ctx.setLineDash([...stroke.dashArray]);
   ctx.globalAlpha = baseOpacity * stroke.opacity;
+}
+
+/** Render closed geometry inside, outside or centered without changing document geometry. */
+function strokeClosedPath(ctx: CanvasRenderingContext2D, stroke: StrokeStyle, drawPath: () => void): void {
+  const align = stroke.align ?? 'center';
+  if (align === 'center') {
+    ctx.beginPath();
+    drawPath();
+    ctx.stroke();
+    return;
+  }
+  ctx.save();
+  ctx.beginPath();
+  if (align === 'outside') ctx.rect(-1e9, -1e9, 2e9, 2e9);
+  drawPath();
+  ctx.clip('evenodd');
+  ctx.beginPath();
+  drawPath();
+  ctx.stroke();
+  ctx.restore();
 }
 
 /**
@@ -940,7 +972,6 @@ function roundRect(
   radii: ReturnType<typeof normalizeCornerRadii>,
 ): void {
   const { topLeft, topRight, bottomRight, bottomLeft } = radii;
-  ctx.beginPath();
   ctx.moveTo(x + topLeft, y);
   ctx.lineTo(x + w - topRight, y);
   ctx.arcTo(x + w, y, x + w, y + topRight, topRight);
@@ -980,6 +1011,7 @@ export function renderOverlay(
       guides: { axis: 'horizontal' | 'vertical'; position: number; targetId: string }[];
     };
     geometryPreview?: GeometryPreview;
+    gradientHandles?: readonly GradientHandleOverlay[];
   },
 ): void {
   const dpr = window.devicePixelRatio || 1;
@@ -1061,6 +1093,10 @@ export function renderOverlay(
 
   if (options?.geometryPreview) {
     renderGeometryPreview(ctx, camera, options.geometryPreview);
+  }
+
+  if (options?.gradientHandles) {
+    renderGradientHandles(ctx, camera, options.gradientHandles);
   }
 
   if (options?.objectSnap && options.objectSnap.guides.length > 0) {
@@ -1148,6 +1184,49 @@ export function renderOverlay(
   }
 
   ctx.restore();
+}
+
+export interface GradientHandleOverlay {
+  readonly objectId: ObjectId;
+  readonly fill: Extract<FillStyle, { type: 'linear-gradient' | 'radial-gradient' | 'angular-gradient' }>;
+  readonly transform: Transform2D;
+}
+
+function renderGradientHandles(ctx: CanvasRenderingContext2D, camera: Camera, handles: readonly GradientHandleOverlay[]): void {
+  const accent = themeColor('--color-accent', '#5caeff');
+  const node = themeColor('--color-node', '#ffffff');
+  for (const handle of handles) {
+    const matrix = getTransformMatrix(handle.transform);
+    const world = (point: Vec2): Vec2 => mat3TransformPoint(matrix, point);
+    const points: Vec2[] = [];
+    if (handle.fill.type === 'linear-gradient') points.push(world(handle.fill.start), world(handle.fill.end));
+    if (handle.fill.type === 'radial-gradient') points.push(world(handle.fill.center), world({ x: handle.fill.center.x + handle.fill.radius, y: handle.fill.center.y }));
+    if (handle.fill.type === 'angular-gradient') points.push(world(handle.fill.center), world({ x: handle.fill.center.x + 24, y: handle.fill.center.y }));
+    if (points.length < 2) continue;
+    const screen = points.map((point) => camera.worldToScreen(point));
+    ctx.save();
+    ctx.strokeStyle = accent;
+    ctx.fillStyle = node;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 3]);
+    ctx.beginPath();
+    ctx.moveTo(screen[0]!.x, screen[0]!.y);
+    ctx.lineTo(screen[1]!.x, screen[1]!.y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    for (const point of screen) {
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, 9, 0, Math.PI * 2);
+      ctx.strokeStyle = `${accent}66`;
+      ctx.stroke();
+      ctx.strokeStyle = accent;
+    }
+    ctx.restore();
+  }
 }
 
 function renderGeometryPreview(ctx: CanvasRenderingContext2D, camera: Camera, preview: GeometryPreview): void {

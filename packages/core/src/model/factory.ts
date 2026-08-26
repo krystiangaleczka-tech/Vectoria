@@ -23,6 +23,7 @@ export interface CreateDocumentOptions {
 export const defaultStroke: StrokeStyle = {
   color: '#000000',
   width: 1,
+  align: 'center',
   lineCap: 'butt',
   lineJoin: 'miter',
   miterLimit: 10,

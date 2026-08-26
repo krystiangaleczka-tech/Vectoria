@@ -1,4 +1,4 @@
-import { normalizeColor } from '@vectoria/shared';
+import { generateId, normalizeColor } from '@vectoria/shared';
 import type { Command } from './command.js';
 import type { ColorPalette, DocumentModel, ObjectId, ObjectStyle, PaletteColor, SavedObjectStyle } from '../model/types.js';
 
@@ -51,7 +51,7 @@ export class ApplyStyleCommand extends StyleObjectCommand {
 export class UpdateGlobalColorCommand implements Command {
   readonly type = 'UpdateGlobalColor';
   readonly description = 'Update global color';
-  private previous: DocumentModel['palettes'] | undefined;
+  private previous: DocumentModel | undefined;
   constructor(private readonly paletteId: string, private readonly colorId: string, private readonly color: string) {}
   execute(doc: DocumentModel): DocumentModel {
     const normalized = normalizeColor(this.color);
@@ -59,12 +59,12 @@ export class UpdateGlobalColorCommand implements Command {
     const palette = palettes.find((candidate) => candidate.id === this.paletteId);
     const old = palette?.colors.find((candidate) => candidate.id === this.colorId);
     if (!normalized || !old) return doc;
-    this.previous = palettes;
+    this.previous = doc;
     const nextPalettes = palettes.map((candidate) => candidate.id !== this.paletteId ? candidate : { ...candidate, colors: candidate.colors.map((candidateColor) => candidateColor.id === this.colorId ? { ...candidateColor, color: normalized } : candidateColor) });
-    const objects = Object.fromEntries(Object.entries(doc.objects).map(([id, object]) => [id, { ...object, style: replaceStyleColors(object.style, old.color, normalized) }]));
+    const objects = Object.fromEntries(Object.entries(doc.objects).map(([id, object]) => [id, object.locked ? object : { ...object, style: replaceStyleColors(object.style, old.color, normalized) }]));
     return { ...doc, palettes: nextPalettes, objects, updatedAt: new Date().toISOString() };
   }
-  undo(doc: DocumentModel): DocumentModel { return this.previous ? { ...doc, palettes: this.previous, updatedAt: new Date().toISOString() } : doc; }
+  undo(_doc: DocumentModel): DocumentModel { return this.previous ?? _doc; }
 }
 
 export class UpsertPaletteCommand implements Command {
@@ -74,6 +74,84 @@ export class UpsertPaletteCommand implements Command {
   constructor(private readonly palette: ColorPalette) {}
   execute(doc: DocumentModel): DocumentModel { this.previous = doc.palettes ?? []; return { ...doc, palettes: [...this.previous.filter((candidate) => candidate.id !== this.palette.id), this.palette], updatedAt: new Date().toISOString() }; }
   undo(doc: DocumentModel): DocumentModel { return this.previous ? { ...doc, palettes: this.previous, updatedAt: new Date().toISOString() } : doc; }
+}
+
+export class DeletePaletteCommand implements Command {
+  readonly type = 'DeletePalette';
+  readonly description = 'Delete palette';
+  private previous: readonly ColorPalette[] | undefined;
+  constructor(private readonly paletteId: string) {}
+  execute(doc: DocumentModel): DocumentModel {
+    const palettes = doc.palettes ?? [];
+    if (!palettes.some((palette) => palette.id === this.paletteId)) return doc;
+    this.previous = palettes;
+    return { ...doc, palettes: palettes.filter((palette) => palette.id !== this.paletteId), updatedAt: new Date().toISOString() };
+  }
+  undo(doc: DocumentModel): DocumentModel { return this.previous ? { ...doc, palettes: this.previous, updatedAt: new Date().toISOString() } : doc; }
+}
+
+export class DuplicatePaletteCommand implements Command {
+  readonly type = 'DuplicatePalette';
+  readonly description = 'Duplicate palette';
+  private previous: readonly ColorPalette[] | undefined;
+  private readonly duplicate: ColorPalette;
+
+  constructor(palette: ColorPalette) {
+    this.duplicate = {
+      ...palette,
+      id: generateId(),
+      name: `${palette.name} copy`,
+      colors: palette.colors.map((color) => ({ ...color, id: generateId() })),
+      ...(palette.swatches ? { swatches: palette.swatches.map((swatch) => ({ ...swatch, id: generateId() })) } : {}),
+    };
+  }
+
+  execute(doc: DocumentModel): DocumentModel {
+    const palettes = doc.palettes ?? [];
+    if (palettes.some((palette) => palette.id === this.duplicate.id)) return doc;
+    this.previous = palettes;
+    return { ...doc, palettes: [...palettes, this.duplicate], updatedAt: new Date().toISOString() };
+  }
+
+  undo(doc: DocumentModel): DocumentModel {
+    return this.previous ? { ...doc, palettes: this.previous, updatedAt: new Date().toISOString() } : doc;
+  }
+}
+
+export class DeleteObjectStyleCommand implements Command {
+  readonly type = 'DeleteObjectStyle';
+  readonly description = 'Delete object style';
+  private previous: readonly SavedObjectStyle[] | undefined;
+  constructor(private readonly styleId: string) {}
+  execute(doc: DocumentModel): DocumentModel {
+    const styles = doc.objectStyles ?? [];
+    if (!styles.some((style) => style.id === this.styleId)) return doc;
+    this.previous = styles;
+    return { ...doc, objectStyles: styles.filter((style) => style.id !== this.styleId), updatedAt: new Date().toISOString() };
+  }
+  undo(doc: DocumentModel): DocumentModel { return this.previous ? { ...doc, objectStyles: this.previous, updatedAt: new Date().toISOString() } : doc; }
+}
+
+export class DuplicateObjectStyleCommand implements Command {
+  readonly type = 'DuplicateObjectStyle';
+  readonly description = 'Duplicate object style';
+  private previous: readonly SavedObjectStyle[] | undefined;
+  private readonly duplicate: SavedObjectStyle;
+
+  constructor(style: SavedObjectStyle) {
+    this.duplicate = { ...style, id: generateId(), name: `${style.name} copy` };
+  }
+
+  execute(doc: DocumentModel): DocumentModel {
+    const styles = doc.objectStyles ?? [];
+    if (styles.some((style) => style.id === this.duplicate.id)) return doc;
+    this.previous = styles;
+    return { ...doc, objectStyles: [...styles, this.duplicate], updatedAt: new Date().toISOString() };
+  }
+
+  undo(doc: DocumentModel): DocumentModel {
+    return this.previous ? { ...doc, objectStyles: this.previous, updatedAt: new Date().toISOString() } : doc;
+  }
 }
 
 export class SaveObjectStyleCommand implements Command {

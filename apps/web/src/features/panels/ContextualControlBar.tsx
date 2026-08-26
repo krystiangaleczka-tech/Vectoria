@@ -4,6 +4,7 @@ import type { Vec2 } from '@vectoria/shared';
 import { ColorControl, NumberInput } from '@vectoria/ui';
 import { convertUnit } from '@vectoria/shared';
 import type { ActiveTool } from '../toolbar/ToolRail.js';
+import type { StyleSampleTarget } from '@vectoria/editor-engine';
 
 export interface FreehandSettings {
   smoothing: number;
@@ -25,6 +26,10 @@ export interface ContextualControlBarProps {
   onUpdateFill: (id: ObjectId, color: string | null) => void;
   freehandSettings?: FreehandSettings;
   onFreehandSettingsChange?: (settings: FreehandSettings) => void;
+  styleSampleTarget?: StyleSampleTarget;
+  onStyleSampleTargetChange?: (target: StyleSampleTarget) => void;
+  styleSampleTolerance?: number;
+  onStyleSampleToleranceChange?: (tolerance: number) => void;
 }
 
 export const ContextualControlBar: React.FC<ContextualControlBarProps> = ({
@@ -37,6 +42,10 @@ export const ContextualControlBar: React.FC<ContextualControlBarProps> = ({
   onUpdateFill,
   freehandSettings,
   onFreehandSettingsChange,
+  styleSampleTarget = 'style',
+  onStyleSampleTargetChange,
+  styleSampleTolerance = 0,
+  onStyleSampleToleranceChange,
 }) => {
   const selected = selectedObjectId ? doc.objects[selectedObjectId] : null;
   const rectangle = selected?.type === 'rectangle' ? selected as RectangleObject : null;
@@ -50,7 +59,13 @@ export const ContextualControlBar: React.FC<ContextualControlBarProps> = ({
   return (
     <section className="contextual-control-bar" data-testid="contextual-control-bar" aria-label="Kontrolki kontekstowe">
        <span className="contextual-label">{rectangle ? 'Prostokąt' : ellipse ? 'Elipsa' : line ? 'Linia' : activeTool === 'select' ? 'Zaznaczenie' : activeTool === 'direct-select' ? 'Węzły' : activeTool === 'rectangle' ? 'Prostokąt' : activeTool === 'ellipse' ? 'Elipsa' : activeTool === 'line' ? 'Linia' : activeTool === 'pencil' ? 'Pencil' : activeTool === 'brush' ? 'Brush' : activeTool === 'smooth' ? 'Smooth' : activeTool === 'corner' ? 'Corner Tool' : activeTool === 'eraser' ? 'Eraser' : activeTool === 'knife' ? 'Knife' : activeTool === 'scissors' ? 'Scissors' : activeTool === 'width' ? 'Width' : activeTool === 'zoom' ? 'Zoom' : 'Nawigacja'}</span>
-      {rectangle || ellipse ? (
+       {(activeTool === 'eyedropper' || activeTool === 'bucket') ? (
+         <div className="contextual-field-group" aria-label="Style sampling target">
+            <label className="contextual-select-label">Target<select className="contextual-select" aria-label="Style sampling target" value={activeTool === 'bucket' && styleSampleTarget === 'style' ? 'fill' : styleSampleTarget} onChange={(event) => onStyleSampleTargetChange?.(event.target.value as StyleSampleTarget)}><option value="fill">Fill</option><option value="stroke">Stroke</option>{activeTool === 'eyedropper' && <option value="style">Whole style</option>}</select></label>
+            {activeTool === 'bucket' && <NumberInput data-testid="bucket-tolerance" label="Tolerance" min={0} max={100} value={styleSampleTolerance} unit="%" decimals={0} onChange={onStyleSampleToleranceChange ?? (() => undefined)} />}
+            <span className="contextual-hint">Click source object, then apply to selection</span>
+         </div>
+       ) : rectangle || ellipse ? (
         <>
           <div className="contextual-field-group" aria-label="Transformacja">
              <NumberInput data-testid="contextual-x" label="X" value={convertUnit(selectedShape!.transform.position.x, 'px', doc.unit)} unit={doc.unit} onChange={(value) => onUpdatePosition(selectedShape!.id, convertUnit(value, doc.unit, 'px'), selectedShape!.transform.position.y)} />

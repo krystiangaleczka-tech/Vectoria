@@ -591,34 +591,31 @@ export class SetObjectStyleCommand implements Command {
   execute(doc: DocumentModel): DocumentModel {
     const newObjects = { ...doc.objects };
     let changed = false;
+    this.previousStyles.clear();
 
     for (const objectId of this.objectIds) {
       const obj = doc.objects[objectId];
       if (!obj || obj.locked) continue;
 
-      this.previousStyles.set(objectId, obj.style);
-
       const fill = this.stylePatch.fill;
       const stroke = this.stylePatch.stroke;
-      const normalizedFill = fill?.type === 'solid' ? normalizeColor(fill.color) : null;
-      const normalizedStops = fill?.type === 'linear-gradient'
-        ? fill.stops.map((stop) => ({ ...stop, color: normalizeColor(stop.color) }))
-        : null;
+      const normalizedFill = fill === undefined ? undefined : normalizeFill(fill);
       const normalizedStroke = stroke ? normalizeColor(stroke.color) : null;
-      if (fill?.type === 'solid' && normalizedFill === null) continue;
-      if (normalizedStops?.some((stop) => stop.color === null)) continue;
+      if (normalizedFill === null) continue;
       if (stroke && normalizedStroke === null) continue;
       if (this.stylePatch.opacity !== undefined && (!Number.isFinite(this.stylePatch.opacity) || this.stylePatch.opacity < 0 || this.stylePatch.opacity > 1)) continue;
 
+      const nextStyle: ObjectStyle = {
+        ...obj.style,
+        ...this.stylePatch,
+        ...(normalizedFill !== undefined ? { fill: normalizedFill } : {}),
+        ...(stroke && normalizedStroke ? { stroke: { ...stroke, color: normalizedStroke } } : {}),
+      };
+      if (JSON.stringify(nextStyle) === JSON.stringify(obj.style)) continue;
+      this.previousStyles.set(objectId, obj.style);
       newObjects[objectId] = {
         ...obj,
-        style: {
-          ...obj.style,
-          ...this.stylePatch,
-          ...(fill?.type === 'solid' && normalizedFill ? { fill: { ...fill, color: normalizedFill } } : {}),
-          ...(fill?.type === 'linear-gradient' && normalizedStops ? { fill: { ...fill, stops: normalizedStops.map((stop) => ({ ...stop, color: stop.color ?? fill.stops[0]?.color ?? '#000000' })) } } : {}),
-          ...(stroke && normalizedStroke ? { stroke: { ...stroke, color: normalizedStroke } } : {}),
-        },
+        style: nextStyle,
       };
       changed = true;
     }
@@ -651,6 +648,27 @@ export class SetObjectStyleCommand implements Command {
       updatedAt: new Date().toISOString(),
     };
   }
+}
+
+function normalizeFill(fill: ObjectStyle['fill']): ObjectStyle['fill'] | null {
+  if (fill.type === 'none') return fill;
+  if (fill.type === 'solid') {
+    const color = normalizeColor(fill.color);
+    return color ? { ...fill, color } : null;
+  }
+  if (fill.type === 'pattern') {
+    const foreground = normalizeColor(fill.foreground);
+    const background = normalizeColor(fill.background);
+    return foreground && background && Number.isFinite(fill.size) && fill.size > 0 ? { ...fill, foreground, background } : null;
+  }
+  const stops = fill.stops.map((stop) => {
+    const color = normalizeColor(stop.color);
+    return color && Number.isFinite(stop.offset) && stop.offset >= 0 && stop.offset <= 1 && Number.isFinite(stop.opacity) && stop.opacity >= 0 && stop.opacity <= 1 ? { ...stop, color } : null;
+  });
+  if (stops.some((stop) => stop === null) || stops.length < 2) return null;
+  if (fill.type === 'linear-gradient' && fill.start.x === fill.end.x && fill.start.y === fill.end.y) return null;
+  if (fill.type === 'radial-gradient' && (!Number.isFinite(fill.radius) || fill.radius <= 0)) return null;
+  return { ...fill, stops: stops as typeof fill.stops };
 }
 
 
@@ -1817,4 +1835,3 @@ export class SetStrokeArrowheadsCommand implements Command {
     return { ...doc, objects: { ...doc.objects, [this.objectId]: { ...obj, style: { ...obj.style, stroke: { ...obj.style.stroke, markerStart: this.previous.markerStart, markerEnd: this.previous.markerEnd } } } }, updatedAt: new Date().toISOString() };
   }
 }
-
