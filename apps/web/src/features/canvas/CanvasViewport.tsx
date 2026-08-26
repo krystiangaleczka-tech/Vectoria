@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useCallback } from 'react';
+import React, { useRef, useEffect, useCallback, useState } from 'react';
 import type { Vec2 } from '@vectoria/shared';
 import { generateId } from '@vectoria/shared';
 import type {
@@ -11,6 +11,15 @@ import type {
   Command,
   SelectionState,
   GeometryPreview,
+  BasicShapeTool,
+  PolygonObject,
+  StarObject,
+  ArcObject,
+  PieObject,
+  RingObject,
+  SpiralObject,
+  CalloutObject,
+  PolylineObject,
 } from '@vectoria/core';
 import {
   CreateObjectsCommand,
@@ -27,8 +36,6 @@ import {
   defaultCornerRadii,
   getTransformMatrix,
   getInverseTransformMatrix,
-  normalizeShapeDrag,
-  isValidShapeGeometry,
   updatePathNodeHandle,
   createFreehandPath,
   KnifePathCommand,
@@ -43,7 +50,7 @@ import {
   SetObjectStyleCommand,
   ApplyStyleCommand,
 } from '@vectoria/core';
-import { Camera, DragSession, SelectTool, DirectSelectTool, PenTool, PencilTool, BrushTool, SmoothTool, CornerTool, EraserTool, KnifeTool, ScissorsTool, WidthTool, SnapService, IsolationService, LassoSession, calculateObjectSnap, type GridSettings, type SnapResult, type ObjectSnapResult } from '@vectoria/editor-engine';
+import { Camera, DragSession, SelectTool, DirectSelectTool, PenTool, PencilTool, BrushTool, SmoothTool, CornerTool, EraserTool, KnifeTool, ScissorsTool, WidthTool, SnapService, IsolationService, LassoSession, calculateObjectSnap, ShapeTool, PolylineTool, type GridSettings, type SnapResult, type ObjectSnapResult } from '@vectoria/editor-engine';
 import { mat3TransformPoint } from '@vectoria/shared';
 import {
   RenderLoop,
@@ -81,7 +88,7 @@ export interface CanvasViewportProps {
 
 interface DragState {
   type: 'pan' | 'create-shape' | 'move-object' | 'move-node' | 'move-handle' | 'resize-object' | 'rotate-object' | 'marquee' | 'lasso' | 'node-lasso';
-  shape?: 'rectangle' | 'ellipse' | 'line';
+  shape?: BasicShapeTool;
   startScreen: Vec2;
   startWorld: Vec2;
   currentWorld: Vec2;
@@ -140,6 +147,12 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   const penToolRef = useRef<PenTool | null>(null);
   if (!penToolRef.current) penToolRef.current = new PenTool();
   const [penVersion, setPenVersion] = React.useState(0);
+  // Engine-owned state machine for the active drag-created shape; null when no
+  // drag tool is engaged. Replaced on every pointerDown.
+  const shapeToolRef = useRef<ShapeTool | null>(null);
+  const polylineToolRef = useRef<PolylineTool | null>(null);
+  if (!polylineToolRef.current) polylineToolRef.current = new PolylineTool();
+  const [polylineVersion, setPolylineVersion] = useState(0);
   const pencilToolRef = useRef<PencilTool | null>(null);
   const brushToolRef = useRef<BrushTool | null>(null);
   const eraserToolRef = useRef<EraserTool | null>(null);
@@ -236,9 +249,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       overlayCtx.translate(camera.pan.x, camera.pan.y);
       overlayCtx.scale(camera.zoom, camera.zoom);
 
-      const geometry = drag.shape
-        ? normalizeShapeDrag(drag.shape, drag.startWorld, drag.currentWorld)
-        : null;
+      const geometry = shapeToolRef.current?.preview ?? null;
       if (geometry) {
         overlayCtx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-accent').trim();
         overlayCtx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-selection-fill').trim();
@@ -248,11 +259,6 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
           overlayCtx.moveTo(geometry.start.x, geometry.start.y);
           overlayCtx.lineTo(geometry.end.x, geometry.end.y);
           overlayCtx.stroke();
-        } else if (geometry.type === 'ellipse') {
-          overlayCtx.beginPath();
-          overlayCtx.ellipse(geometry.x + geometry.width / 2, geometry.y + geometry.height / 2, geometry.width / 2, geometry.height / 2, 0, 0, Math.PI * 2);
-          overlayCtx.fill();
-          overlayCtx.stroke();
         } else {
           overlayCtx.fillRect(geometry.x, geometry.y, geometry.width, geometry.height);
           overlayCtx.strokeRect(geometry.x, geometry.y, geometry.width, geometry.height);
@@ -260,6 +266,32 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       }
 
       overlayCtx.restore();
+    }
+    // Polyline draft preview: committed points plus rubber-band segment.
+    if (activeTool === 'polyline' && polylineToolRef.current) {
+      const draft = polylineToolRef.current.preview.points;
+      if (draft.length > 0) {
+        const dpr = window.devicePixelRatio || 1;
+        overlayCtx.save();
+        overlayCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        overlayCtx.translate(camera.pan.x, camera.pan.y);
+        overlayCtx.scale(camera.zoom, camera.zoom);
+        overlayCtx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-accent').trim();
+        overlayCtx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-node').trim();
+        overlayCtx.lineWidth = 1.5 / camera.zoom;
+        overlayCtx.beginPath();
+        draft.forEach((point, index) => {
+          if (index === 0) overlayCtx.moveTo(point.x, point.y);
+          else overlayCtx.lineTo(point.x, point.y);
+        });
+        overlayCtx.stroke();
+        for (const point of draft) {
+          overlayCtx.beginPath();
+          overlayCtx.arc(point.x, point.y, 3 / camera.zoom, 0, Math.PI * 2);
+          overlayCtx.fill();
+        }
+        overlayCtx.restore();
+      }
     }
     // Pen rubber-band preview stays on overlay and never mutates DocumentModel.
     const pen = penToolRef.current?.preview;
@@ -346,7 +378,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     }
     void penVersion;
     void freehandVersion;
-  }, [doc, camera, selectedIds, dragPreview, pathPreview, geometryPreview, cornerPreview, activeTool, penVersion, freehandVersion, freehandSettings, showGrid, gridSettings, selection, selectedObjectId]);
+  }, [doc, camera, selectedIds, dragPreview, pathPreview, geometryPreview, cornerPreview, activeTool, penVersion, polylineVersion, freehandVersion, freehandSettings, showGrid, gridSettings, selection, selectedObjectId]);
 
   // Initialize render loop
   useEffect(() => {
@@ -547,7 +579,10 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       );
       if (result?.type === 'commit') commitPen(result.nodes, result.closed);
       setPenVersion((version) => version + 1);
-    } else if (activeTool === 'rectangle' || activeTool === 'ellipse' || activeTool === 'line') {
+    } else if (isDragShapeTool(activeTool)) {
+      const tool = new ShapeTool(activeTool);
+      shapeToolRef.current = tool;
+      tool.pointerDown({ screenPoint: screenPos, worldPoint: worldPos, shiftKey: e.shiftKey, altKey: e.altKey });
       dragStateRef.current = {
         type: 'create-shape',
         shape: activeTool,
@@ -556,6 +591,10 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         currentWorld: worldPos,
         pointerId: e.pointerId,
       };
+    } else if (activeTool === 'polyline') {
+      const result = polylineToolRef.current?.pointerDown({ screenPoint: screenPos, worldPoint: worldPos, shiftKey: e.shiftKey, altKey: e.altKey });
+      if (result?.type === 'commit') commitPolyline(result.points);
+      setPolylineVersion((version) => version + 1);
     } else if (activeTool === 'direct-select') {
       const handleHit = directSelect.hitHandle(doc, worldPos, camera.zoom, selectedObjectId ?? undefined);
       if (handleHit?.part?.endsWith('handle')) {
@@ -715,8 +754,8 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       }
       renderLoopRef.current?.invalidate();
     } else if (drag.type === 'create-shape') {
-      const geometry = drag.shape ? normalizeShapeDrag(drag.shape, drag.startWorld, worldPos, { shift: e.shiftKey }) : null;
-      if (geometry) drag.currentWorld = geometry.type === 'line' ? geometry.end : { x: geometry.x + (worldPos.x >= drag.startWorld.x ? geometry.width : 0), y: geometry.y + (worldPos.y >= drag.startWorld.y ? geometry.height : 0) };
+      drag.currentWorld = worldPos;
+      shapeToolRef.current?.pointerMove({ screenPoint: screenPos, worldPoint: worldPos, shiftKey: e.shiftKey, altKey: e.altKey });
        renderLoopRef.current?.invalidate();
     } else if ((drag.type === 'move-node' || drag.type === 'move-handle') && drag.objectIds?.[0] && drag.initialNodes) {
       const objectId = drag.objectIds[0];
@@ -881,28 +920,25 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       }
       lassoSessionRef.current = null;
     } else if (drag.type === 'create-shape') {
-      const geometry = drag.shape ? normalizeShapeDrag(drag.shape, drag.startWorld, drag.currentWorld) : null;
+      const result = shapeToolRef.current?.pointerUp({ screenPoint: drag.currentWorld, worldPoint: drag.currentWorld, shiftKey: e.shiftKey, altKey: e.altKey });
+      shapeToolRef.current = null;
 
        // Only create if non-zero size
-       if (geometry && isValidShapeGeometry(geometry)) {
+       if (result?.type === 'commit') {
          const newId = generateId();
-        const common = {
+        const object = createObjectFromShape(result.geometry, {
           id: newId,
-          name: `${drag.shape === 'ellipse' ? 'Ellipse' : drag.shape === 'line' ? 'Line' : 'Rectangle'} ${Object.keys(doc.objects).length + 1}`,
+          name: `${SHAPE_LABELS[result.geometry.type] ?? 'Shape'} ${Object.keys(doc.objects).length + 1}`,
           layerId: doc.activeLayerId,
           visible: true,
           locked: false,
-        };
-         const object: RectangleObject | EllipseObject | LineObject = geometry.type === 'ellipse'
-           ? { ...common, type: 'ellipse', transform: createTransform({ x: geometry.x, y: geometry.y }), style: defaultObjectStyle, width: geometry.width, height: geometry.height }
-           : geometry.type === 'line'
-           ? { ...common, type: 'line', transform: createTransform(geometry.start), style: { ...defaultObjectStyle, fill: { type: 'none' }, stroke: defaultStroke }, endPoint: { x: geometry.end.x - geometry.start.x, y: geometry.end.y - geometry.start.y } }
-           : { ...common, type: 'rectangle', transform: createTransform({ x: geometry.x, y: geometry.y }), style: defaultObjectStyle, width: geometry.width, height: geometry.height, cornerRadius: defaultCornerRadii };
-
-        const cmd = new CreateObjectsCommand([object], doc.activeLayerId);
-        onExecuteCommand(cmd);
-        onSelectObject(newId);
-      }
+        });
+         if (object) {
+           const cmd = new CreateObjectsCommand([object], doc.activeLayerId);
+           onExecuteCommand(cmd);
+           onSelectObject(newId);
+         }
+       }
     } else if (drag.type === 'move-object') {
       const transforms = new Map(Object.entries(dragPreview) as [ObjectId, import('@vectoria/core').Transform2D][]);
       if (transforms.size > 0) {
@@ -964,6 +1000,10 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         penToolRef.current?.cancel();
         setPenVersion((version) => version + 1);
       }
+      if (activeTool === 'polyline') {
+        polylineToolRef.current?.cancel();
+        setPolylineVersion((version) => version + 1);
+      }
       if (activeTool === 'corner') {
         cornerToolRef.current?.cancel();
         cornerStartScreenRef.current = null;
@@ -976,6 +1016,10 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       setDragPreview({});
     }
     if (drag.type === 'move-node' || drag.type === 'move-handle') setPathPreview({});
+    if (drag.type === 'create-shape') {
+      shapeToolRef.current?.cancel();
+      shapeToolRef.current = null;
+    }
     dragSessionRef.current = null;
 
     dragStateRef.current = null;
@@ -995,6 +1039,21 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     onExecuteCommand(new CreateObjectsCommand([path], doc.activeLayerId));
     onSelectObject(newId);
     setPenVersion((version) => version + 1);
+  }, [doc, onExecuteCommand, onSelectObject]);
+
+  const commitPolyline = useCallback((points: readonly Vec2[]) => {
+    if (points.length < 2) return;
+    const origin = points[0]!;
+    const newId = generateId();
+    const polyline: PolylineObject = {
+      type: 'polyline', id: newId, name: `Polyline ${Object.keys(doc.objects).length + 1}`, layerId: doc.activeLayerId,
+      visible: true, locked: false, transform: createTransform(origin),
+      style: { ...defaultObjectStyle, fill: { type: 'none' }, stroke: defaultStroke },
+      points: points.map((point) => ({ x: point.x - origin.x, y: point.y - origin.y })),
+    };
+    onExecuteCommand(new CreateObjectsCommand([polyline], doc.activeLayerId));
+    onSelectObject(newId);
+    setPolylineVersion((version) => version + 1);
   }, [doc, onExecuteCommand, onSelectObject]);
 
   const commitFreehand = useCallback((samples: readonly FreehandSample[], brush: boolean) => {
@@ -1021,6 +1080,12 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       cornerStartScreenRef.current = null;
       setCornerPreview(null);
     }
+    if (activeTool !== 'polyline') {
+      polylineToolRef.current?.cancel();
+      setPolylineVersion((version) => version + 1);
+    }
+    shapeToolRef.current?.cancel();
+    shapeToolRef.current = null;
     if (activeTool === 'pen') return;
     const result = penToolRef.current?.keyDown('Escape');
     if (result?.type === 'commit') commitPen(result.nodes, result.closed);
@@ -1097,6 +1162,11 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         const result = penToolRef.current?.keyDown(e.key);
         if (result?.type === 'commit') commitPen(result.nodes, result.closed);
         setPenVersion((version) => version + 1);
+      } else if (activeTool === 'polyline' && ['Enter', 'Escape', 'Backspace', 'Delete'].includes(e.key)) {
+        e.preventDefault();
+        const result = polylineToolRef.current?.keyDown(e.key);
+        if (result?.type === 'commit') commitPolyline(result.points);
+        setPolylineVersion((version) => version + 1);
       } else if (e.key === 'Escape') {
         if (isolationRef.current.context) {
           isolationRef.current.exit();
@@ -1133,7 +1203,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [selectedObjectId, selectedObjectIds, doc, onExecuteCommand, onSelectObject, activeTool, commitPen]);
+  }, [selectedObjectId, selectedObjectIds, doc, onExecuteCommand, onSelectObject, activeTool, commitPen, commitPolyline]);
 
   return (
     <div
@@ -1152,12 +1222,12 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         flex: 1,
         height: '100%',
         overflow: 'hidden',
-        cursor:
-          isSpacePressed || activeTool === 'hand'
-            ? 'grab'
-             : activeTool === 'rectangle' || activeTool === 'ellipse' || activeTool === 'line' || activeTool === 'pen' || activeTool === 'pencil' || activeTool === 'brush' || activeTool === 'corner' || activeTool === 'eraser' || activeTool === 'knife' || activeTool === 'scissors' || activeTool === 'lasso' || activeTool === 'node-lasso'
+         cursor:
+           isSpacePressed || activeTool === 'hand'
+             ? 'grab'
+              : isDragShapeTool(activeTool) || activeTool === 'polyline' || activeTool === 'pen' || activeTool === 'pencil' || activeTool === 'brush' || activeTool === 'corner' || activeTool === 'eraser' || activeTool === 'knife' || activeTool === 'scissors' || activeTool === 'lasso' || activeTool === 'node-lasso'
              ? 'crosshair'
-            : 'default',
+             : 'default',
         touchAction: 'none',
       }}
     >
@@ -1211,6 +1281,80 @@ function selectNearestPathPoint(path: PathObject, worldPoint: Vec2): { point: Ve
   const localPoint = inverse ? mat3TransformPoint(inverse, worldPoint) : worldPoint;
   const nearest = nearestPointOnPolyline(localPoint, points);
   return nearest ? { point: nearest.point, t: nearest.index / Math.max(1, points.length - 2) } : null;
+}
+
+/** Tools whose objects are created by a single press-drag-release gesture. */
+const DRAG_SHAPE_TOOLS: readonly BasicShapeTool[] = ['rectangle', 'ellipse', 'line', 'polygon', 'star', 'arc', 'pie', 'ring', 'spiral', 'callout'];
+
+function isDragShapeTool(tool: ActiveTool): tool is BasicShapeTool {
+  return (DRAG_SHAPE_TOOLS as readonly string[]).includes(tool);
+}
+
+const SHAPE_LABELS: Record<string, string> = {
+  rectangle: 'Rectangle', ellipse: 'Ellipse', line: 'Line',
+  polygon: 'Polygon', star: 'Star', arc: 'Arc', pie: 'Pie',
+  ring: 'Ring', spiral: 'Spiral', callout: 'Callout', polyline: 'Polyline',
+};
+
+type CreatedShapeObject =
+  | RectangleObject | EllipseObject | LineObject
+  | PolygonObject | StarObject | ArcObject | PieObject | RingObject
+  | SpiralObject | CalloutObject | PolylineObject;
+
+interface CommonObjectFields {
+  id: ObjectId;
+  name: string;
+  layerId: ObjectId;
+  visible: boolean;
+  locked: boolean;
+}
+
+/**
+ * Map a normalized drag geometry onto a concrete scene object with sensible
+ * per-type defaults (radii inscribed into the drag box, parametric ratios).
+ * Returns null only for geometries that cannot produce a valid object.
+ */
+function createObjectFromShape(geometry: import('@vectoria/core').ShapeGeometry, common: CommonObjectFields): CreatedShapeObject | null {
+  switch (geometry.type) {
+    case 'rectangle':
+      return { ...common, type: 'rectangle', transform: createTransform({ x: geometry.x, y: geometry.y }), style: defaultObjectStyle, width: geometry.width, height: geometry.height, cornerRadius: defaultCornerRadii };
+    case 'ellipse':
+      return { ...common, type: 'ellipse', transform: createTransform({ x: geometry.x, y: geometry.y }), style: defaultObjectStyle, width: geometry.width, height: geometry.height };
+    case 'line':
+      return { ...common, type: 'line', transform: createTransform(geometry.start), style: { ...defaultObjectStyle, fill: { type: 'none' }, stroke: defaultStroke }, endPoint: { x: geometry.end.x - geometry.start.x, y: geometry.end.y - geometry.start.y } };
+    case 'polygon': {
+      const center = createTransform({ x: geometry.x + geometry.width / 2, y: geometry.y + geometry.height / 2 });
+      return { ...common, type: 'polygon', transform: center, style: defaultObjectStyle, sides: 6, radius: Math.max(geometry.width, geometry.height) / 2 };
+    }
+    case 'star': {
+      const outer = Math.max(geometry.width, geometry.height) / 2;
+      const center = createTransform({ x: geometry.x + geometry.width / 2, y: geometry.y + geometry.height / 2 });
+      return { ...common, type: 'star', transform: center, style: defaultObjectStyle, points: 5, outerRadius: outer, innerRadius: outer * 0.5 };
+    }
+    case 'arc': {
+      const center = createTransform({ x: geometry.x + geometry.width / 2, y: geometry.y + geometry.height / 2 });
+      return { ...common, type: 'arc', transform: center, style: { ...defaultObjectStyle, fill: { type: 'none' }, stroke: defaultStroke }, radiusX: geometry.width / 2, radiusY: geometry.height / 2, startAngle: 0, endAngle: Math.PI * 1.5, closed: false };
+    }
+    case 'pie': {
+      const center = createTransform({ x: geometry.x + geometry.width / 2, y: geometry.y + geometry.height / 2 });
+      return { ...common, type: 'pie', transform: center, style: defaultObjectStyle, radiusX: geometry.width / 2, radiusY: geometry.height / 2, startAngle: 0, endAngle: Math.PI * 1.5 };
+    }
+    case 'ring': {
+      const outer = Math.max(geometry.width, geometry.height) / 2;
+      const center = createTransform({ x: geometry.x + geometry.width / 2, y: geometry.y + geometry.height / 2 });
+      return { ...common, type: 'ring', transform: center, style: defaultObjectStyle, outerRadius: outer, innerRadius: outer * 0.5 };
+    }
+    case 'spiral': {
+      const finalRadius = Math.max(geometry.width, geometry.height) / 2;
+      const turns = 3;
+      const center = createTransform({ x: geometry.x + geometry.width / 2, y: geometry.y + geometry.height / 2 });
+      return { ...common, type: 'spiral', transform: center, style: { ...defaultObjectStyle, fill: { type: 'none' }, stroke: defaultStroke }, turns, decay: finalRadius / turns, direction: 'cw' };
+    }
+    case 'callout':
+      return { ...common, type: 'callout', transform: createTransform({ x: geometry.x, y: geometry.y }), style: defaultObjectStyle, width: geometry.width, height: geometry.height, cornerRadius: Math.min(geometry.width, geometry.height) * 0.12, tailTip: { x: geometry.width * 0.35, y: geometry.height * 1.35 }, tailBaseWidth: geometry.width * 0.15 };
+    default:
+      return null;
+  }
 }
 
 function pointOnPath(path: PathObject, t: number): Vec2 {

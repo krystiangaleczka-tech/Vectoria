@@ -1,5 +1,5 @@
 import React from 'react';
-import type { DocumentModel, ObjectId, ObjectStyle, SceneObject, CornerRadii, PathNode, SelectionState, GeometryPreview, BlendMode } from '@vectoria/core';
+import type { DocumentModel, ObjectId, ObjectStyle, SceneObject, CornerRadii, PathNode, SelectionState, GeometryPreview, BlendMode, ArrowheadStyle } from '@vectoria/core';
 import { normalizeCornerRadii, getObjectBounds } from '@vectoria/core';
 import type { Vec2 } from '@vectoria/shared';
 import { defaultStroke } from '@vectoria/core';
@@ -23,6 +23,15 @@ export type PathAction =
   | { type: 'connect-handles'; objectId: ObjectId; nodeIndex: number }
   | { type: 'disconnect-handles'; objectId: ObjectId; nodeIndex: number }
   | { type: 'join'; objectIds: readonly [ObjectId, ObjectId] };
+
+export type ParametricPatch =
+  | { kind: 'polygon'; sides?: number; radius?: number }
+  | { kind: 'star'; points?: number; outerRadius?: number; innerRadius?: number }
+  | { kind: 'arc'; radiusX?: number; radiusY?: number; startAngle?: number; endAngle?: number; closed?: boolean }
+  | { kind: 'pie'; radiusX?: number; radiusY?: number; startAngle?: number; endAngle?: number }
+  | { kind: 'ring'; outerRadius?: number; innerRadius?: number }
+  | { kind: 'spiral'; turns?: number; decay?: number; direction?: 'cw' | 'ccw' }
+  | { kind: 'callout'; width?: number; height?: number; cornerRadius?: number; tailTip?: Vec2; tailBaseWidth?: number };
 
 export interface PropertiesPanelProps {
   document: DocumentModel;
@@ -55,6 +64,8 @@ export interface PropertiesPanelProps {
   onCancelGeometryPreview?: () => void;
   onOpenCleanup?: () => void;
   onUpdateGroupTransform?: (ids: readonly ObjectId[], scaleX: number, scaleY: number, pivotWorld: { x: number; y: number }) => void;
+  onUpdateParametric?: (id: ObjectId, patch: ParametricPatch) => void;
+  onUpdateArrowheads?: (id: ObjectId, markerStart: ArrowheadStyle | null, markerEnd: ArrowheadStyle | null) => void;
 }
 
 const dimensions = (object: SceneObject): { width: number; height: number } | null =>
@@ -89,9 +100,11 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   onGeometryAction,
   onApplyGeometryPreview,
   onCancelGeometryPreview,
-  onOpenCleanup,
-  onUpdateGroupTransform,
-}) => {
+   onOpenCleanup,
+   onUpdateGroupTransform,
+   onUpdateParametric,
+   onUpdateArrowheads,
+ }) => {
   const [aspectLocked, setAspectLocked] = React.useState(true);
   const [alignTarget, setAlignTarget] = React.useState<'selection' | 'artboard' | 'key'>('selection');
   const selected = selectedObjectId ? doc.objects[selectedObjectId] : null;
@@ -239,6 +252,48 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 {selectedObjectIds.length === 2 && selectedObjectIds.every((id) => doc.objects[id]?.type === 'path' && !(doc.objects[id] as Extract<SceneObject, { type: 'path' }>).closed) && <Button size="sm" variant="ghost" onClick={() => onPathAction?.({ type: 'join', objectIds: selectedObjectIds as readonly [ObjectId, ObjectId] })}>Join paths</Button>}
               </div>
             </section>}
+          {(selected.type === 'polygon' || selected.type === 'star' || selected.type === 'arc' || selected.type === 'pie' || selected.type === 'ring' || selected.type === 'spiral' || selected.type === 'callout') && <section className="property-section" aria-label="Parametric shape">
+            <div className="panel-section-heading"><span>Kształt</span></div>
+            <div className="property-grid">
+              {selected.type === 'polygon' && <>
+                <NumberInput data-testid="prop-sides" label="Sides" disabled={selected.locked} min={3} max={64} decimals={0} unit="" value={selected.sides} onChange={(value) => onUpdateParametric?.(selected.id, { kind: 'polygon', sides: Math.round(value) })} />
+                <NumberInput data-testid="prop-poly-radius" label="Radius" disabled={selected.locked} min={0.01} decimals={2} unit={doc.unit} value={convertUnit(selected.radius, 'px', doc.unit)} onChange={(value) => onUpdateParametric?.(selected.id, { kind: 'polygon', radius: convertUnit(value, doc.unit, 'px') })} />
+              </>}
+              {selected.type === 'star' && <>
+                <NumberInput data-testid="prop-points" label="Points" disabled={selected.locked} min={3} max={64} decimals={0} unit="" value={selected.points} onChange={(value) => onUpdateParametric?.(selected.id, { kind: 'star', points: Math.round(value) })} />
+                <NumberInput data-testid="prop-star-outer" label="Outer R" disabled={selected.locked} min={0.01} decimals={2} unit={doc.unit} value={convertUnit(selected.outerRadius, 'px', doc.unit)} onChange={(value) => onUpdateParametric?.(selected.id, { kind: 'star', outerRadius: convertUnit(value, doc.unit, 'px') })} />
+                <NumberInput data-testid="prop-star-inner" label="Inner R" disabled={selected.locked} min={0} decimals={2} unit={doc.unit} value={convertUnit(selected.innerRadius, 'px', doc.unit)} onChange={(value) => onUpdateParametric?.(selected.id, { kind: 'star', innerRadius: convertUnit(value, doc.unit, 'px') })} />
+              </>}
+              {(selected.type === 'arc' || selected.type === 'pie') && <>
+                <NumberInput data-testid="prop-arc-rx" label="Radius X" disabled={selected.locked} min={0.01} decimals={2} unit={doc.unit} value={convertUnit(selected.radiusX, 'px', doc.unit)} onChange={(value) => onUpdateParametric?.(selected.id, selected.type === 'arc' ? { kind: 'arc', radiusX: convertUnit(value, doc.unit, 'px') } : { kind: 'pie', radiusX: convertUnit(value, doc.unit, 'px') })} />
+                <NumberInput data-testid="prop-arc-ry" label="Radius Y" disabled={selected.locked} min={0.01} decimals={2} unit={doc.unit} value={convertUnit(selected.radiusY, 'px', doc.unit)} onChange={(value) => onUpdateParametric?.(selected.id, selected.type === 'arc' ? { kind: 'arc', radiusY: convertUnit(value, doc.unit, 'px') } : { kind: 'pie', radiusY: convertUnit(value, doc.unit, 'px') })} />
+                <NumberInput data-testid="prop-arc-start" label="Start °" disabled={selected.locked} decimals={1} unit="°" value={selected.startAngle * 180 / Math.PI} onChange={(value) => onUpdateParametric?.(selected.id, selected.type === 'arc' ? { kind: 'arc', startAngle: value * Math.PI / 180 } : { kind: 'pie', startAngle: value * Math.PI / 180 })} />
+                <NumberInput data-testid="prop-arc-end" label="End °" disabled={selected.locked} decimals={1} unit="°" value={selected.endAngle * 180 / Math.PI} onChange={(value) => onUpdateParametric?.(selected.id, selected.type === 'arc' ? { kind: 'arc', endAngle: value * Math.PI / 180 } : { kind: 'pie', endAngle: value * Math.PI / 180 })} />
+                {selected.type === 'arc' && <label className="dialog-label">Zamknięty<select data-testid="prop-arc-closed" value={selected.closed ? 'closed' : 'open'} disabled={selected.locked} onChange={(event) => onUpdateParametric?.(selected.id, { kind: 'arc', closed: event.target.value === 'closed' })}><option value="open">Otwarty</option><option value="closed">Zamknięty</option></select></label>}
+              </>}
+              {selected.type === 'ring' && <>
+                <NumberInput data-testid="prop-ring-outer" label="Outer R" disabled={selected.locked} min={0.01} decimals={2} unit={doc.unit} value={convertUnit(selected.outerRadius, 'px', doc.unit)} onChange={(value) => onUpdateParametric?.(selected.id, { kind: 'ring', outerRadius: convertUnit(value, doc.unit, 'px') })} />
+                <NumberInput data-testid="prop-ring-inner" label="Inner R" disabled={selected.locked} min={0} decimals={2} unit={doc.unit} value={convertUnit(selected.innerRadius, 'px', doc.unit)} onChange={(value) => onUpdateParametric?.(selected.id, { kind: 'ring', innerRadius: convertUnit(value, doc.unit, 'px') })} />
+              </>}
+              {selected.type === 'spiral' && <>
+                <NumberInput data-testid="prop-turns" label="Turns" disabled={selected.locked} min={0.1} max={20} decimals={1} unit="" value={selected.turns} onChange={(value) => onUpdateParametric?.(selected.id, { kind: 'spiral', turns: value })} />
+                <NumberInput data-testid="prop-decay" label="Decay" disabled={selected.locked} min={0.01} decimals={2} unit={doc.unit} value={convertUnit(selected.decay, 'px', doc.unit)} onChange={(value) => onUpdateParametric?.(selected.id, { kind: 'spiral', decay: convertUnit(value, doc.unit, 'px') })} />
+                <label className="dialog-label">Kierunek<select data-testid="prop-spiral-dir" value={selected.direction} disabled={selected.locked} onChange={(event) => onUpdateParametric?.(selected.id, { kind: 'spiral', direction: event.target.value as 'cw' | 'ccw' })}><option value="cw">CW</option><option value="ccw">CCW</option></select></label>
+              </>}
+              {selected.type === 'callout' && <>
+                <NumberInput data-testid="prop-callout-corner" label="Corner R" disabled={selected.locked} min={0} decimals={2} unit={doc.unit} value={convertUnit(selected.cornerRadius, 'px', doc.unit)} onChange={(value) => onUpdateParametric?.(selected.id, { kind: 'callout', cornerRadius: convertUnit(value, doc.unit, 'px') })} />
+                <NumberInput data-testid="prop-tail-tip-x" label="Tail X" disabled={selected.locked} decimals={2} unit={doc.unit} value={convertUnit(selected.tailTip.x, 'px', doc.unit)} onChange={(value) => onUpdateParametric?.(selected.id, { kind: 'callout', tailTip: { x: convertUnit(value, doc.unit, 'px'), y: selected.tailTip.y } })} />
+                <NumberInput data-testid="prop-tail-tip-y" label="Tail Y" disabled={selected.locked} decimals={2} unit={doc.unit} value={convertUnit(selected.tailTip.y, 'px', doc.unit)} onChange={(value) => onUpdateParametric?.(selected.id, { kind: 'callout', tailTip: { x: selected.tailTip.x, y: convertUnit(value, doc.unit, 'px') } })} />
+                <NumberInput data-testid="prop-tail-base" label="Tail W" disabled={selected.locked} min={0} decimals={2} unit={doc.unit} value={convertUnit(selected.tailBaseWidth, 'px', doc.unit)} onChange={(value) => onUpdateParametric?.(selected.id, { kind: 'callout', tailBaseWidth: convertUnit(value, doc.unit, 'px') })} />
+              </>}
+            </div>
+          </section>}
+          {(selected.type === 'line' || selected.type === 'polyline') && selected.style.stroke && <section className="property-section" aria-label="Arrowheads">
+            <div className="panel-section-heading"><span>Groty</span></div>
+            <label className="dialog-label">Start<select data-testid="prop-marker-start" value={selected.style.stroke.markerStart?.type ?? 'none'} disabled={selected.locked} onChange={(event) => { const type = event.target.value as ArrowheadStyle['type'] | 'none'; const size = selected.style.stroke?.markerEnd?.size ?? selected.style.stroke?.markerStart?.size ?? 12; onUpdateArrowheads?.(selected.id, type === 'none' ? null : { type, size }, selected.style.stroke?.markerEnd ?? null); }}><option value="none">Brak</option><option value="arrow">Strzałka</option><option value="triangle">Trójkąt</option><option value="circle">Kółko</option><option value="square">Kwadrat</option></select></label>
+            <label className="dialog-label">End<select data-testid="prop-marker-end" value={selected.style.stroke.markerEnd?.type ?? 'none'} disabled={selected.locked} onChange={(event) => { const type = event.target.value as ArrowheadStyle['type'] | 'none'; const size = selected.style.stroke?.markerStart?.size ?? selected.style.stroke?.markerEnd?.size ?? 12; onUpdateArrowheads?.(selected.id, selected.style.stroke?.markerStart ?? null, type === 'none' ? null : { type, size }); }}><option value="none">Brak</option><option value="arrow">Strzałka</option><option value="triangle">Trójkąt</option><option value="circle">Kółko</option><option value="square">Kwadrat</option></select></label>
+            {(selected.style.stroke.markerStart || selected.style.stroke.markerEnd) && <NumberInput data-testid="prop-marker-size" label="Rozmiar" disabled={selected.locked} min={1} decimals={1} unit={doc.unit} value={convertUnit(selected.style.stroke.markerEnd?.size ?? selected.style.stroke.markerStart?.size ?? 12, 'px', doc.unit)} onChange={(value) => { const px = convertUnit(value, doc.unit, 'px'); const start = selected.style.stroke?.markerStart ? { ...selected.style.stroke.markerStart, size: px } : null; const end = selected.style.stroke?.markerEnd ? { ...selected.style.stroke.markerEnd, size: px } : null; onUpdateArrowheads?.(selected.id, start, end); }} />}
+          </section>}
           <section className="property-section">
             <div className="panel-section-heading"><span>Wygląd</span></div>
               <ColorControl label="Fill" disabled={selected.locked} color={selected.style.fill.type === 'solid' ? selected.style.fill.color : null} onChange={(value) => onUpdateFill(selected.id, value)} />

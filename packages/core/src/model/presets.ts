@@ -21,3 +21,19 @@ export const DOCUMENT_PRESETS: readonly DocumentPreset[] = [
   { id: 'business-card', name: 'Business card', category: 'business', width: 90, height: 50, unit: 'mm', defaultName: 'Business card' },
   { id: 'custom', name: 'Custom', category: 'custom', width: 1920, height: 1080, unit: 'px' },
 ];
+
+export interface ShapePreset {
+  readonly id: string;
+  readonly type: string;
+  readonly name: string;
+  readonly props: Record<string, unknown>;
+}
+
+export const SHAPE_PRESETS: readonly ShapePreset[] = [
+  { id: 'triangle', type: 'polygon', name: 'Triangle', props: { sides: 3 } },
+  { id: 'diamond', type: 'polygon', name: 'Diamond', props: { sides: 4, rotate45: true } },
+  { id: 'star-5', type: 'star', name: 'Star 5-point', props: { points: 5, innerRatio: 0.5 } },
+  { id: 'donut', type: 'ring', name: 'Donut', props: { innerRatio: 0.5 } },
+  { id: 'speech-bubble', type: 'callout', name: 'Speech Bubble', props: { tailTipOffset: { x: 20, y: 30 }, tailBaseRatio: 0.2 } },
+];
+

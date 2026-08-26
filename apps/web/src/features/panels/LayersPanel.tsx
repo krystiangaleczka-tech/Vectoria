@@ -13,6 +13,7 @@ export interface LayersPanelProps {
 
 const objectIcon: Record<SceneObject['type'], React.ComponentProps<typeof VectoriaIcon>['name']> = {
   rectangle: 'rectangle', ellipse: 'ellipse', line: 'line', path: 'pen', group: 'layers',
+  polygon: 'rectangle', star: 'ellipse', arc: 'ellipse', pie: 'ellipse', ring: 'ellipse', spiral: 'ellipse', callout: 'rectangle', polyline: 'line',
 };
 
 export const LayersPanel: React.FC<LayersPanelProps> = ({ document: doc, selectedObjectId, selectedObjectIds = [], onSelectObject, onToggleObject }) => {

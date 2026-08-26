@@ -216,6 +216,49 @@ export function validateInvariants(doc: DocumentModel): InvariantViolation[] {
           violations.push({ code: 'INVALID_ELLIPSE_SIZE', message: `Object '${objectId}' has non-positive ellipse dimensions.` });
         }
 
+        if (obj.type === 'polygon') {
+          if (!Number.isFinite(obj.sides) || obj.sides < 3 || obj.sides > 64) violations.push({ code: 'INVALID_POLYGON_SIDES', message: `Object '${objectId}' polygon sides must be between 3 and 64.` });
+          if (!Number.isFinite(obj.radius) || obj.radius <= 0) violations.push({ code: 'INVALID_POLYGON_RADIUS', message: `Object '${objectId}' polygon radius must be positive.` });
+        }
+
+        if (obj.type === 'star') {
+          if (!Number.isFinite(obj.points) || obj.points < 3 || obj.points > 64) violations.push({ code: 'INVALID_STAR_POINTS', message: `Object '${objectId}' star points must be between 3 and 64.` });
+          if (!Number.isFinite(obj.outerRadius) || !Number.isFinite(obj.innerRadius) || obj.innerRadius < 0 || obj.innerRadius >= obj.outerRadius) {
+            violations.push({ code: 'INVALID_STAR_RADII', message: `Object '${objectId}' star inner radius must be >= 0 and strictly less than outer radius.` });
+          }
+        }
+
+        if (obj.type === 'arc' || obj.type === 'pie') {
+          if (!Number.isFinite(obj.radiusX) || obj.radiusX <= 0 || !Number.isFinite(obj.radiusY) || obj.radiusY <= 0) violations.push({ code: 'INVALID_ARC_RADII', message: `Object '${objectId}' arc/pie radii must be positive.` });
+          if (!Number.isFinite(obj.startAngle) || !Number.isFinite(obj.endAngle)) violations.push({ code: 'INVALID_ARC_ANGLES', message: `Object '${objectId}' arc/pie angles must be finite.` });
+        }
+
+        if (obj.type === 'ring') {
+          if (!Number.isFinite(obj.outerRadius) || !Number.isFinite(obj.innerRadius) || obj.innerRadius < 0 || obj.innerRadius >= obj.outerRadius) {
+            violations.push({ code: 'INVALID_RING_RADII', message: `Object '${objectId}' ring inner radius must be >= 0 and strictly less than outer radius.` });
+          }
+        }
+
+        if (obj.type === 'spiral') {
+          if (!Number.isFinite(obj.turns) || obj.turns <= 0 || obj.turns > 20) violations.push({ code: 'INVALID_SPIRAL_TURNS', message: `Object '${objectId}' spiral turns must be in (0, 20].` });
+          if (!Number.isFinite(obj.decay) || obj.decay <= 0) violations.push({ code: 'INVALID_SPIRAL_DECAY', message: `Object '${objectId}' spiral decay must be positive.` });
+        }
+
+        if (obj.type === 'callout') {
+          if (!Number.isFinite(obj.tailBaseWidth) || obj.tailBaseWidth < 0) violations.push({ code: 'INVALID_CALLOUT_TAIL_WIDTH', message: `Object '${objectId}' callout tailBaseWidth must be non-negative.` });
+          if (!Number.isFinite(obj.tailTip.x) || !Number.isFinite(obj.tailTip.y)) violations.push({ code: 'INVALID_CALLOUT_TAIL_TIP', message: `Object '${objectId}' callout tail tip must be finite.` });
+        }
+
+        if (obj.type === 'polyline') {
+          if (obj.points.length < 2) violations.push({ code: 'INVALID_POLYLINE_POINTS', message: `Object '${objectId}' polyline must have at least 2 points.` });
+          for (const pt of obj.points) {
+            if (!Number.isFinite(pt.x) || !Number.isFinite(pt.y)) {
+               violations.push({ code: 'NON_FINITE_POLYLINE_POINT', message: `Object '${objectId}' polyline has non-finite coordinates.` });
+               break;
+            }
+          }
+        }
+
         if (obj.type === 'line') {
           if (!Number.isFinite(obj.endPoint.x) || !Number.isFinite(obj.endPoint.y)) {
             violations.push({ code: 'NON_FINITE_ENDPOINT', message: `Object '${objectId}' has non-finite endPoint.` });

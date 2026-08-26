@@ -1,8 +1,8 @@
 import type { Camera } from '@vectoria/editor-engine';
 import type { Vec2 } from '@vectoria/shared';
-import type { DocumentModel, Artboard, RectangleObject, EllipseObject, LineObject, PathObject, ObjectId, Transform2D, LinearGradientFill, RadialGradientFill, AngularGradientFill, PatternFill, GeometryPreview, SceneObject } from '@vectoria/core';
+import type { DocumentModel, Artboard, RectangleObject, EllipseObject, LineObject, PathObject, ObjectId, Transform2D, LinearGradientFill, RadialGradientFill, AngularGradientFill, PatternFill, GeometryPreview, SceneObject, PolygonObject, StarObject, ArcObject, PieObject, RingObject, SpiralObject, CalloutObject, PolylineObject, StrokeStyle, ArrowheadStyle } from '@vectoria/core';
 import type { SnapResult } from '@vectoria/editor-engine';
-import { getTransformMatrix, getObjectBounds, rectsIntersect, normalizeCornerRadii, flattenPath, widthAtT } from '@vectoria/core';
+import { getTransformMatrix, getObjectBounds, rectsIntersect, normalizeCornerRadii, flattenPath, widthAtT, getPolygonVertices, getStarVertices, getSpiralVertices, getCalloutVertices, getArrowheadVertices } from '@vectoria/core';
 import { mat3TransformPoint } from '@vectoria/shared';
 import { RenderMetrics } from './metrics.js';
 export { RenderQualityPolicy, type RenderQuality } from './quality.js';
@@ -286,6 +286,30 @@ export function renderScene(
          case 'path':
             renderPath(ctx, obj as PathObject);
            break;
+         case 'polygon':
+           renderParametric(ctx, obj as PolygonObject);
+           break;
+         case 'star':
+           renderParametric(ctx, obj as StarObject);
+           break;
+         case 'arc':
+           renderParametric(ctx, obj as ArcObject);
+           break;
+         case 'pie':
+           renderParametric(ctx, obj as PieObject);
+           break;
+         case 'ring':
+           renderParametric(ctx, obj as RingObject);
+           break;
+         case 'spiral':
+           renderParametric(ctx, obj as SpiralObject);
+           break;
+         case 'callout':
+           renderParametric(ctx, obj as CalloutObject);
+           break;
+         case 'polyline':
+           renderParametric(ctx, obj as PolylineObject);
+           break;
          case 'group':
            for (const childId of obj.childIds) {
              const child = doc.objects[childId];
@@ -373,6 +397,16 @@ function renderSceneObject(ctx: CanvasRenderingContext2D, obj: SceneObject, doc?
     case 'ellipse': renderEllipse(ctx, obj); break;
     case 'line': renderLine(ctx, obj); break;
     case 'path': renderPath(ctx, obj); break;
+    case 'polygon':
+    case 'star':
+    case 'arc':
+    case 'pie':
+    case 'ring':
+    case 'spiral':
+    case 'callout':
+    case 'polyline':
+      renderParametric(ctx, obj);
+      break;
     case 'group': obj.childIds.forEach((childId) => { const child = doc?.objects[childId]; if (child?.visible) renderSceneObject(ctx, child, doc); }); break;
   }
 }
@@ -486,6 +520,14 @@ function renderLine(
     ctx.moveTo(0, 0);
     ctx.lineTo(obj.endPoint.x, obj.endPoint.y);
     ctx.stroke();
+    const stroke = obj.style.stroke;
+    const alpha = obj.style.opacity * stroke.opacity;
+    if (stroke.markerStart) {
+      drawArrowMarker(ctx, stroke.markerStart, { x: 0, y: 0 }, { x: -obj.endPoint.x, y: -obj.endPoint.y }, stroke.color, alpha);
+    }
+    if (stroke.markerEnd) {
+      drawArrowMarker(ctx, stroke.markerEnd, obj.endPoint, { x: obj.endPoint.x, y: obj.endPoint.y }, stroke.color, alpha);
+    }
   }
 
   ctx.restore();
@@ -565,6 +607,167 @@ function renderVariableWidthStroke(ctx: CanvasRenderingContext2D, obj: PathObjec
     ctx.lineTo(end.x, end.y);
     ctx.stroke();
   }
+}
+
+// ─── Parametric Shapes ────────────────────────────────────────────────────────
+
+type ParametricObject = PolygonObject | StarObject | ArcObject | PieObject | RingObject | SpiralObject | CalloutObject | PolylineObject;
+
+/**
+ * Render any parametric shape (polygon, star, arc, pie, ring, spiral, callout,
+ * polyline). Fill and stroke share one traced path so the canvas output matches
+ * hit-testing and SVG export, which reuse the same core geometry helpers.
+ */
+function renderParametric(ctx: CanvasRenderingContext2D, obj: ParametricObject): void {
+  const matrix = getTransformMatrix(obj.transform);
+
+  ctx.save();
+  ctx.transform(matrix[0], matrix[1], matrix[3], matrix[4], matrix[6], matrix[7]);
+
+  const fillable =
+    obj.type === 'polygon' || obj.type === 'star' || obj.type === 'pie' ||
+    obj.type === 'ring' || obj.type === 'callout' || (obj.type === 'arc' && obj.closed);
+
+  if (obj.style.fill.type !== 'none' && fillable) {
+    ctx.beginPath();
+    traceParametricPath(ctx, obj);
+    ctx.fillStyle = resolveFill(ctx, obj.style.fill);
+    if (obj.type === 'ring') ctx.fill('evenodd');
+    else ctx.fill();
+  }
+
+  if (obj.style.stroke) {
+    applyLocalStroke(ctx, obj.style.stroke, obj.style.opacity);
+    ctx.beginPath();
+    traceParametricPath(ctx, obj);
+    ctx.stroke();
+  }
+
+  if (obj.style.stroke && obj.type === 'polyline') {
+    drawPolyArrowheads(ctx, obj.style.stroke, obj.style.opacity * obj.style.stroke.opacity, obj.points);
+  }
+
+  ctx.restore();
+}
+
+/** Apply dash/cap/join state for a local-space stroke without touching fills. */
+function applyLocalStroke(ctx: CanvasRenderingContext2D, stroke: StrokeStyle, baseOpacity: number): void {
+  ctx.strokeStyle = stroke.color;
+  ctx.lineWidth = stroke.width;
+  ctx.lineCap = stroke.lineCap;
+  ctx.lineJoin = stroke.lineJoin;
+  ctx.miterLimit = stroke.miterLimit;
+  if (stroke.dashArray.length > 0) ctx.setLineDash([...stroke.dashArray]);
+  ctx.globalAlpha = baseOpacity * stroke.opacity;
+}
+
+/**
+ * Trace the object outline in its local space onto the current path.
+ * The caller begins and consumes the path.
+ */
+function traceParametricPath(ctx: CanvasRenderingContext2D, obj: ParametricObject): void {
+  switch (obj.type) {
+    case 'polygon':
+      traceVertexLoop(ctx, getPolygonVertices(obj.sides, obj.radius), true);
+      break;
+    case 'star':
+      traceVertexLoop(ctx, getStarVertices(obj.points, obj.outerRadius, obj.innerRadius), true);
+      break;
+    case 'callout':
+      traceVertexLoop(ctx, getCalloutVertices(obj.width, obj.height, obj.cornerRadius, obj.tailTip, obj.tailBaseWidth), true);
+      break;
+    case 'arc': {
+      const sweep = obj.endAngle - obj.startAngle;
+      ctx.ellipse(0, 0, obj.radiusX, obj.radiusY, 0, obj.startAngle, obj.endAngle, sweep < 0);
+      if (obj.closed) ctx.closePath();
+      break;
+    }
+    case 'pie': {
+      const sweep = obj.endAngle - obj.startAngle;
+      ctx.moveTo(0, 0);
+      ctx.ellipse(0, 0, obj.radiusX, obj.radiusY, 0, obj.startAngle, obj.endAngle, sweep < 0);
+      ctx.closePath();
+      break;
+    }
+    case 'ring': {
+      ctx.arc(0, 0, obj.outerRadius, 0, Math.PI * 2);
+      ctx.moveTo(obj.innerRadius, 0);
+      ctx.arc(0, 0, obj.innerRadius, 0, Math.PI * 2, true);
+      break;
+    }
+    case 'spiral':
+      traceVertexLoop(ctx, getSpiralVertices(obj.turns, obj.decay, obj.direction), false);
+      break;
+    case 'polyline':
+      traceVertexLoop(ctx, [...obj.points], false);
+      break;
+  }
+}
+
+function traceVertexLoop(ctx: CanvasRenderingContext2D, points: readonly Vec2[], closed: boolean): void {
+  points.forEach((point, index) => {
+    if (index === 0) ctx.moveTo(point.x, point.y);
+    else ctx.lineTo(point.x, point.y);
+  });
+  if (closed && points.length > 2) ctx.closePath();
+}
+
+/**
+ * Draw markerStart/markerEnd arrowheads for an open vertex chain. Orientation
+ * comes from the tangent of the adjacent segment; nothing is persisted in state.
+ */
+function drawPolyArrowheads(
+  ctx: CanvasRenderingContext2D,
+  stroke: StrokeStyle,
+  alpha: number,
+  points: readonly Vec2[],
+): void {
+  if (points.length < 2) return;
+  const first = points[0]!;
+  const second = points[1]!;
+  const penultimate = points[points.length - 2]!;
+  const last = points[points.length - 1]!;
+  if (stroke.markerStart) {
+    drawArrowMarker(ctx, stroke.markerStart, first, { x: first.x - second.x, y: first.y - second.y }, stroke.color, alpha);
+  }
+  if (stroke.markerEnd) {
+    drawArrowMarker(ctx, stroke.markerEnd, last, { x: last.x - penultimate.x, y: last.y - penultimate.y }, stroke.color, alpha);
+  }
+}
+
+/** Draw one filled arrowhead at `tip`, pointing along the normalized tangent. */
+function drawArrowMarker(
+  ctx: CanvasRenderingContext2D,
+  marker: ArrowheadStyle,
+  tip: Vec2,
+  outDirection: Vec2,
+  color: string,
+  alpha: number,
+): void {
+  const length = Math.hypot(outDirection.x, outDirection.y);
+  if (!Number.isFinite(length) || length === 0) return;
+  const tangent = { x: outDirection.x / length, y: outDirection.y / length };
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = color;
+  if (marker.type === 'circle') {
+    ctx.translate(tip.x, tip.y);
+    ctx.rotate(Math.atan2(tangent.y, tangent.x));
+    ctx.beginPath();
+    ctx.arc(-marker.size / 2, 0, marker.size / 2, 0, Math.PI * 2);
+    ctx.fill();
+  } else {
+    const vertices = getArrowheadVertices(marker.type, marker.size, tip, tangent);
+    ctx.beginPath();
+    vertices.forEach((vertex, index) => {
+      if (index === 0) ctx.moveTo(vertex.x, vertex.y);
+      else ctx.lineTo(vertex.x, vertex.y);
+    });
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
 }
 
 function roundRect(
@@ -768,13 +971,14 @@ export function renderOverlay(
          break;
        case 'group': {
          const bound = getObjectBounds(obj, doc);
-         const topLeft = camera.worldToScreen({ x: bound.x, y: bound.y });
-         const bottomRight = camera.worldToScreen({ x: bound.x + bound.width, y: bound.y + bound.height });
-         ctx.strokeStyle = themeColor('--color-selection', '#5caeff');
-         ctx.fillStyle = themeColor('--color-selection-fill', 'rgba(92, 174, 255, 0.13)');
-         ctx.lineWidth = 1.5;
-         ctx.strokeRect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
-         ctx.fillRect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
+         renderBoundsSelectionOutline(ctx, camera, bound);
+         break;
+       }
+       default: {
+         // Parametric shapes share the group-style bounds outline; their scene
+         // geometry is already drawn on the scene canvas.
+         const bound = getObjectBounds(obj, doc);
+         renderBoundsSelectionOutline(ctx, camera, bound);
          break;
        }
     }
@@ -827,7 +1031,26 @@ function renderPreviewObject(ctx: CanvasRenderingContext2D, camera: Camera, obje
     case 'path':
       renderPathSelectionOutline(ctx, camera, object);
       break;
+    default:
+      renderBoundsSelectionOutline(ctx, camera, getObjectBounds(object));
+      break;
   }
+}
+
+/** Screen-space dashed bounds outline with handles, shared by groups and parametric shapes. */
+function renderBoundsSelectionOutline(
+  ctx: CanvasRenderingContext2D,
+  camera: Camera,
+  bound: { x: number; y: number; width: number; height: number },
+): void {
+  const topLeft = camera.worldToScreen({ x: bound.x, y: bound.y });
+  const bottomRight = camera.worldToScreen({ x: bound.x + bound.width, y: bound.y + bound.height });
+  ctx.strokeStyle = themeColor('--color-selection', '#5caeff');
+  ctx.fillStyle = themeColor('--color-selection-fill', 'rgba(92, 174, 255, 0.13)');
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
+  ctx.fillRect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
+  drawScreenHandles(ctx, camera, [topLeft, { x: bottomRight.x, y: topLeft.y }, bottomRight, { x: topLeft.x, y: bottomRight.y }]);
 }
 
 export interface FreehandOverlayOptions {

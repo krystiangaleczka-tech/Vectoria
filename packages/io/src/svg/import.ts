@@ -1,10 +1,18 @@
-import { createDefaultDocument, createTransform, defaultObjectStyle, defaultStroke, type DocumentModel, type SceneObject, type PathNode } from '@vectoria/core';
+import { createDefaultDocument, createTransform, defaultObjectStyle, defaultStroke, type DocumentModel, type SceneObject, type PathNode, type ArrowheadStyle } from '@vectoria/core';
 import { generateId } from '@vectoria/shared';
 
 const number = (element: Element, name: string, fallback = 0) => {
   const value = Number(element.getAttribute(name));
   return Number.isFinite(value) ? value : fallback;
 };
+
+/** Parse an SVG points list ("x,y x,y …") into vertices; odd trailing values are dropped. */
+export function parsePointsData(data: string): { x: number; y: number }[] {
+  const values = (data || '').trim().split(/[ ,]+/).filter(Boolean).map(Number).filter((value) => Number.isFinite(value));
+  const points: { x: number; y: number }[] = [];
+  for (let i = 0; i + 1 < values.length; i += 2) points.push({ x: values[i]!, y: values[i + 1]! });
+  return points;
+}
 
 const fill = (element: Element, definitions: ReadonlyMap<string, import('@vectoria/core').FillStyle>) => {
   const value = element.getAttribute('fill');
@@ -14,10 +22,18 @@ const fill = (element: Element, definitions: ReadonlyMap<string, import('@vector
   return definition ?? { type: 'solid' as const, color: value || '#cccccc' };
 };
 
-const stroke = (element: Element) => {
+const stroke = (element: Element, markers?: ReadonlyMap<string, ArrowheadStyle>) => {
   const color = element.getAttribute('stroke');
   if (!color || color === 'none') return null;
-  return { ...defaultStroke, color, width: Math.max(0.01, number(element, 'stroke-width', 1)) };
+  const base = { ...defaultStroke, color, width: Math.max(0.01, number(element, 'stroke-width', 1)) };
+  if (!markers) return base;
+  const resolveMarker = (attributeName: string): ArrowheadStyle | undefined => {
+    const reference = element.getAttribute(attributeName)?.match(/^url\(#(.+)\)$/)?.[1];
+    return reference ? markers.get(reference) : undefined;
+  };
+  const markerStart = resolveMarker('marker-start');
+  const markerEnd = resolveMarker('marker-end');
+  return markerStart || markerEnd ? { ...base, markerStart, markerEnd } : base;
 };
 
 const styleFor = (element: Element, definitions: ReadonlyMap<string, import('@vectoria/core').FillStyle>) => ({ ...defaultObjectStyle, fill: fill(element, definitions), stroke: stroke(element), opacity: Math.max(0, Math.min(1, number(element, 'opacity', 1))) });
@@ -122,7 +138,19 @@ export function importSvgToDocument(svgText: string, name = 'Imported SVG'): Doc
     const foreground = pattern.querySelector('circle')?.getAttribute('fill') ?? pattern.querySelector('path')?.getAttribute('stroke');
     if (id && background && foreground) definitions.set(id, { type: 'pattern', kind: pattern.querySelector('circle') ? 'dots' : pattern.querySelector('path')?.getAttribute('d')?.includes('H') ? 'grid' : 'hatch', foreground, background, size: Math.max(2, number(pattern, 'width', 12)) });
   }
-  const elements = Array.from(root.querySelectorAll('rect, ellipse, line, path')).filter((element) => !element.closest('defs'));
+  const elements = Array.from(root.querySelectorAll('rect, ellipse, circle, line, polygon, polyline, path')).filter((element) => !element.closest('defs'));
+  // Arrowhead markers: type inferred from the child shape, size from markerWidth/2.
+  const markers = new Map<string, ArrowheadStyle>();
+  for (const marker of Array.from(root.querySelectorAll('marker'))) {
+    const id = marker.getAttribute('id');
+    if (!id) continue;
+    const child = marker.querySelector('path, rect, circle, polygon');
+    if (!child) continue;
+    const childTag = child.nodeName.toLowerCase();
+    const size = Math.max(1, number(marker, 'markerWidth', 10) / 2);
+    const type: ArrowheadStyle['type'] = childTag === 'circle' ? 'circle' : childTag === 'rect' ? 'square' : / Z\s*$/i.test(child.getAttribute('d') ?? '') && (child.getAttribute('d') ?? '').match(/L/g)?.length === 2 ? 'triangle' : 'arrow';
+    markers.set(id, { type, size });
+  }
   for (const element of elements) {
     const id = generateId();
     const base = { id, name: element.getAttribute('id') || `${element.nodeName} ${objectIds.length + 1}`, layerId, visible: true, locked: false, style: styleFor(element, definitions) };
@@ -130,7 +158,22 @@ export function importSvgToDocument(svgText: string, name = 'Imported SVG'): Doc
     let object: SceneObject | null = null;
     if (tag === 'rect') object = { ...base, type: 'rectangle', transform: createTransform({ x: number(element, 'x'), y: number(element, 'y') }), width: Math.max(0.01, number(element, 'width', 1)), height: Math.max(0.01, number(element, 'height', 1)), cornerRadius: Math.max(0, number(element, 'rx')) };
     if (tag === 'ellipse') object = { ...base, type: 'ellipse', transform: createTransform({ x: number(element, 'cx') - number(element, 'rx', 1), y: number(element, 'cy') - number(element, 'ry', 1) }), width: Math.max(0.01, number(element, 'rx', 1) * 2), height: Math.max(0.01, number(element, 'ry', 1) * 2) };
-    if (tag === 'line') object = { ...base, type: 'line', transform: createTransform({ x: number(element, 'x1'), y: number(element, 'y1') }), endPoint: { x: number(element, 'x2') - number(element, 'x1'), y: number(element, 'y2') - number(element, 'y1') }, style: { ...styleFor(element, definitions), fill: { type: 'none' }, stroke: stroke(element) ?? defaultStroke } };
+    if (tag === 'circle') { const r = Math.max(0.01, number(element, 'r', 1)); object = { ...base, type: 'ellipse', transform: createTransform({ x: number(element, 'cx') - r, y: number(element, 'cy') - r }), width: r * 2, height: r * 2 }; }
+    if (tag === 'line') object = { ...base, type: 'line', transform: createTransform({ x: number(element, 'x1'), y: number(element, 'y1') }), endPoint: { x: number(element, 'x2') - number(element, 'x1'), y: number(element, 'y2') - number(element, 'y1') }, style: { ...styleFor(element, definitions), fill: { type: 'none' }, stroke: stroke(element, markers) ?? defaultStroke } };
+    if (tag === 'polyline') {
+      const points = parsePointsData(element.getAttribute('points') || '');
+      if (points.length >= 2) {
+        const origin = points[0]!;
+        object = { ...base, type: 'polyline', transform: createTransform(origin), points: points.map((p) => ({ x: p.x - origin.x, y: p.y - origin.y })), style: { ...styleFor(element, definitions), fill: { type: 'none' }, stroke: stroke(element, markers) ?? defaultStroke } };
+      }
+    }
+    if (tag === 'polygon') {
+      const points = parsePointsData(element.getAttribute('points') || '');
+      if (points.length >= 3) {
+        const nodes = points.map((point, index) => ({ id: `${id}-node-${index + 1}`, point, inHandle: null, outHandle: null, kind: 'corner' as const }));
+        object = { ...base, type: 'path', transform: createTransform({ x: 0, y: 0 }), nodes, closed: true };
+      }
+    }
     if (tag === 'path') { const data = element.getAttribute('d') || ''; const nodes = parsePathData(data).map((node, index) => ({ ...node, id: `${id}-node-${index + 1}` })); if (nodes.length >= 2) object = { ...base, type: 'path', transform: createTransform({ x: 0, y: 0 }), nodes, closed: /z\s*$/i.test(data) }; }
     if (object) {
       objects[id] = object;

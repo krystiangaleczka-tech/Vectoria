@@ -16,6 +16,7 @@ import type {
   SnapSettings,
   CornerRadii,
   StrokeStyle,
+  ArrowheadStyle,
   GroupObject,
 } from '../model/types.js';
 import { isValidTransform } from '../model/transform.js';
@@ -1169,6 +1170,7 @@ export class ConvertObjectToPathCommand implements Command {
   execute(doc: DocumentModel): DocumentModel {
     const object = doc.objects[this.objectId];
     if (!object || object.locked || object.type === 'path' || object.type === 'group') return doc;
+    if (object.type !== 'rectangle' && object.type !== 'ellipse' && object.type !== 'line') return doc;
     const nodes: PathNode[] = object.type === 'rectangle'
       ? [createPathNode({ x: 0, y: 0 }), createPathNode({ x: object.width, y: 0 }), createPathNode({ x: object.width, y: object.height }), createPathNode({ x: 0, y: object.height })]
       : object.type === 'ellipse'
@@ -1196,6 +1198,7 @@ export class ConvertStrokeToPathCommand implements Command {
     const object = doc.objects[this.objectId];
     if (!object || object.locked || !object.style.stroke) return doc;
     if (object.type === 'group') return doc;
+    if (object.type !== 'path' && object.type !== 'line' && object.type !== 'rectangle' && object.type !== 'ellipse') return doc;
     const centerline = object.type === 'path'
       ? samplePath(object.nodes, object.closed)
       : object.type === 'line'
@@ -1606,6 +1609,205 @@ export class UpdateObjectCommand implements Command {
   undo(doc: DocumentModel): DocumentModel {
     const object = doc.objects[this.objectId];
     return this.previous && object ? { ...doc, objects: { ...doc.objects, [this.objectId]: { ...object, ...this.previous } }, updatedAt: new Date().toISOString() } : doc;
+  }
+}
+
+// ─── Parametric Geometry Commands ───────────────────────────────────────────
+
+export class SetPolygonGeometryCommand implements Command {
+  readonly type = 'SetPolygonGeometry';
+  readonly description = 'Edit polygon';
+  private previous: { sides: number; radius: number } | null = null;
+  constructor(private readonly objectId: ObjectId, private readonly patch: { sides?: number; radius?: number }) {}
+  execute(doc: DocumentModel): DocumentModel {
+    const obj = doc.objects[this.objectId];
+    if (!obj || obj.type !== 'polygon' || obj.locked) return doc;
+    const sides = this.patch.sides ?? obj.sides;
+    const radius = this.patch.radius ?? obj.radius;
+    if (!Number.isFinite(sides) || sides < 3 || sides > 64 || !Number.isFinite(radius) || radius <= 0) return doc;
+    this.previous = { sides: obj.sides, radius: obj.radius };
+    return { ...doc, objects: { ...doc.objects, [this.objectId]: { ...obj, sides, radius } }, updatedAt: new Date().toISOString() };
+  }
+  undo(doc: DocumentModel): DocumentModel {
+    const obj = doc.objects[this.objectId];
+    if (!this.previous || !obj || obj.type !== 'polygon') return doc;
+    return { ...doc, objects: { ...doc.objects, [this.objectId]: { ...obj, ...this.previous } }, updatedAt: new Date().toISOString() };
+  }
+}
+
+export class SetStarGeometryCommand implements Command {
+  readonly type = 'SetStarGeometry';
+  readonly description = 'Edit star';
+  private previous: { points: number; outerRadius: number; innerRadius: number } | null = null;
+  constructor(private readonly objectId: ObjectId, private readonly patch: { points?: number; outerRadius?: number; innerRadius?: number }) {}
+  execute(doc: DocumentModel): DocumentModel {
+    const obj = doc.objects[this.objectId];
+    if (!obj || obj.type !== 'star' || obj.locked) return doc;
+    const points = this.patch.points ?? obj.points;
+    const outerRadius = this.patch.outerRadius ?? obj.outerRadius;
+    const innerRadius = this.patch.innerRadius ?? obj.innerRadius;
+    if (!Number.isFinite(points) || points < 3 || points > 64 || !Number.isFinite(outerRadius) || !Number.isFinite(innerRadius) || innerRadius < 0 || innerRadius >= outerRadius) return doc;
+    this.previous = { points: obj.points, outerRadius: obj.outerRadius, innerRadius: obj.innerRadius };
+    return { ...doc, objects: { ...doc.objects, [this.objectId]: { ...obj, points, outerRadius, innerRadius } }, updatedAt: new Date().toISOString() };
+  }
+  undo(doc: DocumentModel): DocumentModel {
+    const obj = doc.objects[this.objectId];
+    if (!this.previous || !obj || obj.type !== 'star') return doc;
+    return { ...doc, objects: { ...doc.objects, [this.objectId]: { ...obj, ...this.previous } }, updatedAt: new Date().toISOString() };
+  }
+}
+
+export class SetArcGeometryCommand implements Command {
+  readonly type = 'SetArcGeometry';
+  readonly description = 'Edit arc';
+  private previous: { radiusX: number; radiusY: number; startAngle: number; endAngle: number; closed: boolean } | null = null;
+  constructor(private readonly objectId: ObjectId, private readonly patch: { radiusX?: number; radiusY?: number; startAngle?: number; endAngle?: number; closed?: boolean }) {}
+  execute(doc: DocumentModel): DocumentModel {
+    const obj = doc.objects[this.objectId];
+    if (!obj || obj.type !== 'arc' || obj.locked) return doc;
+    const radiusX = this.patch.radiusX ?? obj.radiusX;
+    const radiusY = this.patch.radiusY ?? obj.radiusY;
+    const startAngle = this.patch.startAngle ?? obj.startAngle;
+    const endAngle = this.patch.endAngle ?? obj.endAngle;
+    const closed = this.patch.closed ?? obj.closed;
+    if (!Number.isFinite(radiusX) || radiusX <= 0 || !Number.isFinite(radiusY) || radiusY <= 0 || !Number.isFinite(startAngle) || !Number.isFinite(endAngle)) return doc;
+    this.previous = { radiusX: obj.radiusX, radiusY: obj.radiusY, startAngle: obj.startAngle, endAngle: obj.endAngle, closed: obj.closed };
+    return { ...doc, objects: { ...doc.objects, [this.objectId]: { ...obj, radiusX, radiusY, startAngle, endAngle, closed } }, updatedAt: new Date().toISOString() };
+  }
+  undo(doc: DocumentModel): DocumentModel {
+    const obj = doc.objects[this.objectId];
+    if (!this.previous || !obj || obj.type !== 'arc') return doc;
+    return { ...doc, objects: { ...doc.objects, [this.objectId]: { ...obj, ...this.previous } }, updatedAt: new Date().toISOString() };
+  }
+}
+
+export class SetPieGeometryCommand implements Command {
+  readonly type = 'SetPieGeometry';
+  readonly description = 'Edit pie';
+  private previous: { radiusX: number; radiusY: number; startAngle: number; endAngle: number } | null = null;
+  constructor(private readonly objectId: ObjectId, private readonly patch: { radiusX?: number; radiusY?: number; startAngle?: number; endAngle?: number }) {}
+  execute(doc: DocumentModel): DocumentModel {
+    const obj = doc.objects[this.objectId];
+    if (!obj || obj.type !== 'pie' || obj.locked) return doc;
+    const radiusX = this.patch.radiusX ?? obj.radiusX;
+    const radiusY = this.patch.radiusY ?? obj.radiusY;
+    const startAngle = this.patch.startAngle ?? obj.startAngle;
+    const endAngle = this.patch.endAngle ?? obj.endAngle;
+    if (!Number.isFinite(radiusX) || radiusX <= 0 || !Number.isFinite(radiusY) || radiusY <= 0 || !Number.isFinite(startAngle) || !Number.isFinite(endAngle)) return doc;
+    this.previous = { radiusX: obj.radiusX, radiusY: obj.radiusY, startAngle: obj.startAngle, endAngle: obj.endAngle };
+    return { ...doc, objects: { ...doc.objects, [this.objectId]: { ...obj, radiusX, radiusY, startAngle, endAngle } }, updatedAt: new Date().toISOString() };
+  }
+  undo(doc: DocumentModel): DocumentModel {
+    const obj = doc.objects[this.objectId];
+    if (!this.previous || !obj || obj.type !== 'pie') return doc;
+    return { ...doc, objects: { ...doc.objects, [this.objectId]: { ...obj, ...this.previous } }, updatedAt: new Date().toISOString() };
+  }
+}
+
+export class SetRingGeometryCommand implements Command {
+  readonly type = 'SetRingGeometry';
+  readonly description = 'Edit ring';
+  private previous: { outerRadius: number; innerRadius: number } | null = null;
+  constructor(private readonly objectId: ObjectId, private readonly patch: { outerRadius?: number; innerRadius?: number }) {}
+  execute(doc: DocumentModel): DocumentModel {
+    const obj = doc.objects[this.objectId];
+    if (!obj || obj.type !== 'ring' || obj.locked) return doc;
+    const outerRadius = this.patch.outerRadius ?? obj.outerRadius;
+    const innerRadius = this.patch.innerRadius ?? obj.innerRadius;
+    if (!Number.isFinite(outerRadius) || !Number.isFinite(innerRadius) || innerRadius < 0 || innerRadius >= outerRadius) return doc;
+    this.previous = { outerRadius: obj.outerRadius, innerRadius: obj.innerRadius };
+    return { ...doc, objects: { ...doc.objects, [this.objectId]: { ...obj, outerRadius, innerRadius } }, updatedAt: new Date().toISOString() };
+  }
+  undo(doc: DocumentModel): DocumentModel {
+    const obj = doc.objects[this.objectId];
+    if (!this.previous || !obj || obj.type !== 'ring') return doc;
+    return { ...doc, objects: { ...doc.objects, [this.objectId]: { ...obj, ...this.previous } }, updatedAt: new Date().toISOString() };
+  }
+}
+
+export class SetSpiralGeometryCommand implements Command {
+  readonly type = 'SetSpiralGeometry';
+  readonly description = 'Edit spiral';
+  private previous: { turns: number; decay: number; direction: 'cw' | 'ccw' } | null = null;
+  constructor(private readonly objectId: ObjectId, private readonly patch: { turns?: number; decay?: number; direction?: 'cw' | 'ccw' }) {}
+  execute(doc: DocumentModel): DocumentModel {
+    const obj = doc.objects[this.objectId];
+    if (!obj || obj.type !== 'spiral' || obj.locked) return doc;
+    const turns = this.patch.turns ?? obj.turns;
+    const decay = this.patch.decay ?? obj.decay;
+    const direction = this.patch.direction ?? obj.direction;
+    if (!Number.isFinite(turns) || turns <= 0 || turns > 20 || !Number.isFinite(decay) || decay <= 0) return doc;
+    this.previous = { turns: obj.turns, decay: obj.decay, direction: obj.direction };
+    return { ...doc, objects: { ...doc.objects, [this.objectId]: { ...obj, turns, decay, direction } }, updatedAt: new Date().toISOString() };
+  }
+  undo(doc: DocumentModel): DocumentModel {
+    const obj = doc.objects[this.objectId];
+    if (!this.previous || !obj || obj.type !== 'spiral') return doc;
+    return { ...doc, objects: { ...doc.objects, [this.objectId]: { ...obj, ...this.previous } }, updatedAt: new Date().toISOString() };
+  }
+}
+
+export class SetCalloutGeometryCommand implements Command {
+  readonly type = 'SetCalloutGeometry';
+  readonly description = 'Edit callout';
+  private previous: { width: number; height: number; cornerRadius: number; tailTip: Vec2; tailBaseWidth: number } | null = null;
+  constructor(private readonly objectId: ObjectId, private readonly patch: { width?: number; height?: number; cornerRadius?: number; tailTip?: Vec2; tailBaseWidth?: number }) {}
+  execute(doc: DocumentModel): DocumentModel {
+    const obj = doc.objects[this.objectId];
+    if (!obj || obj.type !== 'callout' || obj.locked) return doc;
+    const width = this.patch.width ?? obj.width;
+    const height = this.patch.height ?? obj.height;
+    const cornerRadius = this.patch.cornerRadius ?? obj.cornerRadius;
+    const tailTip = this.patch.tailTip ?? obj.tailTip;
+    const tailBaseWidth = this.patch.tailBaseWidth ?? obj.tailBaseWidth;
+    if (!Number.isFinite(width) || width <= 0 || !Number.isFinite(height) || height <= 0 || !Number.isFinite(cornerRadius) || cornerRadius < 0 || !Number.isFinite(tailBaseWidth) || tailBaseWidth < 0 || !Number.isFinite(tailTip.x) || !Number.isFinite(tailTip.y)) return doc;
+    this.previous = { width: obj.width, height: obj.height, cornerRadius: obj.cornerRadius, tailTip: obj.tailTip, tailBaseWidth: obj.tailBaseWidth };
+    return { ...doc, objects: { ...doc.objects, [this.objectId]: { ...obj, width, height, cornerRadius, tailTip, tailBaseWidth } }, updatedAt: new Date().toISOString() };
+  }
+  undo(doc: DocumentModel): DocumentModel {
+    const obj = doc.objects[this.objectId];
+    if (!this.previous || !obj || obj.type !== 'callout') return doc;
+    return { ...doc, objects: { ...doc.objects, [this.objectId]: { ...obj, ...this.previous } }, updatedAt: new Date().toISOString() };
+  }
+}
+
+export class SetPolylineGeometryCommand implements Command {
+  readonly type = 'SetPolylineGeometry';
+  readonly description = 'Edit polyline';
+  private previous: { points: readonly Vec2[] } | null = null;
+  constructor(private readonly objectId: ObjectId, private readonly patch: { points: readonly Vec2[] }) {}
+  execute(doc: DocumentModel): DocumentModel {
+    const obj = doc.objects[this.objectId];
+    if (!obj || obj.type !== 'polyline' || obj.locked) return doc;
+    const points = this.patch.points;
+    if (points.length < 2 || points.some(pt => !Number.isFinite(pt.x) || !Number.isFinite(pt.y))) return doc;
+    this.previous = { points: obj.points };
+    return { ...doc, objects: { ...doc.objects, [this.objectId]: { ...obj, points } }, updatedAt: new Date().toISOString() };
+  }
+  undo(doc: DocumentModel): DocumentModel {
+    const obj = doc.objects[this.objectId];
+    if (!this.previous || !obj || obj.type !== 'polyline') return doc;
+    return { ...doc, objects: { ...doc.objects, [this.objectId]: { ...obj, ...this.previous } }, updatedAt: new Date().toISOString() };
+  }
+}
+
+export class SetStrokeArrowheadsCommand implements Command {
+  readonly type = 'SetStrokeArrowheads';
+  readonly description = 'Change arrowheads';
+  private previous: { markerStart?: ArrowheadStyle; markerEnd?: ArrowheadStyle } | null = null;
+  constructor(private readonly objectId: ObjectId, private readonly patch: { markerStart?: ArrowheadStyle | null; markerEnd?: ArrowheadStyle | null }) {}
+  execute(doc: DocumentModel): DocumentModel {
+    const obj = doc.objects[this.objectId];
+    if (!obj || obj.locked || !obj.style.stroke) return doc;
+    const markerStart = this.patch.markerStart !== undefined ? (this.patch.markerStart === null ? undefined : this.patch.markerStart) : obj.style.stroke.markerStart;
+    const markerEnd = this.patch.markerEnd !== undefined ? (this.patch.markerEnd === null ? undefined : this.patch.markerEnd) : obj.style.stroke.markerEnd;
+    this.previous = { markerStart: obj.style.stroke.markerStart, markerEnd: obj.style.stroke.markerEnd };
+    return { ...doc, objects: { ...doc.objects, [this.objectId]: { ...obj, style: { ...obj.style, stroke: { ...obj.style.stroke, markerStart, markerEnd } } } }, updatedAt: new Date().toISOString() };
+  }
+  undo(doc: DocumentModel): DocumentModel {
+    const obj = doc.objects[this.objectId];
+    if (!this.previous || !obj || !obj.style.stroke) return doc;
+    return { ...doc, objects: { ...doc.objects, [this.objectId]: { ...obj, style: { ...obj.style, stroke: { ...obj.style.stroke, markerStart: this.previous.markerStart, markerEnd: this.previous.markerEnd } } } }, updatedAt: new Date().toISOString() };
   }
 }
 

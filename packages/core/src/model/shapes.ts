@@ -1,7 +1,17 @@
 import type { Vec2 } from '@vectoria/shared';
 import type { CornerRadii } from './types.js';
 
-export type BasicShapeTool = 'rectangle' | 'ellipse' | 'line';
+export type BasicShapeTool =
+  | 'rectangle'
+  | 'ellipse'
+  | 'line'
+  | 'polygon'
+  | 'star'
+  | 'arc'
+  | 'pie'
+  | 'ring'
+  | 'spiral'
+  | 'callout';
 
 export interface ShapeModifiers {
   readonly shift: boolean;
@@ -17,7 +27,22 @@ export interface ShapeDraft {
 }
 
 export type ShapeGeometry =
-  | { readonly type: 'rectangle' | 'ellipse'; readonly x: number; readonly y: number; readonly width: number; readonly height: number }
+  | {
+      readonly type:
+        | 'rectangle'
+        | 'ellipse'
+        | 'polygon'
+        | 'star'
+        | 'arc'
+        | 'pie'
+        | 'ring'
+        | 'spiral'
+        | 'callout';
+      readonly x: number;
+      readonly y: number;
+      readonly width: number;
+      readonly height: number;
+    }
   | { readonly type: 'line'; readonly start: Vec2; readonly end: Vec2 };
 
 /** Convert legacy or partial radius data into finite, geometry-safe radii. */

@@ -36,7 +36,15 @@ export type VectoriaIconName =
   | 'more'
   | 'sliders'
   | 'eyedropper'
-  | 'bucket';
+  | 'bucket'
+  | 'polygon'
+  | 'star'
+  | 'arc'
+  | 'pie'
+  | 'ring'
+  | 'spiral'
+  | 'callout'
+  | 'polyline';
 
 export interface VectoriaIconProps {
   name: VectoriaIconName;
@@ -94,6 +102,65 @@ export const VectoriaIcon: React.FC<VectoriaIconProps> = ({
       return (
         <svg {...iconProps}>
           <line x1="4" y1="20" x2="20" y2="4" />
+        </svg>
+      );
+
+    case 'polygon':
+      return (
+        <svg {...iconProps}>
+          <polygon points="12 3 21 9.5 17.5 20 6.5 20 3 9.5" />
+        </svg>
+      );
+
+    case 'star':
+      return (
+        <svg {...iconProps}>
+          <polygon points="12 2.5 14.9 8.6 21.5 9.5 16.7 14.1 17.9 20.7 12 17.5 6.1 20.7 7.3 14.1 2.5 9.5 9.1 8.6" />
+        </svg>
+      );
+
+    case 'arc':
+      return (
+        <svg {...iconProps}>
+          <path d="M4 18a9 9 0 0 1 16 0" />
+        </svg>
+      );
+
+    case 'pie':
+      return (
+        <svg {...iconProps}>
+          <path d="M12 12V3a9 9 0 1 0 9 9h-9z" />
+        </svg>
+      );
+
+    case 'ring':
+      return (
+        <svg {...iconProps}>
+          <circle cx="12" cy="12" r="9" />
+          <circle cx="12" cy="12" r="4" />
+        </svg>
+      );
+
+    case 'spiral':
+      return (
+        <svg {...iconProps}>
+          <path d="M12 12a2 2 0 1 1 2-2c0 2.2-2 3.6-4.2 3.2C7 12.7 5.6 10.4 6.2 8 7 4.9 10.4 3.1 13.6 4 17 4.9 19.2 8.4 18.3 12c-.9 3.8-4.7 6.2-8.5 5.3" />
+        </svg>
+      );
+
+    case 'callout':
+      return (
+        <svg {...iconProps}>
+          <path d="M4 5h16v11H10l-4 4v-4H4V5z" />
+        </svg>
+      );
+
+    case 'polyline':
+      return (
+        <svg {...iconProps}>
+          <polyline points="3 17 9 9 14 13 21 5" />
+          <circle cx="3" cy="17" r="1.2" />
+          <circle cx="21" cy="5" r="1.2" />
         </svg>
       );
 

@@ -67,6 +67,7 @@ export function createGeometryPreview(
 
 export function expandObject(object: SceneObject): SceneObject | null {
   if (object.type === 'path' || object.type === 'group') return object;
+  if (object.type !== 'rectangle' && object.type !== 'ellipse' && object.type !== 'line') return null;
   const nodes = object.type === 'rectangle'
     ? rectangleNodes(object.width, object.height, object.cornerRadius)
     : object.type === 'ellipse'

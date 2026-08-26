@@ -28,3 +28,12 @@ export { GeometryOperationSession, type GeometrySessionOperation } from './opera
 export { CornerTool, type CornerToolPreview } from './tools/corner-tool.js';
 export { BooleanOperationSession } from './operations/boolean-session.js';
 export { IsolationService, type IsolationContext } from './isolation/isolation-service.js';
+export { ShapeTool, type ShapeToolState, type ShapeToolPointerEvent, type ShapeToolResult } from './tools/shape-tool.js';
+export { PolygonTool } from './tools/polygon-tool.js';
+export { StarTool } from './tools/star-tool.js';
+export { ArcTool } from './tools/arc-tool.js';
+export { PieTool } from './tools/pie-tool.js';
+export { RingTool } from './tools/ring-tool.js';
+export { SpiralTool } from './tools/spiral-tool.js';
+export { CalloutTool } from './tools/callout-tool.js';
+export { PolylineTool, type PolylineToolResult } from './tools/polyline-tool.js';

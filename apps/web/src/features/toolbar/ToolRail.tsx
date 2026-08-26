@@ -2,7 +2,7 @@ import React from 'react';
 import { IconButton, VectoriaIcon } from '@vectoria/ui';
 import { Tooltip } from '@vectoria/ui';
 
-export type ActiveTool = 'select' | 'direct-select' | 'lasso' | 'node-lasso' | 'rectangle' | 'ellipse' | 'line' | 'pen' | 'pencil' | 'brush' | 'smooth' | 'corner' | 'eraser' | 'knife' | 'scissors' | 'width' | 'eyedropper' | 'bucket' | 'hand' | 'zoom';
+export type ActiveTool = 'select' | 'direct-select' | 'lasso' | 'node-lasso' | 'rectangle' | 'ellipse' | 'line' | 'polygon' | 'star' | 'arc' | 'pie' | 'ring' | 'spiral' | 'callout' | 'polyline' | 'pen' | 'pencil' | 'brush' | 'smooth' | 'corner' | 'eraser' | 'knife' | 'scissors' | 'width' | 'eyedropper' | 'bucket' | 'hand' | 'zoom';
 
 export interface ToolRailProps {
   activeTool: ActiveTool;
@@ -12,7 +12,7 @@ export interface ToolRailProps {
 export const ToolRail: React.FC<ToolRailProps> = ({ activeTool, onSelectTool }) => {
   const groups: readonly ToolGroup[] = [
     { label: 'Selection', tools: [{ id: 'select', label: 'Select Tool', shortcut: 'V', icon: 'select' }, { id: 'direct-select', label: 'Direct Select Tool', shortcut: 'A', icon: 'directSelect' }, { id: 'lasso', label: 'Lasso Tool', shortcut: 'O', icon: 'select' }, { id: 'node-lasso', label: 'Node Lasso Tool', shortcut: 'Shift+O', icon: 'directSelect' }] },
-    { label: 'Shape', tools: [{ id: 'rectangle', label: 'Rectangle Tool', shortcut: 'R', icon: 'rectangle' }, { id: 'ellipse', label: 'Ellipse Tool', shortcut: 'L', icon: 'ellipse' }, { id: 'line', label: 'Line Tool', shortcut: '\\', icon: 'line' }] },
+    { label: 'Shape', tools: [{ id: 'rectangle', label: 'Rectangle Tool', shortcut: 'R', icon: 'rectangle' }, { id: 'ellipse', label: 'Ellipse Tool', shortcut: 'L', icon: 'ellipse' }, { id: 'line', label: 'Line Tool', shortcut: '\\', icon: 'line' }, { id: 'polygon', label: 'Polygon Tool', icon: 'polygon' }, { id: 'star', label: 'Star Tool', icon: 'star' }, { id: 'arc', label: 'Arc Tool', icon: 'arc' }, { id: 'pie', label: 'Pie Tool', icon: 'pie' }, { id: 'ring', label: 'Ring / Donut Tool', icon: 'ring' }, { id: 'spiral', label: 'Spiral Tool', icon: 'spiral' }, { id: 'callout', label: 'Callout Tool', icon: 'callout' }, { id: 'polyline', label: 'Polyline Tool', icon: 'polyline' }] },
     { label: 'Draw', tools: [{ id: 'pen', label: 'Pen Tool', shortcut: 'P', icon: 'pen' }, { id: 'pencil', label: 'Pencil Tool', shortcut: 'N', icon: 'pencil' }, { id: 'brush', label: 'Brush Tool', shortcut: 'B', icon: 'brush' }, { id: 'smooth', label: 'Smooth Tool', shortcut: 'S', icon: 'pen' }] },
     { label: 'Edit path', tools: [{ id: 'corner', label: 'Corner Tool', shortcut: 'Q', icon: 'corner' }, { id: 'eraser', label: 'Eraser Tool', shortcut: 'Shift+E', icon: 'eraser' }, { id: 'knife', label: 'Knife Tool', shortcut: 'K', icon: 'scissors' }, { id: 'scissors', label: 'Scissors Tool', shortcut: 'C', icon: 'scissors' }, { id: 'width', label: 'Width Tool', shortcut: 'W', icon: 'width' }] },
     { label: 'Style', tools: [{ id: 'eyedropper', label: 'Eyedropper Tool', shortcut: 'I', icon: 'eyedropper' }, { id: 'bucket', label: 'Paint Bucket Tool', shortcut: 'G', icon: 'bucket' }] },
@@ -33,6 +33,11 @@ export const ToolRail: React.FC<ToolRailProps> = ({ activeTool, onSelectTool }) 
         padding: '8px 0',
          gap: '4px',
         zIndex: 5,
+        // The rail scrolls internally so a growing tool list never stretches
+        // the workspace row or shifts the canvas viewport.
+        height: '100%',
+        overflowY: 'auto',
+        overflowX: 'hidden',
       }}
     >
       {groups.map((group, groupIndex) => (
@@ -60,5 +65,5 @@ export const ToolRail: React.FC<ToolRailProps> = ({ activeTool, onSelectTool }) 
 
 type ToolId = ActiveTool | 'text';
 type ToolIcon = React.ComponentProps<typeof VectoriaIcon>['name'];
-interface ToolConfig { id: ToolId; label: string; shortcut: string; icon: ToolIcon; disabled?: boolean }
+interface ToolConfig { id: ToolId; label: string; shortcut?: string; icon: ToolIcon; disabled?: boolean }
 interface ToolGroup { label: string; tools: readonly ToolConfig[] }

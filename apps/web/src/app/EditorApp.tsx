@@ -18,6 +18,15 @@ import {
   SetRectangleGeometryCommand,
   SetEllipseGeometryCommand,
   SetLineGeometryCommand,
+  SetPolygonGeometryCommand,
+  SetStarGeometryCommand,
+  SetArcGeometryCommand,
+  SetPieGeometryCommand,
+  SetRingGeometryCommand,
+  SetSpiralGeometryCommand,
+  SetCalloutGeometryCommand,
+  SetStrokeArrowheadsCommand,
+  type ArrowheadStyle,
   type CornerRadii,
   SetObjectStyleCommand,
   UpdateArtboardCommand,
@@ -567,6 +576,22 @@ export const EditorApp: React.FC = () => {
 
   const handleUpdateLineEndpoint = useCallback((id: ObjectId, endPoint: Vec2) => {
     handleExecuteCommand(new SetLineGeometryCommand(id, { endPoint }));
+  }, [handleExecuteCommand]);
+
+  const handleUpdateParametric = useCallback((id: ObjectId, patch: import('../features/panels/PropertiesPanel.js').ParametricPatch) => {
+    switch (patch.kind) {
+      case 'polygon': handleExecuteCommand(new SetPolygonGeometryCommand(id, { sides: patch.sides, radius: patch.radius })); break;
+      case 'star': handleExecuteCommand(new SetStarGeometryCommand(id, { points: patch.points, outerRadius: patch.outerRadius, innerRadius: patch.innerRadius })); break;
+      case 'arc': handleExecuteCommand(new SetArcGeometryCommand(id, { radiusX: patch.radiusX, radiusY: patch.radiusY, startAngle: patch.startAngle, endAngle: patch.endAngle, closed: patch.closed })); break;
+      case 'pie': handleExecuteCommand(new SetPieGeometryCommand(id, { radiusX: patch.radiusX, radiusY: patch.radiusY, startAngle: patch.startAngle, endAngle: patch.endAngle })); break;
+      case 'ring': handleExecuteCommand(new SetRingGeometryCommand(id, { outerRadius: patch.outerRadius, innerRadius: patch.innerRadius })); break;
+      case 'spiral': handleExecuteCommand(new SetSpiralGeometryCommand(id, { turns: patch.turns, decay: patch.decay, direction: patch.direction })); break;
+      case 'callout': handleExecuteCommand(new SetCalloutGeometryCommand(id, { width: patch.width, height: patch.height, cornerRadius: patch.cornerRadius, tailTip: patch.tailTip, tailBaseWidth: patch.tailBaseWidth })); break;
+    }
+  }, [handleExecuteCommand]);
+
+  const handleUpdateArrowheads = useCallback((id: ObjectId, markerStart: ArrowheadStyle | null, markerEnd: ArrowheadStyle | null) => {
+    handleExecuteCommand(new SetStrokeArrowheadsCommand(id, { markerStart, markerEnd }));
   }, [handleExecuteCommand]);
 
   const handleUpdateCornerRadius = useCallback((id: ObjectId, radii: CornerRadii) => {
@@ -1131,7 +1156,9 @@ export const EditorApp: React.FC = () => {
           onSelectObjects={handleSelectObjects}
           onUpdatePosition={handleUpdatePosition}
           onUpdateDimensions={handleUpdateDimensions}
-          onUpdateGroupTransform={handleUpdateGroupTransform}
+           onUpdateGroupTransform={handleUpdateGroupTransform}
+          onUpdateParametric={handleUpdateParametric}
+          onUpdateArrowheads={handleUpdateArrowheads}
           onUpdateLineEndpoint={handleUpdateLineEndpoint}
           onUpdateCornerRadius={handleUpdateCornerRadius}
           onUpdateFill={handleUpdateFill}

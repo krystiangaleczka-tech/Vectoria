@@ -90,6 +90,11 @@ export interface PatternFill {
 
 export type FillStyle = SolidFill | NoFill | LinearGradientFill | RadialGradientFill | AngularGradientFill | PatternFill;
 
+export interface ArrowheadStyle {
+  readonly type: 'arrow' | 'triangle' | 'circle' | 'square';
+  readonly size: number;
+}
+
 export interface StrokeStyle {
   readonly color: string;
   readonly width: number;
@@ -98,6 +103,8 @@ export interface StrokeStyle {
   readonly miterLimit: number;
   readonly dashArray: readonly number[];
   readonly opacity: number;
+  readonly markerStart?: ArrowheadStyle;
+  readonly markerEnd?: ArrowheadStyle;
 }
 
 export interface ObjectStyle {
@@ -197,7 +204,77 @@ export interface WidthPoint {
   readonly width: number;
 }
 
-export type SceneObject = RectangleObject | EllipseObject | LineObject | PathObject | GroupObject;
+export interface PolygonObject extends SceneObjectBase {
+  readonly type: 'polygon';
+  readonly sides: number;
+  readonly radius: number;
+}
+
+export interface StarObject extends SceneObjectBase {
+  readonly type: 'star';
+  readonly points: number;
+  readonly outerRadius: number;
+  readonly innerRadius: number;
+}
+
+export interface ArcObject extends SceneObjectBase {
+  readonly type: 'arc';
+  readonly radiusX: number;
+  readonly radiusY: number;
+  readonly startAngle: number;
+  readonly endAngle: number;
+  readonly closed: boolean;
+}
+
+export interface PieObject extends SceneObjectBase {
+  readonly type: 'pie';
+  readonly radiusX: number;
+  readonly radiusY: number;
+  readonly startAngle: number;
+  readonly endAngle: number;
+}
+
+export interface RingObject extends SceneObjectBase {
+  readonly type: 'ring';
+  readonly outerRadius: number;
+  readonly innerRadius: number;
+}
+
+export interface SpiralObject extends SceneObjectBase {
+  readonly type: 'spiral';
+  readonly turns: number;
+  readonly decay: number;
+  readonly direction: 'cw' | 'ccw';
+}
+
+export interface CalloutObject extends SceneObjectBase {
+  readonly type: 'callout';
+  readonly width: number;
+  readonly height: number;
+  readonly cornerRadius: number;
+  readonly tailTip: Vec2;
+  readonly tailBaseWidth: number;
+}
+
+export interface PolylineObject extends SceneObjectBase {
+  readonly type: 'polyline';
+  readonly points: readonly Vec2[];
+}
+
+export type SceneObject =
+  | RectangleObject
+  | EllipseObject
+  | LineObject
+  | PathObject
+  | GroupObject
+  | PolygonObject
+  | StarObject
+  | ArcObject
+  | PieObject
+  | RingObject
+  | SpiralObject
+  | CalloutObject
+  | PolylineObject;
 
 // Selection stays multi-object capable even while the MVP UI exposes one
 // active editing context at a time.

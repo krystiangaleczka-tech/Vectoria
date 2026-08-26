@@ -1,7 +1,7 @@
 import type { Vec2 } from '@vectoria/shared';
 import { rectContainsPoint } from '@vectoria/shared';
-import type { DocumentModel, SceneObject, ObjectId, RectangleObject, EllipseObject, LineObject, PathObject } from '@vectoria/core';
-import { getTransformMatrix, getObjectBounds, normalizeCornerRadii } from '@vectoria/core';
+import type { DocumentModel, SceneObject, ObjectId, RectangleObject, EllipseObject, LineObject, PathObject, PolygonObject, StarObject, ArcObject, PieObject, RingObject, SpiralObject, CalloutObject, PolylineObject } from '@vectoria/core';
+import { getTransformMatrix, getObjectBounds, normalizeCornerRadii, getPolygonVertices, getStarVertices, approximateArc, getSpiralVertices, getCalloutVertices } from '@vectoria/core';
 import { mat3Inverse, mat3TransformPoint } from '@vectoria/shared';
 import type { Rect } from '@vectoria/shared';
 
@@ -112,11 +112,135 @@ function hitTestObject(obj: SceneObject, worldPoint: Vec2, toleranceWorld: numbe
       return hitTestLine(obj, worldPoint, toleranceWorld);
     case 'path':
       return hitTestPath(obj, worldPoint, toleranceWorld);
+    case 'polygon':
+    case 'star':
+    case 'callout':
+      return hitTestVertexShape(obj as PolygonObject | StarObject | CalloutObject, worldPoint, toleranceWorld);
+    case 'arc':
+      return hitTestArc(obj as ArcObject, worldPoint, toleranceWorld);
+    case 'pie':
+      return hitTestPie(obj as PieObject, worldPoint, toleranceWorld);
+    case 'ring':
+      return hitTestRing(obj as RingObject, worldPoint, toleranceWorld);
+    case 'spiral':
+    case 'polyline':
+      return hitTestOpenChain(obj as SpiralObject | PolylineObject, worldPoint, toleranceWorld);
     case 'group':
       return false;
     default:
       return false;
   }
+}
+
+/** Vertex-loop shapes: point-in-polygon when filled, segment distance otherwise. */
+function hitTestVertexShape(
+  obj: PolygonObject | StarObject | CalloutObject,
+  worldPoint: Vec2,
+  toleranceWorld: number,
+): boolean {
+  const inv = mat3Inverse(getTransformMatrix(obj.transform));
+  if (!inv) return false;
+  const local = mat3TransformPoint(inv, worldPoint);
+  const vertices = obj.type === 'polygon'
+    ? getPolygonVertices(obj.sides, obj.radius)
+    : obj.type === 'star'
+      ? getStarVertices(obj.points, obj.outerRadius, obj.innerRadius)
+      : getCalloutVertices(obj.width, obj.height, obj.cornerRadius, obj.tailTip, obj.tailBaseWidth);
+  if (vertices.length < 2) return false;
+
+  if (obj.style.fill.type !== 'none') return pointInPolygon(local, vertices);
+
+  const tolerance = Math.max((obj.style.stroke?.width ?? 1) / 2, toleranceWorld);
+  return polygonEdgeDistance(local, vertices) <= tolerance;
+}
+
+/**
+ * Arc: sampled outline. Closed arcs allow chord fill (point-in-polygon on the
+ * flattened loop); open arcs are stroke-only.
+ */
+function hitTestArc(obj: ArcObject, worldPoint: Vec2, toleranceWorld: number): boolean {
+  const inv = mat3Inverse(getTransformMatrix(obj.transform));
+  if (!inv) return false;
+  const local = mat3TransformPoint(inv, worldPoint);
+  const samples = approximateArc(obj.radiusX, obj.radiusY, obj.startAngle, obj.endAngle, 48);
+
+  if (obj.closed && obj.style.fill.type !== 'none' && samples.length >= 3) {
+    return pointInPolygon(local, samples);
+  }
+
+  const tolerance = Math.max((obj.style.stroke?.width ?? 1) / 2, toleranceWorld);
+  if (polygonEdgeDistance(local, samples) <= tolerance) return true;
+  if (obj.closed && samples.length >= 2) {
+    return distancePointToSegment(local, samples[samples.length - 1]!, samples[0]!) <= tolerance;
+  }
+  return false;
+}
+
+/** Pie: inside the ellipse and within the angular sweep between start/end. */
+function hitTestPie(obj: PieObject, worldPoint: Vec2, toleranceWorld: number): boolean {
+  const inv = mat3Inverse(getTransformMatrix(obj.transform));
+  if (!inv) return false;
+  const local = mat3TransformPoint(inv, worldPoint);
+
+  if (obj.style.fill.type !== 'none') {
+    const norm = ((local.x / obj.radiusX) ** 2 + (local.y / obj.radiusY) ** 2);
+    return norm <= 1 + (toleranceWorld / Math.min(obj.radiusX, obj.radiusY)) && angleWithinSweep(Math.atan2(local.y / obj.radiusY, local.x / obj.radiusX), obj.startAngle, obj.endAngle);
+  }
+
+  // Stroke-only pie: sample sector boundary (arc + two radii).
+  const samples = approximateArc(obj.radiusX, obj.radiusY, obj.startAngle, obj.endAngle, 48);
+  const tolerance = Math.max((obj.style.stroke?.width ?? 1) / 2, toleranceWorld);
+  if (polygonEdgeDistance(local, samples) <= tolerance) return true;
+  return distancePointToSegment(local, { x: 0, y: 0 }, samples[0]!) <= tolerance
+    || distancePointToSegment(local, { x: 0, y: 0 }, samples[samples.length - 1]!) <= tolerance;
+}
+
+/** Ring: annulus — inside outer circle and outside inner hole. */
+function hitTestRing(obj: RingObject, worldPoint: Vec2, toleranceWorld: number): boolean {
+  const inv = mat3Inverse(getTransformMatrix(obj.transform));
+  if (!inv) return false;
+  const local = mat3TransformPoint(inv, worldPoint);
+  const distance = Math.hypot(local.x, local.y);
+  const halfStroke = Math.max((obj.style.stroke?.width ?? 0) / 2, obj.style.fill.type !== 'none' ? 0 : toleranceWorld);
+  return distance <= obj.outerRadius + halfStroke && distance >= obj.innerRadius - halfStroke;
+}
+
+/** Open chains (spiral, polyline): distance to every sampled segment. */
+function hitTestOpenChain(
+  obj: SpiralObject | PolylineObject,
+  worldPoint: Vec2,
+  toleranceWorld: number,
+): boolean {
+  const inv = mat3Inverse(getTransformMatrix(obj.transform));
+  if (!inv) return false;
+  const local = mat3TransformPoint(inv, worldPoint);
+  const points = obj.type === 'spiral'
+    ? getSpiralVertices(obj.turns, obj.decay, obj.direction, 64)
+    : [...obj.points];
+  if (points.length < 2) return false;
+  const tolerance = Math.max((obj.style.stroke?.width ?? 1) / 2, toleranceWorld);
+  for (let i = 0; i < points.length - 1; i += 1) {
+    if (distancePointToSegment(local, points[i]!, points[i + 1]!) <= tolerance) return true;
+  }
+  return false;
+}
+
+/** Distance from a point to the closest edge of a vertex loop. */
+function polygonEdgeDistance(point: Vec2, vertices: readonly Vec2[]): number {
+  let best = Infinity;
+  for (let i = 0; i < vertices.length; i += 1) {
+    best = Math.min(best, distancePointToSegment(point, vertices[i]!, vertices[(i + 1) % vertices.length]!));
+  }
+  return best;
+}
+
+/** Whether `angle` lies within the sweep from `start` to `end` (CCW positive). */
+function angleWithinSweep(angle: number, start: number, end: number): boolean {
+  const twoPi = Math.PI * 2;
+  const normalized = (((angle - start) % twoPi) + twoPi) % twoPi;
+  const sweep = end - start;
+  if (sweep >= 0) return normalized <= sweep;
+  return normalized >= twoPi + sweep;
 }
 
 function hitTestDocumentObject(doc: DocumentModel, object: SceneObject, worldPoint: Vec2, toleranceWorld: number): boolean {
