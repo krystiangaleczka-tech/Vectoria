@@ -492,13 +492,15 @@ test.describe('Vectoria MVP Skeleton', () => {
     await expect(page.getByTestId('history-panel')).toContainText('Add path node');
 
     // Hover the new middle node and delete it with Delete — still in Pen.
-    await page.mouse.move(box.x + box.width / 2, cy);
+    const activeBox = await canvas.boundingBox() ?? box;
+    const midX = activeBox.x + activeBox.width / 2;
+    await page.mouse.move(midX, cy);
     await page.keyboard.press('Delete');
     await expect(page.getByTestId('history-panel')).toContainText('Remove path node');
 
     // Draft flow still works afterwards (tool was never switched).
-    await page.mouse.click(box.x + box.width / 2 - 60, cy + 80);
-    await page.mouse.click(box.x + box.width / 2 + 60, cy + 80);
+    await page.mouse.click(activeBox.x + activeBox.width / 2 - 60, cy + 80);
+    await page.mouse.click(activeBox.x + activeBox.width / 2 + 60, cy + 80);
     await page.keyboard.press('Enter');
     await expect(page.getByTestId('statusbar')).toContainText('2 objects');
   });
@@ -591,5 +593,34 @@ test.describe('Vectoria MVP Skeleton', () => {
     // History contains replacement command
     await page.getByRole('tab', { name: 'Historia' }).click();
     await expect(page.getByTestId('history-panel')).toContainText('Replace All Text');
+  });
+
+  test('EPIC-11: Layer creation, template layer, layer search, and Assets panel', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    // Switch to Layers tab
+    await page.getByRole('tab', { name: 'Warstwy' }).click();
+    const layersPanel = page.getByTestId('layers-panel');
+    await expect(layersPanel).toBeVisible();
+    await expect(layersPanel).toContainText('Layer 1');
+
+    // Create a new layer
+    await page.getByTestId('create-layer-button').click();
+    await expect(layersPanel).toContainText('Layer 2');
+
+    // Create a template layer
+    await page.getByTestId('create-template-layer-button').click();
+    await expect(layersPanel).toContainText('SZABLON');
+
+    // Search filter in layers panel
+    await page.getByTestId('layers-search-input').fill('Layer 1');
+    await expect(layersPanel).toContainText('Layer 1');
+
+    // Switch to Assets panel
+    await page.getByRole('tab', { name: 'Zasoby' }).click();
+    const assetsPanel = page.getByTestId('assets-panel');
+    await expect(assetsPanel).toBeVisible();
+    await expect(assetsPanel).toContainText('Zasoby i Komponenty');
   });
 });

@@ -99,3 +99,12 @@ export {
   BatchReplaceTextCommand,
   type TextPropertiesUpdate,
 } from './text-commands.js';
+export {
+  CreateLayerCommand,
+  DeleteLayerCommand,
+  RenameLayerCommand,
+  UpdateLayerPropertiesCommand,
+  ReorderLayersCommand,
+  MoveObjectsToLayerCommand,
+  LockObjectAttributesCommand,
+} from './layer-commands.js';

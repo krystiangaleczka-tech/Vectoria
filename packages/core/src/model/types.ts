@@ -152,7 +152,7 @@ export interface CornerRadii {
   readonly bottomLeft: number;
 }
 
-// ─── Scene Objects ────────────────────────────────────────────────────────────
+export type LockedAttribute = 'position' | 'size' | 'rotation' | 'style' | 'content';
 
 export interface SceneObjectBase {
   readonly id: ObjectId;
@@ -162,6 +162,7 @@ export interface SceneObjectBase {
   readonly locked: boolean;
   readonly transform: Transform2D;
   readonly style: ObjectStyle;
+  readonly lockedAttributes?: readonly LockedAttribute[];
 }
 
 export interface RectangleObject extends SceneObjectBase {
@@ -360,6 +361,8 @@ export interface Layer {
 
   /** Index 0 = bottom-most within this layer. */
   readonly objectIds: readonly ObjectId[];
+  readonly labelColor?: string;
+  readonly isTemplate?: boolean;
 }
 
 // ─── Artboard ─────────────────────────────────────────────────────────────────

@@ -37,6 +37,8 @@ interface AppMenuBarProps {
   onOpenFindReplace?: () => void;
   onOpenUsedFonts?: () => void;
   onOpenSpecialCharacters?: () => void;
+  outlineMode?: boolean;
+  onToggleOutlineMode?: () => void;
 }
 
 type MenuName = 'Plik' | 'Edycja' | 'Obiekt' | 'Tekst' | 'Widok' | 'Okno' | 'Pomoc';
@@ -75,6 +77,8 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
   onOpenFindReplace,
   onOpenUsedFonts,
   onOpenSpecialCharacters,
+  outlineMode,
+  onToggleOutlineMode,
 }) => {
   const [openMenu, setOpenMenu] = useState<MenuName | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -122,6 +126,7 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
         <MenuItem label="Dopasuj do rysunku" onClick={() => run(onFitDrawing)} />
         <MenuItem label="Dopasuj do zaznaczenia" disabled={selectedObjectIds.length === 0} onClick={() => run(onFitSelection)} />
         <MenuItem label="Zoom 100%" shortcut="Ctrl+0" onClick={() => run(onZoom100)} />
+        <MenuItem label={outlineMode ? 'Wyłącz Outline View' : 'Włącz Outline View'} shortcut="Ctrl+Y" onClick={() => run(onToggleOutlineMode)} />
         <MenuItem label={`${showGrid ? 'Ukryj' : 'Pokaż'} siatkę`} onClick={() => run(onToggleGrid)} />
         <MenuItem label={`${snapToGrid ? 'Wyłącz' : 'Włącz'} snap do siatki`} onClick={() => run(onToggleSnap)} />
         <MenuItem label={`Motyw: ${theme === 'dark' ? 'jasny' : 'ciemny'}`} onClick={() => run(onToggleTheme)} />
@@ -148,6 +153,7 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
       return <>
         <MenuItem label="Właściwości" onClick={() => run(() => onShowPanel('properties'))} />
         <MenuItem label="Warstwy" onClick={() => run(() => onShowPanel('layers'))} />
+        <MenuItem label="Zasoby" onClick={() => run(() => onShowPanel('assets'))} />
         <MenuItem label="Historia" onClick={() => run(() => onShowPanel('history'))} />
         <MenuItem label={rightDockOpen ? 'Ukryj dock' : 'Pokaż dock'} onClick={() => run(onToggleRightDock)} />
       </>;

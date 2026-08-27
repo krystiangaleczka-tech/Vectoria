@@ -96,6 +96,8 @@ export interface CanvasViewportProps {
   geometryPreview?: GeometryPreview | null;
   styleSampleTarget?: StyleSampleTarget;
   styleSampleTolerance?: number;
+  outlineMode?: boolean;
+  soloLayerId?: string | null;
 }
 
 interface DragState {
@@ -202,6 +204,8 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   geometryPreview = null,
   styleSampleTarget = 'style',
   styleSampleTolerance = 0,
+  outlineMode = false,
+  soloLayerId = null,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const bgCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -297,6 +301,8 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       previewStyles: stylePreview,
       previewTexts: textEditSessionRef.current ? { [textEditSessionRef.current.targetObjectId]: textEditSessionRef.current.text } : undefined,
       quality: qualityPolicyRef.current?.quality,
+      outlineMode,
+      soloLayerId,
     });
     renderOverlay(overlayCtx, camera, doc, selectedIds, overlayCanvas.width, overlayCanvas.height, {
       previewTransforms: dragPreview
@@ -566,7 +572,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     void penVersion;
     void freehandVersion;
     void textEditVersion;
-  }, [doc, camera, selectedIds, dragPreview, stylePreview, pathPreview, geometryPreview, cornerPreview, activeTool, penVersion, polylineVersion, freehandVersion, freehandSettings, showGrid, gridSettings, selection, selectedObjectId, selectedObjectIds, textEditVersion]);
+  }, [doc, camera, selectedIds, dragPreview, stylePreview, pathPreview, geometryPreview, cornerPreview, activeTool, penVersion, polylineVersion, freehandVersion, freehandSettings, showGrid, gridSettings, selection, selectedObjectId, selectedObjectIds, textEditVersion, outlineMode, soloLayerId]);
 
   // Initialize render loop
   useEffect(() => {
@@ -697,9 +703,10 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       const activeSession = textEditSessionRef.current;
       const activeObject = doc.objects[activeSession.targetObjectId];
       const activeInverse = activeObject && (activeObject.type === 'text' || activeObject.type === 'text-frame') ? getInverseTransformMatrix(activeObject.transform) : null;
+      const activeLocalPoint = activeInverse ? mat3TransformPoint(activeInverse, worldPos) : null;
       const activeHit = selectTool.pick({ document: doc, selection, screenPoint: screenPos, worldPoint: worldPos, zoom: camera.zoom }).hit;
-      if (activeObject && (activeObject.type === 'text' || activeObject.type === 'text-frame') && activeHit?.objectId === activeSession.targetObjectId && activeInverse) {
-        const caret = textCaretAt(activeObject, mat3TransformPoint(activeInverse, worldPos));
+      if (activeObject && (activeObject.type === 'text' || activeObject.type === 'text-frame') && activeHit?.objectId === activeSession.targetObjectId && activeLocalPoint) {
+        const caret = textCaretAt(activeObject, activeLocalPoint);
         activeSession.setSelection(caret, caret);
         dragStateRef.current = { type: 'text-select', startScreen: screenPos, startWorld: worldPos, currentWorld: worldPos, pointerId: e.pointerId, objectIds: [activeSession.targetObjectId], textAnchor: caret };
         try { (e.target as HTMLElement).setPointerCapture(e.pointerId); } catch { /* synthetic pointer */ }
@@ -996,9 +1003,9 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       return;
     }
 
-    if (drag?.type === 'text-select' && drag.objectIds?.[0] && drag.textAnchor !== undefined) {
+    if (drag?.type === 'text-select' && drag.objectIds?.[0]) {
       const object = doc.objects[drag.objectIds[0]];
-      if (object && (object.type === 'text' || object.type === 'text-frame')) {
+      if (object && (object.type === 'text' || object.type === 'text-frame') && drag.textAnchor !== undefined) {
         const inverse = getInverseTransformMatrix(object.transform);
         if (inverse) {
           const caret = textCaretAt(object, mat3TransformPoint(inverse, worldPos));
@@ -1470,6 +1477,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
 
       if (textEditSessionRef.current) {
         const session = textEditSessionRef.current;
+
         if (e.key === 'Escape') {
           e.preventDefault();
           commitTextEdit();

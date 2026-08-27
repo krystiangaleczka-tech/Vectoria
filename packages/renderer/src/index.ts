@@ -226,8 +226,11 @@ export function renderScene(
   options?: {
     previewTransforms?: Record<string, import('@vectoria/core').Transform2D>;
     previewStyles?: Record<string, import('@vectoria/core').ObjectStyle>;
+    previewTexts?: Record<string, string>;
     showGrid?: boolean;
     quality?: import('./quality.js').RenderQuality;
+    outlineMode?: boolean;
+    soloLayerId?: string | null;
   }
 ): void {
   const dpr = window.devicePixelRatio || 1;
@@ -264,8 +267,11 @@ export function renderScene(
 
   // Render objects in z-order
   for (const layerId of doc.layerIds) {
+    if (options?.soloLayerId && layerId !== options.soloLayerId) continue;
     const layer = doc.layers[layerId];
     if (!layer?.visible || layer.opacity === 0) continue;
+
+    const layerOpacity = layer.isTemplate ? (layer.opacity ?? 1) * 0.5 : layer.opacity;
 
     for (const objectId of layer.objectIds) {
       let obj = doc.objects[objectId];
@@ -278,8 +284,30 @@ export function renderScene(
       if (options?.previewStyles?.[objectId]) {
         obj = { ...obj, style: options.previewStyles[objectId]! };
       }
-      if (layer.opacity !== 1) {
-        obj = { ...obj, style: { ...obj.style, opacity: obj.style.opacity * layer.opacity } };
+      if (options?.previewTexts?.[objectId] !== undefined && (obj.type === 'text' || obj.type === 'text-frame')) {
+        obj = { ...obj, text: options.previewTexts[objectId]! };
+      }
+      if (layerOpacity !== 1) {
+        obj = { ...obj, style: { ...obj.style, opacity: obj.style.opacity * layerOpacity } };
+      }
+      if (options?.outlineMode) {
+        obj = {
+          ...obj,
+          style: {
+            ...obj.style,
+            fill: { type: 'none' },
+            stroke: {
+              color: '#3b82f6',
+              width: 1 / camera.zoom,
+              align: 'center',
+              lineCap: 'butt',
+              lineJoin: 'miter',
+              miterLimit: 4,
+              dashArray: [],
+              opacity: 1,
+            },
+          },
+        };
       }
 
        if (!rectsIntersect(getObjectBounds(obj, doc), visibleWorldRect)) continue;

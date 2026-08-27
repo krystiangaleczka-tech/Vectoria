@@ -62,9 +62,19 @@ export function validateInvariants(doc: DocumentModel): InvariantViolation[] {
   if (!Number.isFinite(doc.snap.tolerancePx) || doc.snap.tolerancePx < 0) violations.push({ code: 'INVALID_SNAP_TOLERANCE', message: 'Snap tolerance must be finite and non-negative.' });
   for (const guide of doc.guides) if (!Number.isFinite(guide.position)) violations.push({ code: 'INVALID_GUIDE_POSITION', message: `Guide '${guide.id}' position must be finite.` });
 
+  if (doc.layerIds.length < 1) {
+    violations.push({ code: 'NO_LAYERS', message: 'Document must contain at least one layer.' });
+  }
+
   for (const layerId of doc.layerIds) {
     const layer = doc.layers[layerId];
     if (layer && (!Number.isFinite(layer.opacity) || layer.opacity < 0 || layer.opacity > 1)) violations.push({ code: 'INVALID_LAYER_OPACITY', message: `Layer '${layerId}' opacity must be within [0, 1].` });
+    if (layer?.labelColor !== undefined && typeof layer.labelColor !== 'string') {
+      violations.push({ code: 'INVALID_LAYER_LABEL_COLOR', message: `Layer '${layerId}' labelColor must be a string.` });
+    }
+    if (layer?.isTemplate !== undefined && typeof layer.isTemplate !== 'boolean') {
+      violations.push({ code: 'INVALID_LAYER_TEMPLATE_FLAG', message: `Layer '${layerId}' isTemplate must be a boolean.` });
+    }
     if (layer) {
       registerId(layer.id, 'DUPLICATE_DOCUMENT_ID');
       if (layer.id !== layerId) violations.push({ code: 'LAYER_KEY_MISMATCH', message: `Layer key '${layerId}' does not match its id.` });
@@ -137,6 +147,18 @@ export function validateInvariants(doc: DocumentModel): InvariantViolation[] {
             code: 'OBJECT_LAYER_MISMATCH',
             message: `Object '${objectId}' has layerId '${obj.layerId}' but is in layer '${layerId}'.`,
           });
+        }
+
+        if (obj.lockedAttributes) {
+          const validAttrs = new Set(['position', 'size', 'rotation', 'style', 'content']);
+          for (const attr of obj.lockedAttributes) {
+            if (!validAttrs.has(attr)) {
+              violations.push({
+                code: 'INVALID_LOCKED_ATTRIBUTE',
+                message: `Object '${objectId}' has invalid lockedAttribute '${attr}'.`,
+              });
+            }
+          }
         }
 
         // Geometry dimensions must be positive and finite

@@ -102,6 +102,8 @@ export const ObjectStyleSchema = z.object({
   blendMode: z.enum(['normal', 'multiply', 'screen', 'overlay']).default('normal'),
 });
 
+export const LockedAttributeSchema = z.enum(['position', 'size', 'rotation', 'style', 'content']);
+
 export const RectangleObjectSchema = z.object({
   type: z.literal('rectangle'),
   id: z.string().min(1),
@@ -109,6 +111,7 @@ export const RectangleObjectSchema = z.object({
   layerId: z.string().min(1),
   visible: z.boolean(),
   locked: z.boolean(),
+  lockedAttributes: z.array(LockedAttributeSchema).optional(),
   transform: Transform2DSchema,
   style: ObjectStyleSchema,
   width: z.number().positive().finite(),
@@ -131,6 +134,7 @@ export const EllipseObjectSchema = z.object({
   layerId: z.string().min(1),
   visible: z.boolean(),
   locked: z.boolean(),
+  lockedAttributes: z.array(LockedAttributeSchema).optional(),
   transform: Transform2DSchema,
   style: ObjectStyleSchema,
   width: z.number().positive().finite(),
@@ -144,6 +148,7 @@ export const LineObjectSchema = z.object({
   layerId: z.string().min(1),
   visible: z.boolean(),
   locked: z.boolean(),
+  lockedAttributes: z.array(LockedAttributeSchema).optional(),
   transform: Transform2DSchema,
   style: ObjectStyleSchema,
   endPoint: Vec2Schema,
@@ -164,6 +169,7 @@ export const PathObjectSchema = z.object({
   layerId: z.string().min(1),
   visible: z.boolean(),
   locked: z.boolean(),
+  lockedAttributes: z.array(LockedAttributeSchema).optional(),
   transform: Transform2DSchema,
   style: ObjectStyleSchema,
   nodes: z.array(PathNodeSchema).max(DOCUMENT_LIMITS.maxPathNodes),
@@ -179,6 +185,7 @@ export const GroupObjectSchema = z.object({
   layerId: z.string().min(1),
   visible: z.boolean(),
   locked: z.boolean(),
+  lockedAttributes: z.array(LockedAttributeSchema).optional(),
   transform: Transform2DSchema,
   style: ObjectStyleSchema,
   childIds: z.array(z.string().min(1)),
@@ -203,6 +210,7 @@ export const TextObjectSchema = z.object({
   layerId: z.string().min(1),
   visible: z.boolean(),
   locked: z.boolean(),
+  lockedAttributes: z.array(LockedAttributeSchema).optional(),
   transform: Transform2DSchema,
   style: ObjectStyleSchema,
   text: z.string(),
@@ -226,6 +234,7 @@ export const TextFrameObjectSchema = z.object({
   layerId: z.string().min(1),
   visible: z.boolean(),
   locked: z.boolean(),
+  lockedAttributes: z.array(LockedAttributeSchema).optional(),
   transform: Transform2DSchema,
   style: ObjectStyleSchema,
   text: z.string(),
@@ -286,6 +295,8 @@ export const LayerSchema = z.object({
   locked: z.boolean(),
   opacity: z.number().min(0).max(1).default(1),
   objectIds: z.array(z.string().min(1)),
+  labelColor: z.string().optional(),
+  isTemplate: z.boolean().optional(),
 });
 
 export const ArtboardSchema = z.object({

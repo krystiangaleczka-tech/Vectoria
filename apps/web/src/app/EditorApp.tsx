@@ -79,6 +79,12 @@ import {
   SetTextOnPathCommand,
   BatchReplaceTextCommand,
   SetTextContentCommand,
+  CreateLayerCommand,
+  DeleteLayerCommand,
+  RenameLayerCommand,
+  UpdateLayerPropertiesCommand,
+  ReorderLayersCommand,
+  MoveObjectsToLayerCommand,
 } from '@vectoria/core';
 import { Camera, emptySelection, selectionService, GeometryOperationSession, BooleanOperationSession } from '@vectoria/editor-engine';
 import {
@@ -164,6 +170,8 @@ export const EditorApp: React.FC = () => {
   const [usedFontsOpen, setUsedFontsOpen] = useState(false);
   const [findReplaceOpen, setFindReplaceOpen] = useState(false);
   const [specialCharsOpen, setSpecialCharsOpen] = useState(false);
+  const [outlineMode, setOutlineMode] = useState(false);
+  const [soloLayerId, setSoloLayerId] = useState<string | null>(null);
 
   const history = useMemo(() => new CommandHistory(), []);
   const camera = useMemo(() => new Camera(), []);
@@ -993,6 +1001,61 @@ export const EditorApp: React.FC = () => {
     }
   }, [doc, handleExecuteCommand]);
 
+  const handleSelectLayer = useCallback((layerId: string) => {
+    if (!doc) return;
+    setDoc((prev) => (prev ? { ...prev, activeLayerId: layerId } : null));
+  }, [doc]);
+
+  const handleCreateLayer = useCallback((isTemplate = false) => {
+    handleExecuteCommand(new CreateLayerCommand(undefined, undefined, isTemplate));
+  }, [handleExecuteCommand]);
+
+  const handleDeleteLayer = useCallback((layerId: string) => {
+    handleExecuteCommand(new DeleteLayerCommand(layerId));
+  }, [handleExecuteCommand]);
+
+  const handleRenameLayer = useCallback((layerId: string, nextName: string) => {
+    handleExecuteCommand(new RenameLayerCommand(layerId, nextName));
+  }, [handleExecuteCommand]);
+
+  const handleUpdateLayer = useCallback((layerId: string, patch: Partial<import('@vectoria/core').Layer>) => {
+    handleExecuteCommand(new UpdateLayerPropertiesCommand(layerId, patch));
+  }, [handleExecuteCommand]);
+
+  const handleReorderLayers = useCallback((layerIds: readonly string[]) => {
+    handleExecuteCommand(new ReorderLayersCommand(layerIds));
+  }, [handleExecuteCommand]);
+
+  const handleMoveObjectsToLayer = useCallback((objectIds: readonly string[], targetLayerId: string) => {
+    handleExecuteCommand(new MoveObjectsToLayerCommand(objectIds, targetLayerId));
+  }, [handleExecuteCommand]);
+
+  const handleToggleSoloLayer = useCallback((layerId: string) => {
+    setSoloLayerId((current) => (current === layerId ? null : layerId));
+  }, []);
+
+  const handleSelectAllInLayer = useCallback((layerId: string) => {
+    if (!doc) return;
+    const layer = doc.layers[layerId];
+    if (!layer) return;
+    const candidateIds: string[] = [];
+    const collect = (id: string) => {
+      const obj = doc.objects[id];
+      if (obj && obj.visible && !obj.locked) {
+        candidateIds.push(id);
+        if (obj.type === 'group') {
+          obj.childIds.forEach(collect);
+        }
+      }
+    };
+    layer.objectIds.forEach(collect);
+    setSelection(selectionService.selectObjects(emptySelection(), candidateIds));
+  }, [doc]);
+
+  const handleToggleOutlineMode = useCallback(() => {
+    setOutlineMode((prev) => !prev);
+  }, []);
+
   // Global Keyboard Shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1042,7 +1105,14 @@ export const EditorApp: React.FC = () => {
         }
       } else if (cmdKey && e.key.toLowerCase() === 'y') {
         e.preventDefault();
-        handleRedo();
+        handleToggleOutlineMode();
+      } else if (e.altKey && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        if (doc?.activeLayerId) handleToggleSoloLayer(doc.activeLayerId);
+      } else if (e.key === 'Escape') {
+        if (soloLayerId) {
+          setSoloLayerId(null);
+        }
       } else if (cmdKey && e.key.toLowerCase() === 'f') {
         e.preventDefault();
         setFindReplaceOpen(true);
@@ -1233,6 +1303,8 @@ export const EditorApp: React.FC = () => {
           onOpenFindReplace={() => setFindReplaceOpen(true)}
           onOpenUsedFonts={() => setUsedFontsOpen(true)}
           onOpenSpecialCharacters={() => setSpecialCharsOpen(true)}
+          outlineMode={outlineMode}
+          onToggleOutlineMode={handleToggleOutlineMode}
         />
 
       {bootstrapState.status === 'recovery-error' && (
@@ -1269,6 +1341,20 @@ export const EditorApp: React.FC = () => {
 
         {/* Center Canvas */}
         <div className="canvas-workspace" data-testid="canvas-workspace">
+          {soloLayerId && doc.layers[soloLayerId] && (
+            <div className="solo-mode-banner" role="status" aria-live="polite">
+              <span className="solo-mode-text">
+                Tryb Solo: <strong>{doc.layers[soloLayerId].name}</strong> (pozostałe warstwy ukryte)
+              </span>
+              <button
+                type="button"
+                className="solo-mode-exit-btn"
+                onClick={() => setSoloLayerId(null)}
+              >
+                Wyjdź z trybu Solo (Esc)
+              </button>
+            </div>
+          )}
           <CanvasRulers camera={camera} unit={doc?.unit ?? 'px'} onAddGuide={handleAddGuide} />
          <CanvasViewport
             document={doc}
@@ -1283,13 +1369,15 @@ export const EditorApp: React.FC = () => {
             onSelectSelection={handleSelectSelection}
             onCursorMove={setCursorWorld}
             onZoomChange={setZoomPercent}
-             showGrid={doc.grid.visible}
+            showGrid={doc.grid.visible}
             snapToGrid={doc.snap.enabled}
-             gridSettings={doc.grid}
-             freehandSettings={freehandSettings}
-              geometryPreview={geometryPreview}
-              styleSampleTarget={styleSampleTarget}
-              styleSampleTolerance={styleSampleTolerance}
+            gridSettings={doc.grid}
+            freehandSettings={freehandSettings}
+            geometryPreview={geometryPreview}
+            styleSampleTarget={styleSampleTarget}
+            styleSampleTolerance={styleSampleTolerance}
+            outlineMode={outlineMode}
+            soloLayerId={soloLayerId}
            />
         </div>
 
@@ -1348,16 +1436,27 @@ export const EditorApp: React.FC = () => {
           onDeleteArtboard={handleDeleteArtboard}
           onRenameArtboard={handleRenameArtboard}
           onOrientArtboard={handleOrientArtboard}
-           onToggleArtboardVisibility={handleToggleArtboardVisibility}
-           libraryPalettes={libraryPalettes}
-           onLibraryPalettesChange={handleLibraryPalettesChange}
-           onApplyPaletteFill={handleApplyPaletteFill}
-           onUpsertDocumentPalette={handleUpsertDocumentPalette}
-           onDeleteDocumentPalette={handleDeleteDocumentPalette}
-           onSaveObjectStyle={handleSaveObjectStyle}
-           onApplyObjectStyle={handleApplyObjectStyle}
-           onDeleteObjectStyle={handleDeleteObjectStyle}
-           activePanel={activeDockPanel}
+          onToggleArtboardVisibility={handleToggleArtboardVisibility}
+          activeLayerId={doc.activeLayerId}
+          soloLayerId={soloLayerId}
+          onSelectLayer={handleSelectLayer}
+          onCreateLayer={handleCreateLayer}
+          onDeleteLayer={handleDeleteLayer}
+          onRenameLayer={handleRenameLayer}
+          onUpdateLayer={handleUpdateLayer}
+          onReorderLayers={handleReorderLayers}
+          onMoveObjectsToLayer={handleMoveObjectsToLayer}
+          onToggleSoloLayer={handleToggleSoloLayer}
+          onSelectAllInLayer={handleSelectAllInLayer}
+          libraryPalettes={libraryPalettes}
+          onLibraryPalettesChange={handleLibraryPalettesChange}
+          onApplyPaletteFill={handleApplyPaletteFill}
+          onUpsertDocumentPalette={handleUpsertDocumentPalette}
+          onDeleteDocumentPalette={handleDeleteDocumentPalette}
+          onSaveObjectStyle={handleSaveObjectStyle}
+          onApplyObjectStyle={handleApplyObjectStyle}
+          onDeleteObjectStyle={handleDeleteObjectStyle}
+          activePanel={activeDockPanel}
           onPanelChange={setActiveDockPanel}
           open={rightDockOpen}
           isDirty={revision !== savedRevision}

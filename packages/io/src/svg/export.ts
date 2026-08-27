@@ -46,7 +46,7 @@ export function exportArtboardToSvg(doc: DocumentModel, artboardId?: string): st
   // Render objects in global z-order
   for (const layerId of doc.layerIds) {
     const layer = doc.layers[layerId];
-    if (!layer || !layer.visible) continue;
+    if (!layer || !layer.visible || layer.isTemplate) continue;
 
     for (const objectId of layer.objectIds) {
       const obj = doc.objects[objectId];

@@ -39,6 +39,8 @@ export interface TopBarProps {
   onOpenFindReplace?: () => void;
   onOpenUsedFonts?: () => void;
   onOpenSpecialCharacters?: () => void;
+  outlineMode?: boolean;
+  onToggleOutlineMode?: () => void;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -76,6 +78,8 @@ export const TopBar: React.FC<TopBarProps> = ({
   onOpenFindReplace,
   onOpenUsedFonts,
   onOpenSpecialCharacters,
+  outlineMode,
+  onToggleOutlineMode,
 }) => {
   return (
     <header
@@ -123,6 +127,8 @@ export const TopBar: React.FC<TopBarProps> = ({
         onOpenFindReplace={onOpenFindReplace}
         onOpenUsedFonts={onOpenUsedFonts}
         onOpenSpecialCharacters={onOpenSpecialCharacters}
+        outlineMode={outlineMode}
+        onToggleOutlineMode={onToggleOutlineMode}
       />
       <DocumentTabs documentName={documentName} dirty={saveStatus !== 'saved-locally'} />
     </header>
