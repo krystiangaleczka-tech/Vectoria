@@ -99,7 +99,7 @@ export interface CanvasViewportProps {
 }
 
 interface DragState {
-   type: 'pan' | 'create-shape' | 'move-object' | 'move-node' | 'move-handle' | 'resize-object' | 'rotate-object' | 'gradient-handle' | 'style-sample' | 'marquee' | 'lasso' | 'node-lasso' | 'text-create';
+   type: 'pan' | 'create-shape' | 'move-object' | 'move-node' | 'move-handle' | 'resize-object' | 'rotate-object' | 'gradient-handle' | 'style-sample' | 'marquee' | 'lasso' | 'node-lasso' | 'text-create' | 'text-select';
   shape?: BasicShapeTool;
   startScreen: Vec2;
   startWorld: Vec2;
@@ -118,6 +118,17 @@ interface DragState {
   gradientHandle?: 'start' | 'end' | 'center' | 'radius' | 'angle';
   initialStyle?: import('@vectoria/core').ObjectStyle;
   styleTool?: 'eyedropper' | 'bucket';
+  textAnchor?: number;
+}
+
+function textCaretAt(object: TextObject | TextFrameObject, localPoint: Vec2): number {
+  const layout = object.type === 'text' ? computeArtisticTextLayout(object) : computeTextFrameLayout(object);
+  const line = layout.lines.reduce((best, candidate) => Math.abs(candidate.y - localPoint.y) < Math.abs(best.y - localPoint.y) ? candidate : best, layout.lines[0]!);
+  for (const glyph of line.glyphs) {
+    if (localPoint.x < glyph.x + glyph.width / 2) return glyph.codePointIndex;
+  }
+  const last = line.glyphs[line.glyphs.length - 1];
+  return last ? last.codePointIndex + 1 : 0;
 }
 
 function gradientHandles(object: SceneObject): readonly { id: DragState['gradientHandle']; point: Vec2 }[] {
@@ -284,6 +295,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     renderScene(sceneCtx, camera, doc, sceneCanvas.width, sceneCanvas.height, {
       previewTransforms: dragPreview,
       previewStyles: stylePreview,
+      previewTexts: textEditSessionRef.current ? { [textEditSessionRef.current.targetObjectId]: textEditSessionRef.current.text } : undefined,
       quality: qualityPolicyRef.current?.quality,
     });
     renderOverlay(overlayCtx, camera, doc, selectedIds, overlayCanvas.width, overlayCanvas.height, {
@@ -630,6 +642,17 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     return result.worldPoint;
   };
 
+  const commitTextEdit = useCallback(() => {
+    const session = textEditSessionRef.current;
+    if (!session) return;
+    const object = doc.objects[session.targetObjectId];
+    if (object && (object.type === 'text' || object.type === 'text-frame') && session.text !== object.text) {
+      onExecuteCommand(new SetTextContentCommand(session.targetObjectId, session.text));
+    }
+    textEditSessionRef.current = null;
+    setTextEditVersion((version) => version + 1);
+  }, [doc, onExecuteCommand]);
+
   // Wheel zoom handler
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
@@ -671,25 +694,25 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
 
     // Close active text edit session if clicking outside
     if (textEditSessionRef.current && activeTool !== 'text') {
-      const session = textEditSessionRef.current;
-      const currentObj = doc.objects[session.targetObjectId] as TextObject | TextFrameObject | undefined;
-      if (currentObj && session.text !== currentObj.text) {
-        onExecuteCommand(new SetTextContentCommand(session.targetObjectId, session.text));
+      const activeSession = textEditSessionRef.current;
+      const activeObject = doc.objects[activeSession.targetObjectId];
+      const activeInverse = activeObject && (activeObject.type === 'text' || activeObject.type === 'text-frame') ? getInverseTransformMatrix(activeObject.transform) : null;
+      const activeHit = selectTool.pick({ document: doc, selection, screenPoint: screenPos, worldPoint: worldPos, zoom: camera.zoom }).hit;
+      if (activeObject && (activeObject.type === 'text' || activeObject.type === 'text-frame') && activeHit?.objectId === activeSession.targetObjectId && activeInverse) {
+        const caret = textCaretAt(activeObject, mat3TransformPoint(activeInverse, worldPos));
+        activeSession.setSelection(caret, caret);
+        dragStateRef.current = { type: 'text-select', startScreen: screenPos, startWorld: worldPos, currentWorld: worldPos, pointerId: e.pointerId, objectIds: [activeSession.targetObjectId], textAnchor: caret };
+        try { (e.target as HTMLElement).setPointerCapture(e.pointerId); } catch { /* synthetic pointer */ }
+        setTextEditVersion((version) => version + 1);
+        return;
       }
-      textEditSessionRef.current = null;
-      setTextEditVersion((v) => v + 1);
+      commitTextEdit();
     }
 
     if (activeTool === 'text') {
       try { (e.target as HTMLElement).setPointerCapture(e.pointerId); } catch { /* synthetic pointer */ }
       if (textEditSessionRef.current) {
-        const session = textEditSessionRef.current;
-        const currentObj = doc.objects[session.targetObjectId] as TextObject | TextFrameObject | undefined;
-        if (currentObj && session.text !== currentObj.text) {
-          onExecuteCommand(new SetTextContentCommand(session.targetObjectId, session.text));
-        }
-        textEditSessionRef.current = null;
-        setTextEditVersion((v) => v + 1);
+        commitTextEdit();
       }
       textToolRef.current!.pointerDown(worldPos);
       dragStateRef.current = {
@@ -970,6 +993,19 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       }
       drag.currentWorld = worldPos;
       renderLoopRef.current?.invalidate();
+      return;
+    }
+
+    if (drag?.type === 'text-select' && drag.objectIds?.[0] && drag.textAnchor !== undefined) {
+      const object = doc.objects[drag.objectIds[0]];
+      if (object && (object.type === 'text' || object.type === 'text-frame')) {
+        const inverse = getInverseTransformMatrix(object.transform);
+        if (inverse) {
+          const caret = textCaretAt(object, mat3TransformPoint(inverse, worldPos));
+          textEditSessionRef.current?.setSelection(drag.textAnchor, caret);
+          setTextEditVersion((version) => version + 1);
+        }
+      }
       return;
     }
 
@@ -1434,12 +1470,9 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
 
       if (textEditSessionRef.current) {
         const session = textEditSessionRef.current;
-        const currentObj = doc.objects[session.targetObjectId] as TextObject | TextFrameObject | undefined;
-
         if (e.key === 'Escape') {
           e.preventDefault();
-          textEditSessionRef.current = null;
-          setTextEditVersion((v) => v + 1);
+          commitTextEdit();
           renderLoopRef.current?.invalidate();
           return;
         }
@@ -1447,9 +1480,6 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         if (e.key === 'Enter') {
           e.preventDefault();
           session.insertText('\n');
-          if (currentObj) {
-            onExecuteCommand(new SetTextContentCommand(session.targetObjectId, session.text));
-          }
           setTextEditVersion((v) => v + 1);
           renderLoopRef.current?.invalidate();
           return;
@@ -1458,9 +1488,6 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         if (e.key === 'Backspace') {
           e.preventDefault();
           session.deleteBackward();
-          if (currentObj) {
-            onExecuteCommand(new SetTextContentCommand(session.targetObjectId, session.text));
-          }
           setTextEditVersion((v) => v + 1);
           renderLoopRef.current?.invalidate();
           return;
@@ -1469,9 +1496,6 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         if (e.key === 'Delete') {
           e.preventDefault();
           session.deleteForward();
-          if (currentObj) {
-            onExecuteCommand(new SetTextContentCommand(session.targetObjectId, session.text));
-          }
           setTextEditVersion((v) => v + 1);
           renderLoopRef.current?.invalidate();
           return;
@@ -1488,6 +1512,14 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         if (e.key === 'ArrowRight') {
           e.preventDefault();
           session.moveCaret('right', e.shiftKey);
+          setTextEditVersion((v) => v + 1);
+          renderLoopRef.current?.invalidate();
+          return;
+        }
+
+        if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+          e.preventDefault();
+          session.moveCaretVertical(e.key === 'ArrowUp' ? 'up' : 'down', e.shiftKey);
           setTextEditVersion((v) => v + 1);
           renderLoopRef.current?.invalidate();
           return;
@@ -1520,9 +1552,6 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
           e.preventDefault();
           session.insertText(e.key);
-          if (currentObj) {
-            onExecuteCommand(new SetTextContentCommand(session.targetObjectId, session.text));
-          }
           setTextEditVersion((v) => v + 1);
           renderLoopRef.current?.invalidate();
           return;
@@ -1629,7 +1658,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [selectedObjectId, selectedObjectIds, doc, onExecuteCommand, onSelectObject, activeTool, commitPen, commitPolyline]);
+  }, [selectedObjectId, selectedObjectIds, doc, onExecuteCommand, onSelectObject, activeTool, commitPen, commitPolyline, commitTextEdit]);
 
   const handleDoubleClick = (e: React.MouseEvent) => {
     const rect = containerRef.current?.getBoundingClientRect();
@@ -1648,6 +1677,12 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     if (hit && (doc.objects[hit.objectId]?.type === 'text' || doc.objects[hit.objectId]?.type === 'text-frame')) {
       const obj = doc.objects[hit.objectId] as TextObject | TextFrameObject;
       textEditSessionRef.current = new TextEditSession(obj.id, obj.text);
+      const inverse = getInverseTransformMatrix(obj.transform);
+      if (inverse) {
+        const caret = textCaretAt(obj, mat3TransformPoint(inverse, worldPos));
+        if (e.detail >= 3) textEditSessionRef.current.selectParagraphAt(caret);
+        else if (e.detail === 2) textEditSessionRef.current.selectWordAt(caret);
+      }
       setTextEditVersion((v) => v + 1);
       onSelectObject(obj.id);
       renderLoopRef.current?.invalidate();

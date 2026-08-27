@@ -1,108 +1,60 @@
 import type { PathNode, PathObject, TextObject, TextFrameObject } from '../model/types.js';
 import { computeArtisticTextLayout, computeTextFrameLayout } from './text-layout.js';
 
-/**
- * Generate vector path nodes for a given glyph at local coordinates (x, y).
- */
-function generateGlyphOutline(
-  char: string,
-  x: number,
-  y: number,
-  size: number,
-): PathNode[] {
-  const w = size * 0.55;
-  const h = size * 0.75;
-  const baselineY = y + size * 0.8;
-  const topY = baselineY - h;
+export type GlyphPathCommand =
+  | { readonly type: 'M'; readonly x: number; readonly y: number }
+  | { readonly type: 'L'; readonly x: number; readonly y: number }
+  | { readonly type: 'C'; readonly x1: number; readonly y1: number; readonly x2: number; readonly y2: number; readonly x: number; readonly y: number }
+  | { readonly type: 'Q'; readonly x1: number; readonly y1: number; readonly x: number; readonly y: number }
+  | { readonly type: 'Z' };
 
-  // Simple glyph vector outlines
-  switch (char.toUpperCase()) {
-    case 'O':
-    case '0': {
-      // Rounded loop
-      const cx = x + w / 2;
-      const cy = topY + h / 2;
-      const rx = w / 2;
-      const ry = h / 2;
-      const k = 0.5522847498;
-      return [
-        { id: `${x}_${y}_0`, point: { x: cx, y: topY }, inHandle: { x: cx - rx * k, y: topY }, outHandle: { x: cx + rx * k, y: topY }, kind: 'smooth' },
-        { id: `${x}_${y}_1`, point: { x: cx + rx, y: cy }, inHandle: { x: cx + rx, y: cy - ry * k }, outHandle: { x: cx + rx, y: cy + ry * k }, kind: 'smooth' },
-        { id: `${x}_${y}_2`, point: { x: cx, y: topY + h }, inHandle: { x: cx + rx * k, y: topY + h }, outHandle: { x: cx - rx * k, y: topY + h }, kind: 'smooth' },
-        { id: `${x}_${y}_3`, point: { x: cx - rx, y: cy }, inHandle: { x: cx - rx, y: cy + ry * k }, outHandle: { x: cx - rx, y: cy - ry * k }, kind: 'smooth' },
-      ];
-    }
-    case 'A': {
-      return [
-        { id: `${x}_${y}_0`, point: { x, y: baselineY }, inHandle: null, outHandle: null, kind: 'corner' },
-        { id: `${x}_${y}_1`, point: { x: x + w / 2, y: topY }, inHandle: null, outHandle: null, kind: 'corner' },
-        { id: `${x}_${y}_2`, point: { x: x + w, y: baselineY }, inHandle: null, outHandle: null, kind: 'corner' },
-        { id: `${x}_${y}_3`, point: { x: x + w * 0.8, y: baselineY - h * 0.3 }, inHandle: null, outHandle: null, kind: 'corner' },
-        { id: `${x}_${y}_4`, point: { x: x + w * 0.2, y: baselineY - h * 0.3 }, inHandle: null, outHandle: null, kind: 'corner' },
-      ];
-    }
-    case 'L': {
-      return [
-        { id: `${x}_${y}_0`, point: { x, y: topY }, inHandle: null, outHandle: null, kind: 'corner' },
-        { id: `${x}_${y}_1`, point: { x, y: baselineY }, inHandle: null, outHandle: null, kind: 'corner' },
-        { id: `${x}_${y}_2`, point: { x: x + w, y: baselineY }, inHandle: null, outHandle: null, kind: 'corner' },
-        { id: `${x}_${y}_3`, point: { x: x + w, y: baselineY - h * 0.15 }, inHandle: null, outHandle: null, kind: 'corner' },
-        { id: `${x}_${y}_4`, point: { x: x + w * 0.2, y: baselineY - h * 0.15 }, inHandle: null, outHandle: null, kind: 'corner' },
-        { id: `${x}_${y}_5`, point: { x: x + w * 0.2, y: topY }, inHandle: null, outHandle: null, kind: 'corner' },
-      ];
-    }
-    case 'T':
-    case 'I': {
-      return [
-        { id: `${x}_${y}_0`, point: { x: x + w * 0.35, y: topY }, inHandle: null, outHandle: null, kind: 'corner' },
-        { id: `${x}_${y}_1`, point: { x: x + w * 0.65, y: topY }, inHandle: null, outHandle: null, kind: 'corner' },
-        { id: `${x}_${y}_2`, point: { x: x + w * 0.65, y: baselineY }, inHandle: null, outHandle: null, kind: 'corner' },
-        { id: `${x}_${y}_3`, point: { x: x + w * 0.35, y: baselineY }, inHandle: null, outHandle: null, kind: 'corner' },
-      ];
-    }
-    default: {
-      // Default rectangular contour for general glyph
-      return [
-        { id: `${x}_${y}_0`, point: { x, y: topY }, inHandle: null, outHandle: null, kind: 'corner' },
-        { id: `${x}_${y}_1`, point: { x: x + w, y: topY }, inHandle: null, outHandle: null, kind: 'corner' },
-        { id: `${x}_${y}_2`, point: { x: x + w, y: baselineY }, inHandle: null, outHandle: null, kind: 'corner' },
-        { id: `${x}_${y}_3`, point: { x, y: baselineY }, inHandle: null, outHandle: null, kind: 'corner' },
-      ];
-    }
-  }
+export interface GlyphOutline {
+  readonly advanceWidth: number;
+  readonly commands: readonly GlyphPathCommand[];
+}
+
+/** Supplies real glyph contours while keeping font parsing outside core. */
+export interface FontOutlineProvider {
+  readonly unitsPerEm: number;
+  getGlyph(codePoint: number): GlyphOutline | null;
 }
 
 /**
- * Converts a TextObject or TextFrameObject to a vector PathObject (compound path of all glyphs).
+ * Converts text into real glyph contours supplied by an OpenType adapter.
+ * A provider is required so unsupported fonts cannot silently become fake geometry.
  */
 export function convertTextToOutlines(
   object: TextObject | TextFrameObject,
+  provider?: FontOutlineProvider,
 ): PathObject {
+  if (!provider || !Number.isFinite(provider.unitsPerEm) || provider.unitsPerEm <= 0) {
+    throw new Error('Font outline data is unavailable for this text object.');
+  }
+
   const layout = object.type === 'text'
     ? computeArtisticTextLayout(object)
     : computeTextFrameLayout(object);
-
-  const allGlyphLoops: PathNode[][] = [];
+  const contours: PathNode[][] = [];
+  let glyphIndex = 0;
 
   for (const line of layout.lines) {
     for (const glyph of line.glyphs) {
-      if (glyph.char.trim() === '') continue;
-      const nodes = generateGlyphOutline(glyph.char, glyph.x, line.y, object.fontSize);
-      if (nodes.length >= 3) {
-        allGlyphLoops.push(nodes);
-      }
+      const codePoint = glyph.char.codePointAt(0);
+      if (codePoint === undefined || glyph.char.trim() === '') continue;
+      const outline = provider.getGlyph(codePoint);
+      if (!outline) continue;
+      const scale = object.fontSize / provider.unitsPerEm;
+      const glyphContours = commandsToContours(outline.commands, glyph.x, line.baseline, scale, `glyph-${glyphIndex}`);
+      contours.push(...glyphContours);
+      glyphIndex += 1;
     }
   }
 
-  // If no glyphs found, create a fallback non-empty loop
-  const primaryLoop = allGlyphLoops[0] || [
-    { id: 'n0', point: { x: 0, y: 0 }, inHandle: null, outHandle: null, kind: 'corner' },
-    { id: 'n1', point: { x: object.fontSize, y: 0 }, inHandle: null, outHandle: null, kind: 'corner' },
-    { id: 'n2', point: { x: object.fontSize, y: object.fontSize }, inHandle: null, outHandle: null, kind: 'corner' },
-  ];
+  if (contours.length === 0) {
+    throw new Error(`No outline glyphs available for font '${object.fontFamily}'.`);
+  }
 
-  const compoundChildren = allGlyphLoops.slice(1);
-
+  const [nodes, ...compoundChildren] = contours;
   return {
     id: object.id,
     type: 'path',
@@ -112,9 +64,54 @@ export function convertTextToOutlines(
     locked: object.locked,
     transform: object.transform,
     style: object.style,
-    nodes: primaryLoop,
+    nodes: nodes!,
     closed: true,
     compoundChildren: compoundChildren.length > 0 ? compoundChildren : undefined,
     fillRule: 'evenodd',
   };
+}
+
+function commandsToContours(
+  commands: readonly GlyphPathCommand[],
+  originX: number,
+  baselineY: number,
+  scale: number,
+  idPrefix: string,
+): PathNode[][] {
+  const contours: PathNode[][] = [];
+  let current: PathNode[] = [];
+  let nodeIndex = 0;
+  const point = (x: number, y: number): { x: number; y: number } => ({ x: originX + x * scale, y: baselineY + y * scale });
+  const flush = (): void => {
+    if (current.length >= 3) contours.push(current);
+    current = [];
+  };
+
+  for (const command of commands) {
+    if (command.type === 'M') {
+      flush();
+      current.push({ id: `${idPrefix}-${nodeIndex++}`, point: point(command.x, command.y), inHandle: null, outHandle: null, kind: 'corner' });
+    } else if (command.type === 'L') {
+      if (current.length > 0) current.push({ id: `${idPrefix}-${nodeIndex++}`, point: point(command.x, command.y), inHandle: null, outHandle: null, kind: 'corner' });
+    } else if (command.type === 'C') {
+      if (current.length === 0) continue;
+      const previous = current[current.length - 1]!;
+      const endpoint = point(command.x, command.y);
+      current[current.length - 1] = { ...previous, outHandle: point(command.x1, command.y1) };
+      current.push({ id: `${idPrefix}-${nodeIndex++}`, point: endpoint, inHandle: point(command.x2, command.y2), outHandle: null, kind: 'smooth' });
+    } else if (command.type === 'Q') {
+      if (current.length === 0) continue;
+      const previous = current[current.length - 1]!;
+      const endpoint = point(command.x, command.y);
+      const control = point(command.x1, command.y1);
+      const cp1 = { x: previous.point.x + (control.x - previous.point.x) * (2 / 3), y: previous.point.y + (control.y - previous.point.y) * (2 / 3) };
+      const cp2 = { x: endpoint.x + (control.x - endpoint.x) * (2 / 3), y: endpoint.y + (control.y - endpoint.y) * (2 / 3) };
+      current[current.length - 1] = { ...previous, outHandle: cp1 };
+      current.push({ id: `${idPrefix}-${nodeIndex++}`, point: endpoint, inHandle: cp2, outHandle: null, kind: 'smooth' });
+    } else {
+      flush();
+    }
+  }
+  flush();
+  return contours;
 }

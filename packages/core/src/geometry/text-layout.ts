@@ -298,7 +298,7 @@ export function computeTextFrameLayout(object: TextFrameObject): TextLayoutResul
         text: lineText,
         x: columnX + lineIndent,
         y: currentColumnY,
-        width: naturalWidth,
+        width: isJustified && spaceIndices.length > 0 ? lineAvailableW : naturalWidth,
         height: lineSpacing,
         baseline: currentColumnY + object.fontSize,
         columnIndex: currentColumn,

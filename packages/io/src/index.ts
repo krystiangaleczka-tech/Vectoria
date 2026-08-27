@@ -7,3 +7,4 @@ export * from './svg/import.js';
 export * from './palettes/import.js';
 export * from './storage/palette-repository.js';
 export * from './fonts/font-service.js';
+export * from './fonts/open-type-font.js';

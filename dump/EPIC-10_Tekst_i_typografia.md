@@ -1,17 +1,17 @@
-# EPIC-10 Tekst i typografia — Podsumowanie i Dump
+# EPIC-10 Tekst i typografia — Podsumowanie i Dump (korekta audytu)
 
 ## Metadata
 
 - **Task**: EPIC-10: Tekst i typografia (`TEXT-001` – `TEXT-034`)
 - **Date**: 2026-08-27
 - **Branch**: master
-- **Scope**: Pełna implementacja narzędzi i modeli tekstu (Artistic Text, Paragraph Text Frame), silnika układu tekstu (word-wrap, multi-column, justowanie, listy, text-on-path), edycji bezpośredniej na canvasie (caret, zaznaczenia Unicode, double-click), renderingu Canvas/SVG, zarządzania czcionkami (Google Fonts, web fonts, inspekcja użytych fontów), wyszukiwania i zamiany tekstu, znaków specjalnych/emoji oraz konwersji tekstu na wektory.
+- **Scope**: Audyt i naprawa częściowej implementacji EPIC-10: realne glyph outlines, atomic inline edit, Unicode Replace All, caret/selection oraz status evidence. Pozostałe taski pozostają jawnie PARTIAL.
 
 ---
 
 ## State Before
 
-Wcześniejsza wersja Vectorii posiadała narzędzia do rysowania i edycji kształtów parametrycznych, krzywych Pen/Pencil/Brush, operacji boolowskich oraz stylów (kolory, gradienty, kontury). Brakowało obiektów domenowych reprezentujących tekst, silnika składu i zawijania wierszy, sesji interaktywnej edycji tekstu z poziomu viewportu canvasa, obsługi formatów typograficznych w schemacie Zod oraz eksportu/importu znaczników `<text>`, `<tspan>`, `<textPath>` w SVG.
+Ten dump opisuje bazową implementację EPIC-10. Audyt wykazał, że część funkcji była tylko API surface; status pozostaje PARTIAL do czasu domknięcia wszystkich tasków.
 
 ---
 
@@ -23,12 +23,12 @@ Wcześniejsza wersja Vectorii posiadała narzędzia do rysowania i edycji kszta�
    - Restrykcyjna walidacja niezmienników w `invariants.ts` (brak NaN/Infinity, minimalne dodatnie wymiary ramek, poprawne zakresy kolumn i rozmiarów czcionek).
 2. **Silnik składu tekstu i wektoryzacji**:
    - [`text-layout.ts`](file:///Users/krystiangaleczka/Downloads/Vectoria/packages/core/src/geometry/text-layout.ts) — pełny algorytm greedy word-wrap, obsługa wielu kolumn, justowania ze skalowaniem spacji, punktatorów list i precyzyjnego pozycjonowania glifów wzdłuż krzywych Béziera na podstawie długości łuku (Arc-Length parameterization).
-   - [`text-outlines.ts`](file:///Users/krystiangaleczka/Downloads/Vectoria/packages/core/src/geometry/text-outlines.ts) — konwerter zamieniający glify tekstu na wektorowe krzywe Béziera (`PathObject` ze strukturą węzłów i uchwytów).
+   - [`text-outlines.ts`](file:///Users/krystiangaleczka/Downloads/Vectoria/packages/core/src/geometry/text-outlines.ts) — konwerter mapujący realne kontury dostarczone przez `FontOutlineProvider` na compound `PathObject`; brak danych fontu kończy się kontrolowanym błędem.
 3. **Komendy i historia Undo/Redo**:
    - Atomowe komendy: `CreateTextObjectCommand`, `CreateTextFrameCommand`, `SetTextContentCommand`, `UpdateTextPropertiesCommand`, `SetTextOnPathCommand`, `ConvertTextToOutlinesCommand`, `BatchReplaceTextCommand`.
 4. **Interakcja i edycja na canvasie**:
    - `TextTool` — kliknięcie tworzy tekst artystyczny, przeciągnięcie tworzy ramkę akapitową.
-   - `TextEditSession` — w pełni bezpieczna dla wielobajtowych znaków Unicode (surrogate pairs/emojis) sesja edycji na canvasie, kursor migający w rAF (`performance.now() / 500 % 2`), zaznaczanie tekstu, obsługa klawiszy funkcyjnych (`Enter`, `Backspace`, `Delete`, strzałki, `Home`, `End`, `Ctrl+A`, `Escape`).
+    - `TextEditSession` — Unicode/code-point caret i selection z lokalnym draftem; commit tekstu jest jedną komendą po zakończeniu sesji.
    - Podwójne kliknięcie (`double-click`) na tekście natychmiast otwiera sesję edycji.
 5. **Renderer Canvas 2D**:
    - Rendering tekstu artystycznego i ramek tekstowych z uwzględnieniem stylów wypełnień (jednolite, gradienty liniowe/radialne), obrysów (grubość, kreskowanie), transformacji macierzowych i rotacji każdego glifu wzdłuż ścieżki.
@@ -36,7 +36,8 @@ Wcześniejsza wersja Vectorii posiadała narzędzia do rysowania i edycji kszta�
    - Zaktualizowany schemat `DocumentV1Schema` o obiekty tekstu.
    - Eksport SVG generujący semantyczne znaczniki `<text>`, `<tspan>` oraz `<textPath>`.
    - Import SVG parsujący elementy `<text>` i powiązania `<textPath>`.
-   - `FontService` ładujący i weryfikujący dostępność czcionek webowych i systemowych.
+    - `FontService` ładujący i weryfikujący dostępność czcionek webowych i systemowych.
+    - Adapter `opentype.js` mapujący realne kontury glifów do kontraktu core.
 7. **Interfejs użytkownika**:
    - Skrót `T` w toolbarze `ToolRail`.
    - Rozbudowana sekcja Typografii w `PropertiesPanel`.
@@ -49,7 +50,7 @@ Wcześniejsza wersja Vectorii posiadała narzędzia do rysowania i edycji kszta�
 
 - **`pnpm typecheck`**: ✅ 0 błędów we wszystkich 7 pakietach monorepo i aplikacji webowej
 - **`pnpm lint`**: ✅ 0 błędów i 0 ostrzeżeń
-- **`pnpm test`**: ✅ 250 testów jednostkowych i integracyjnych zaliczonych (40 plików testowych)
+- **Targeted Vitest**: ✅ text commands/outlines i OpenType adapter (`11/11`)
 - **`pnpm build`**: ✅ Zbudowano aplikację webową (1.29s)
 - **`pnpm --filter @vectoria/web test:e2e`**: ✅ 16/16 testów Playwright E2E zaliczonych
 
@@ -65,7 +66,7 @@ Wcześniejsza wersja Vectorii posiadała narzędzia do rysowania i edycji kszta�
 | `packages/core/src/model/bounds.ts` | Brak obliczania obwiedni tekstu | Dodano obliczanie bounds dla `text` i `text-frame` | Prawidłowe zaznaczanie, transformacje i hit-testing |
 | `packages/core/src/model/factory.ts` | Brak kreatorów obiektów tekstu | Dodano `createTextObject` oraz `createTextFrameObject` | Fabryka poprawnych instancji obiektów tekstu |
 | `packages/core/src/geometry/text-layout.ts` | Brak pliku | Zaimplementowano silnik składu tekstu, zawijania wierszy, kolumn, list i text-on-path | Wyliczanie pozycji glifów na potrzeby Canvas i SVG |
-| `packages/core/src/geometry/text-outlines.ts` | Brak pliku | Zaimplementowano konwerter zamiany tekstu na wektory `PathObject` | Realizacja funkcji Convert Text to Outlines (TEXT-024) |
+| `packages/core/src/geometry/text-outlines.ts` | Fałszywe kontury znaków | Wymaga `FontOutlineProvider`, mapuje M/L/C/Q/Z do compound `PathObject` i odrzuca brak danych | Brak placeholder geometry |
 | `packages/core/src/commands/text-commands.ts` | Brak pliku | Zaimplementowano 7 komend Undo/Redo dla tekstu | Deterministyczna mutacja dokumentu z pełnym Undo/Redo |
 | `packages/core/src/commands/index.ts` | Brak eksportu komend tekstu | Wyeksportowano komendy typograficzne | Dostępność komend w innych warstwach |
 | `packages/core/src/index.ts` | Brak eksportu modułów tekstu | Wyeksportowano typy, geometrie i komendy typograficzne | Publiczne API pakietu `@vectoria/core` |
@@ -100,14 +101,14 @@ Wcześniejsza wersja Vectorii posiadała narzędzia do rysowania i edycji kszta�
 | `apps/web/src/features/canvas/CanvasViewport.tsx` | Brak obsługi sesji edycji tekstu | Zintegrowano TextTool, TextEditSession, double-click, kursor i zaznaczanie | Pełna interaktywna edycja bezpośrednia na canvasie |
 | `apps/web/src/app/EditorApp.tsx` | Brak stanu i komend typografii | Dodano stan okien dialogowych, handlery komend i skróty `T`, `Ctrl+F` | Centralne zarządzanie stanem aplikacji webowej |
 | `apps/web/e2e/editor.spec.ts` | Brak testów E2E dla tekstu | Dodano testy E2E dla tworzenia tekstu, edycji, Properties, outlines i Find & Replace | Automatyczna weryfikacja scenariuszy użytkownika |
-| `BACKLOG.md` | Wszystkie pozycje `TEXT-001` – `TEXT-034` odznaczone jako `[ ]` | Odznaczono wszystkie pozycje `TEXT-001` – `TEXT-034` jako `[x]` | Zaktualizowano stan realizacji backlogu |
-| `EPIC-10_atomowe_taski.md` | Brak pliku | Utworzono szczegółową dekompozycję epicu na atomowe taski | Dokumentacja wdrożeniowa |
+| `BACKLOG.md` | Legacy status marked TEXT-001–034 as done | Reset incomplete claims to `[ ]`; kept TEXT-026 verified and EPIC-10 status `PARTIAL` | Prevent false epic completion |
+| `EPIC-10_atomowe_taski.md` | Istniejący plik tasków | Zachowano jako źródło acceptance criteria; statusy wymagają audytu per task | Dokumentacja wdrożeniowa |
 
 ---
 
 ## Limitations
 
-1. Zaawansowane osie OpenType w Variable Fonts bazują na standardowych właściwościach CSS font-variation-settings; dla niestandardowych osi wymagane jest załadowanie pliku w formacie woff2/ttf wspieranego przez przeglądarkę.
+1. Adapter `opentype.js` działa dla dostarczonych font bytes; aplikacja dostarcza obecnie bundled Inter, inne fonty wymagają matching font data.
 2. Dostęp do lokalnych czcionek systemowych opiera się na `window.queryLocalFonts()` (Local Font Access API), które jest dostępne w przeglądarkach Chromium po wyrażeniu zgody przez użytkownika; w pozostałych przeglądarkach system automatycznie stosuje czcionki systemowe i webowe.
 
 ---
@@ -115,3 +116,45 @@ Wcześniejsza wersja Vectorii posiadała narzędzia do rysowania i edycji kszta�
 ## Next Safe Step
 
 Przejście do realizacji **EPIC-11: Warstwy, obiekty i assety** (`LAYER-001` – `LAYER-015`), w tym zaawansowane zarządzanie hierarchią grup, blokowanie atrybutów, widoki szablonowe i izolacja obiektów.
+
+---
+
+## Complete Change Register
+
+Records below cover current worktree files not fully described in table above. Changes marked `pre-existing` were present before this dump/commit pass and are included because user requested commit of current worktree.
+
+| Path | Before | After | Purpose |
+|---|---|---|---|
+| `AGENTS.md` | Existing agent rules | Added non-negotiable engineering rules, task protocol, DoD, adversarial review and epic completion rule | Prevent placeholder implementations and false DONE status |
+| `apps/web/package.json` | No bundled font dependency | Added `@fontsource/inter@5.3.0` | Supply local font bytes for real Inter outlines |
+| `apps/web/src/assets.d.ts` | Missing font asset declaration | Added `.woff` module declaration | Type-safe Vite font asset import |
+| `apps/web/src/app/EditorApp.tsx` | Text conversion called without font data | Loads bundled Inter font bytes and passes OpenType provider; reports unsupported fonts | Connect UI conversion to real glyph outlines |
+| `apps/web/src/features/canvas/CanvasViewport.tsx` | Text draft/selection workflow incomplete | Renders draft preview, supports text selection drag and one edit commit | Complete inline editing behavior |
+| `apps/web/src/features/dialogs/FindReplaceDialog.tsx` | Match indexes used UTF-16 offsets | Converts match positions to Unicode code-point indexes | Safe Unicode find/replace |
+| `apps/web/src/features/panels/LayersPanel.tsx` | `pre-existing` EPIC-11 panel changes | Kept current layer/assets UI changes | Preserve concurrent user work |
+| `apps/web/src/features/panels/RightDock.tsx` | `pre-existing` EPIC-11 dock changes | Kept current dock integration | Preserve concurrent user work |
+| `apps/web/src/features/topbar/AppMenuBar.tsx` | `pre-existing` EPIC-11 menu changes | Kept current menu changes | Preserve concurrent user work |
+| `apps/web/src/features/topbar/TopBar.tsx` | `pre-existing` EPIC-11 topbar changes | Kept current topbar changes | Preserve concurrent user work |
+| `apps/web/src/app/editor.css` | `pre-existing` EPIC-11 styles | Kept current styles; trailing EOF blank line remains | Preserve concurrent user work |
+| `apps/web/e2e/editor.spec.ts` | `pre-existing` EPIC-11/text tests | Kept current tests | Preserve concurrent user work |
+| `packages/core/src/commands/text-commands.ts` | Replace used first occurrence and dropped runs | Replace All handles string/non-global regex, Unicode indexes and run preservation; typography updates validate inputs | Correct atomic text mutations |
+| `packages/core/src/geometry/text-layout.ts` | Justified line width reported natural width | Reports final available width for justified lines | Consistent layout metrics |
+| `packages/core/src/geometry/text-outlines.ts` | Hardcoded glyph figures and rectangles | Requires real `FontOutlineProvider`, maps glyph contours to PathObject and rejects missing data | Eliminate fake outlines |
+| `packages/core/test/text-commands.test.ts` | No Replace All/runs regression | Added all-occurrence and rich-text run test | Semantic command coverage |
+| `packages/core/test/text-outlines.test.ts` | Tests accepted fake generator | Added provider-driven contours, holes, curves and missing-provider rejection | Catch fake outline implementation |
+| `packages/editor-engine/src/interaction/text-edit-session.ts` | Horizontal caret only | Added vertical code-point navigation | Complete caret behavior |
+| `packages/editor-engine/test/text-edit-session.test.ts` | No vertical caret test | Added multi-line caret test | Caret regression coverage |
+| `packages/io/package.json` | No OpenType parser | Added `opentype.js@2.0.0` | Parse real font bytes outside core |
+| `packages/io/src/fonts/open-type-font.ts` | Missing | Added OpenType-to-core glyph contour adapter | IO/domain boundary for font outlines |
+| `packages/io/src/fonts/opentype-js.d.ts` | Missing declaration | Added typed unknown module boundary | Avoid untyped dependency import |
+| `packages/io/test/open-type-font.test.ts` | Missing | Added generated binary OpenType fixture test | Verify actual parser output |
+| `pnpm-lock.yaml` | Dependencies before OpenType/fontsource | Locked OpenType and Inter packages | Reproducible dependency installation |
+| `docs/adr/ADR_011_TEXT_AND_TYPOGRAPHY.md` | No provider decision | Documented real font outline provider and controlled failure | Record contract change |
+| `progress_log/2026-08-27_epic-10.md` | Claimed full completion | Corrected to `PARTIAL`, documented actual evidence and limits | Honest progress reporting |
+| `dump/EPIC-10_Tekst_i_typografia.md` | Claimed fake outlines/full completion | Corrected status, validation and current implementation register | Audit trail |
+| `EPIC-11_atomowe_taski.md` | `pre-existing` untracked task file | Included unchanged | Preserve concurrent user work |
+| `docs/adr/ADR_012_LAYER_SYSTEM_AND_ASSETS.md` | `pre-existing` untracked ADR | Included unchanged | Preserve concurrent user work |
+| `progress_log/2026-08-27_epic-11.md` | `pre-existing` untracked progress log | Included unchanged | Preserve concurrent user work |
+| `packages/core/src/commands/layer-commands.ts` | `pre-existing` untracked EPIC-11 commands | Included unchanged | Preserve concurrent user work |
+| `packages/core/test/layer-commands.test.ts` | `pre-existing` untracked EPIC-11 tests | Included unchanged | Preserve concurrent user work |
+| `apps/web/src/features/panels/AssetsPanel.tsx` | `pre-existing` untracked panel | Included unchanged | Preserve concurrent user work |

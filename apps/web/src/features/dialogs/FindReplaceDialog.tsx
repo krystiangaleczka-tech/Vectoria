@@ -37,7 +37,7 @@ export const FindReplaceDialog: React.FC<FindReplaceDialogProps> = ({
     if (!searchTerm) return [];
 
     const results: MatchItem[] = [];
-    const flags = matchCase ? 'g' : 'gi';
+    const flags = matchCase ? 'gu' : 'giu';
     const escaped = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const patternStr = wholeWord ? `\\b${escaped}\\b` : escaped;
     let regex: RegExp;
@@ -51,13 +51,16 @@ export const FindReplaceDialog: React.FC<FindReplaceDialogProps> = ({
       if ((obj.type === 'text' || obj.type === 'text-frame') && obj.text) {
         let match: RegExpExecArray | null;
         while ((match = regex.exec(obj.text)) !== null) {
+          const startIndex = Array.from(obj.text.slice(0, match.index)).length;
+          const matchLength = Array.from(match[0]).length;
           results.push({
             objectId: obj.id,
             objectName: obj.name,
-            startIndex: match.index,
-            length: match[0].length,
+            startIndex,
+            length: matchLength,
             text: obj.text,
           });
+          if (match[0].length === 0) regex.lastIndex += 1;
         }
       }
     }
@@ -89,9 +92,8 @@ export const FindReplaceDialog: React.FC<FindReplaceDialogProps> = ({
 
   const handleReplace = () => {
     if (!currentMatch) return;
-    const before = currentMatch.text.slice(0, currentMatch.startIndex);
-    const after = currentMatch.text.slice(currentMatch.startIndex + currentMatch.length);
-    const updated = before + replaceTerm + after;
+    const codePoints = Array.from(currentMatch.text);
+    const updated = [...codePoints.slice(0, currentMatch.startIndex), ...Array.from(replaceTerm), ...codePoints.slice(currentMatch.startIndex + currentMatch.length)].join('');
     onReplaceMatch?.(currentMatch.objectId, updated);
   };
 

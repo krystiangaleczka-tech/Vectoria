@@ -32,7 +32,14 @@ Do reprezentacji lokalnych różnic stylów (baseline shift, lokalna zmiana wiel
 ### 5. Deterministyczne Outlines
 Komenda `ConvertTextToOutlinesCommand` zastępuje obiekt tekstowy w dokumencie nowym obiektem `PathObject` z wektorowymi konturami liter (`nodes` + `compoundChildren`) i zachowuje pełne `undo()` odtwarzające oryginalny obiekt `text`/`text-frame`.
 
+### 6. Źródło konturów fontu
+Core nie generuje przybliżonych figur znaków. `convertTextToOutlines` wymaga
+`FontOutlineProvider`, który dostarcza rzeczywiste komendy M/L/C/Q/Z oraz
+`unitsPerEm`. Parsowanie binarnych fontów pozostaje w warstwie IO przez
+`opentype.js`; brak danych dla używanego fontu kończy się kontrolowanym błędem.
+
 ## Konsekwencje
 - Renderer Canvas 2D i silnik eksportu SVG implementują dedykowane mapowanie dla obu typów.
 - Obliczanie granic `getObjectBounds` dla tekstu wykorzystuje pomiary metryk tekstu (`measureText`).
 - Każda modyfikacja właściwości typograficznych przechodzi przez komendy `UpdateTextPropertiesCommand` z pełnym wsparciem Undo/Redo.
+- Aplikacja dostarcza bundled Inter jako lokalne źródło outline data; inne fonty wymagają osobnego importu danych fontu.

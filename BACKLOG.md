@@ -418,27 +418,27 @@ Wymóg stopniowego rozszerzania artboardu o 10% wynika bezpośrednio z potrzeby 
 
 ## EPIC-11: Warstwy, obiekty i assety
 
-- [ ] **LAYER-001** Dodać panel Layers
-- [ ] **LAYER-002** Tworzyć warstwy
-- [ ] **LAYER-003** Usuwać warstwy
-- [ ] **LAYER-004** Zmieniać nazwę warstwy
-- [ ] **LAYER-005** Dodać kolor etykiety warstwy
-- [ ] **LAYER-006** Obsłużyć grupy i podgrupy bez sztucznego limitu głębokości
-- [ ] **LAYER-007** Dodać drag-and-drop porządku warstw
-- [ ] **LAYER-008** Dodać widoczność warstwy
-- [ ] **LAYER-009** Dodać blokadę warstwy
-- [ ] **LAYER-010** Dodać blokadę wybranych atrybutów obiektu
-- [ ] **LAYER-011** Zaznaczać wszystkie elementy warstwy
-- [ ] **LAYER-012** Przenosić obiekty między warstwami
-- [ ] **LAYER-013** Dodać Template Layer
-- [ ] **LAYER-014** Dodać Outline View
-- [ ] **LAYER-015** Dodać Solo Mode
-- [ ] **LAYER-016** Dodać wyszukiwarkę w warstwach
-- [ ] **LAYER-017** Dodać filtrowanie warstw
-- [ ] **LAYER-018** Zbudować panel Assets
-- [ ] **LAYER-019** Przechowywać symbole w Assets
-- [ ] **LAYER-020** Przechowywać komponenty w Assets
-- [ ] **LAYER-021** Przechowywać style i brand assets w Assets
+- [x] **LAYER-001** Dodać panel Layers
+- [x] **LAYER-002** Tworzyć warstwy
+- [x] **LAYER-003** Usuwać warstwy
+- [x] **LAYER-004** Zmieniać nazwę warstwy
+- [x] **LAYER-005** Dodać kolor etykiety warstwy
+- [x] **LAYER-006** Obsłużyć grupy i podgrupy bez sztucznego limitu głębokości
+- [x] **LAYER-007** Dodać drag-and-drop porządku warstw
+- [x] **LAYER-008** Dodać widoczność warstwy
+- [x] **LAYER-009** Dodać blokadę warstwy
+- [x] **LAYER-010** Dodać blokadę wybranych atrybutów obiektu
+- [x] **LAYER-011** Zaznaczać wszystkie elementy warstwy
+- [x] **LAYER-012** Przenosić obiekty między warstwami
+- [x] **LAYER-013** Dodać Template Layer
+- [x] **LAYER-014** Dodać Outline View
+- [x] **LAYER-015** Dodać Solo Mode
+- [x] **LAYER-016** Dodać wyszukiwarkę w warstwach
+- [x] **LAYER-017** Dodać filtrowanie warstw
+- [x] **LAYER-018** Zbudować panel Assets
+- [x] **LAYER-019** Przechowywać symbole w Assets
+- [x] **LAYER-020** Przechowywać komponenty w Assets
+- [x] **LAYER-021** Przechowywać style i brand assets w Assets
 
 ## EPIC-12: Obrazy i zasoby zewnętrzne
 

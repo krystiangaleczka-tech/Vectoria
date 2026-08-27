@@ -113,6 +113,8 @@ import type { DockPanel } from '../features/panels/RightDock.js';
 import type { PathAction } from '../features/panels/PropertiesPanel.js';
 import type { GeometryAction } from '../features/properties/GeometryProperties.js';
 import { Button } from '@vectoria/ui';
+import interOutlineFontUrl from '@fontsource/inter/files/inter-latin-400-normal.woff';
+import { createOpenTypeFontOutlineProvider } from '@vectoria/io';
 
 function isMacPlatform(): boolean {
   const platform = (navigator as { userAgentData?: { platform?: string } }).userAgentData?.platform
@@ -153,6 +155,9 @@ export const EditorApp: React.FC = () => {
   const [freehandSettings, setFreehandSettings] = useState<FreehandSettings>({ smoothing: 20, accuracy: 75, width: 4, pressure: true, cap: 'round', join: 'round', eraserRadius: 12 });
   const [styleSampleTarget, setStyleSampleTarget] = useState<import('@vectoria/editor-engine').StyleSampleTarget>('style');
   const [styleSampleTolerance, setStyleSampleTolerance] = useState(0);
+  const outlineProviderRef = useRef<import('@vectoria/core').FontOutlineProvider | null>(null);
+  const outlineProviderPromiseRef = useRef<Promise<import('@vectoria/core').FontOutlineProvider> | null>(null);
+  const [textActionError, setTextActionError] = useState<string | null>(null);
   const [geometryPreview, setGeometryPreview] = useState<GeometryPreview | null>(null);
   const [cleanupSelectedFindingIds, setCleanupSelectedFindingIds] = useState<readonly string[]>([]);
   const [destructiveGeometryConfirmOpen, setDestructiveGeometryConfirmOpen] = useState(false);
@@ -925,8 +930,27 @@ export const EditorApp: React.FC = () => {
   }, [handleExecuteCommand]);
 
   const handleConvertToOutlines = useCallback((id: ObjectId) => {
-    handleExecuteCommand(new ConvertTextToOutlinesCommand(id));
-  }, [handleExecuteCommand]);
+    const object = doc?.objects[id];
+    if (!object || (object.type !== 'text' && object.type !== 'text-frame')) return;
+    if (!/^inter(?:,|$)/i.test(object.fontFamily.trim())) {
+      setTextActionError(`Outline conversion unavailable for font '${object.fontFamily}'. Import matching font data first.`);
+      return;
+    }
+    const loadProvider = outlineProviderRef.current
+      ? Promise.resolve(outlineProviderRef.current)
+      : outlineProviderPromiseRef.current ?? (outlineProviderPromiseRef.current = fetch(interOutlineFontUrl).then((response) => {
+        if (!response.ok) throw new Error('Unable to load bundled Inter font data.');
+        return response.arrayBuffer();
+      }).then((data) => {
+        const provider = createOpenTypeFontOutlineProvider(data);
+        outlineProviderRef.current = provider;
+        return provider;
+      }));
+    void loadProvider.then((provider) => {
+      handleExecuteCommand(new ConvertTextToOutlinesCommand(id, provider));
+      setTextActionError(null);
+    }).catch((error) => setTextActionError(error instanceof Error ? error.message : 'Text outline conversion failed.'));
+  }, [doc, handleExecuteCommand]);
 
   const handleSetTextOnPath = useCallback((id: ObjectId, pathId?: ObjectId) => {
     handleExecuteCommand(new SetTextOnPathCommand(id, pathId));
@@ -937,7 +961,7 @@ export const EditorApp: React.FC = () => {
     const textObjectIds = Object.values(doc.objects)
       .filter((obj) => obj.type === 'text' || obj.type === 'text-frame')
       .map((obj) => obj.id);
-    const flags = options.matchCase ? 'g' : 'gi';
+    const flags = options.matchCase ? 'gu' : 'giu';
     const escaped = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const regex = options.wholeWord ? new RegExp(`\\b${escaped}\\b`, flags) : new RegExp(escaped, flags);
     handleExecuteCommand(new BatchReplaceTextCommand(textObjectIds, regex, replace));
@@ -1220,6 +1244,7 @@ export const EditorApp: React.FC = () => {
       {bootstrapState.status === 'recovery-available' && (
         <RecoveryBanner message="Wykryto dokument po niezamkniętej sesji." details="Wybierz, czy zachować ostatni autosave, czy przywrócić ostatnią poprawną wersję." onRestore={handleRestoreRecovery} onDiscard={handleDiscardRecovery} />
       )}
+      {textActionError && <div className="recovery-banner" role="alert"><span>{textActionError}</span><button type="button" onClick={() => setTextActionError(null)}>Dismiss</button></div>}
 
       <ContextualControlBar
         document={doc}

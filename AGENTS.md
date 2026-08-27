@@ -558,3 +558,311 @@ Jeśli nie możesz wypełnić punktów 1-3 bez spekulacji — powiedz wprost:
 > "Nie jestem pewien przyczyny. Oto moje hipotezy: [A, B]. Proponuję zweryfikować [konkretny test/log]."
 
 **Nigdy nie pisz fixa "na próbę".** Nigdy nie mów "spróbujmy czy to pomoże".
+
+---
+
+## 12. NON-NEGOTIABLE ENGINEERING RULES
+
+### 12.1. Never implement a feature by name only
+
+Do NOT consider a feature implemented merely because:
+
+- a type/interface exists;
+- a command exists;
+- a UI button exists;
+- a function with the expected name exists;
+- a property exists in the model;
+- a test only verifies that the function can be called.
+
+A feature is DONE only when complete behavior works end-to-end:
+
+```text
+REQUIREMENT
+→ DOMAIN MODEL
+→ COMMAND / MUTATION
+→ ACTUAL ALGORITHM
+→ RENDERER / ENGINE
+→ UI
+→ UNDO / REDO
+→ TEST
+```
+
+If one element is missing, task status is PARTIAL, not DONE.
+
+### 12.2. Never fake a complex implementation
+
+NEVER replace required real algorithm with:
+
+- hardcoded shapes;
+- placeholder geometry;
+- approximations;
+- magic constants;
+- canned examples;
+- mock data;
+- simplified behavior that only works for test case.
+
+Examples:
+
+BAD:
+
+- Text → Outlines implemented using rectangles/circles for letters.
+- Font metrics approximated with `fontSize * 0.5`.
+- Emoji support implemented using hardcoded list while claiming Unicode support.
+- Variable fonts implemented by storing `variableAxes` without applying them.
+
+GOOD:
+
+Use real underlying representation/algorithm required by feature.
+
+If required technology or library is missing, STOP and report:
+`Implementation requires X. It is currently unavailable.`
+
+Do not invent fake substitute.
+
+### 12.3. Requirements are behavioral, not structural
+
+For every task identify:
+
+1. WHAT must user be able to do?
+2. WHAT should happen internally?
+3. WHAT data must change?
+4. WHAT must be rendered?
+5. WHAT happens on Undo?
+6. WHAT happens on Redo?
+7. WHAT are edge cases?
+
+Do not equate property existence with feature behavior.
+
+### 12.4. Verify actual behavior
+
+Before marking task DONE, create at least one test proving actual behavior.
+
+Test MUST fail if feature is replaced by fake/stub implementation.
+
+Example for Text → Outlines:
+
+```text
+Insufficient:
+expect(result.type).toBe("path")
+
+Required:
+- output is a PathObject;
+- geometry contains actual glyph contours;
+- different fonts produce different geometry;
+- holes/compound glyphs are preserved;
+- Unicode glyphs work;
+- Undo restores original TextObject.
+```
+
+### 12.5. Tests verify semantics, not implementation existence
+
+BAD:
+
+```ts
+expect(generateGlyphOutline('A')).toBeDefined();
+```
+
+GOOD:
+
+```ts
+expect(convertTextToOutlines('Hello', arialGeometry))
+  .not.toEqual(convertTextToOutlines('Hello', timesGeometry));
+```
+
+Tests must detect fake implementations.
+
+### 12.6. No DONE without evidence
+
+Every completed task must include:
+
+- files changed;
+- implementation summary;
+- tests added or updated;
+- test command;
+- actual test result;
+- known limitations.
+
+Use this format:
+
+```text
+TASK: TEXT-024
+STATUS: DONE
+
+Implementation:
+- ...
+
+Tests:
+- ...
+
+Verification:
+- `pnpm test ...`
+- PASS: 12/12
+
+Known limitations:
+- none
+```
+
+If verification was not performed:
+
+```text
+STATUS: PARTIAL
+REASON: verification not performed
+```
+
+Never claim PASS based only on code inspection.
+
+### 12.7. Use existing architecture
+
+Before implementing:
+
+1. inspect existing model;
+2. inspect existing commands;
+3. inspect renderer;
+4. inspect tests;
+5. inspect related features.
+
+Do not create parallel architecture when existing abstraction solves problem.
+
+For mutations, ALL document mutations MUST go through Commands.
+
+For text, ALL layout calculations must have one source of truth shared by:
+
+- renderer;
+- caret;
+- selection;
+- hit testing;
+- bounds;
+- export.
+
+### 12.8. No silent scope reduction
+
+Do not reinterpret:
+
+- `real glyph outlines` as approximate glyph shapes;
+- `replace all` as replace first;
+- `emoji picker` as a list of 20 emoji.
+
+If task cannot be fully implemented within current architecture:
+
+- explain why;
+- propose smallest correct architectural change;
+- implement that change.
+
+### 12.9. Edge cases are part of feature
+
+For text functionality always consider:
+
+- Unicode code points;
+- surrogate pairs;
+- combining marks;
+- emoji sequences;
+- CJK;
+- RTL where applicable;
+- empty strings;
+- long words;
+- missing fonts;
+- font loading delays;
+- very large text;
+- zero and negative values;
+- undo/redo;
+- copy/paste.
+
+Do not assume ASCII-only text.
+
+### 12.10. Hardcoded data requires explicit justification
+
+Do not hardcode the following when requirement expects real or dynamic support:
+
+- Unicode databases;
+- font metadata;
+- glyph geometry;
+- font metrics;
+- supported variable axes;
+- emoji catalogs.
+
+If hardcoded data is necessary, document:
+
+- why;
+- source;
+- scope;
+- limitations.
+
+## 13. TASK EXECUTION PROTOCOL
+
+Before coding a task:
+
+1. Read task completely.
+2. Identify acceptance criteria.
+3. Search repository for existing implementation.
+4. Determine what is already implemented.
+5. Identify missing pieces.
+6. Write short implementation plan.
+7. Implement.
+8. Add tests.
+9. Run tests.
+10. Inspect actual result.
+11. Only then mark DONE.
+
+After implementation ask:
+
+> Could this implementation pass semantic test designed specifically to catch fake implementation?
+
+If NO, task is not DONE. Strengthen tests or mark task PARTIAL.
+
+## 14. DEFINITION OF DONE
+
+A task is DONE only if all statements are true:
+
+- [ ] Requirement is fully implemented.
+- [ ] No placeholder or fake implementation exists.
+- [ ] Existing architecture is respected.
+- [ ] User-visible behavior works.
+- [ ] Undo works.
+- [ ] Redo works.
+- [ ] Edge cases are handled.
+- [ ] Tests verify behavior.
+- [ ] Tests were actually executed.
+- [ ] Build and typecheck pass.
+- [ ] No known critical limitation remains.
+
+Otherwise use `PARTIAL` or `BLOCKED`. Never use DONE for partial implementation.
+
+## 15. MANDATORY SELF-REVIEW
+
+Before declaring task DONE, attempt to disprove own implementation.
+
+For each requirement ask:
+
+1. What is easiest fake implementation that would appear to work?
+2. Would my tests catch that fake implementation?
+3. What real-world input would break my implementation?
+4. Am I implementing requirement or merely its API surface?
+5. Did I verify result using actual output?
+
+If fake implementation could pass tests, tests are insufficient and MUST be strengthened.
+
+## 16. EPIC COMPLETION RULE
+
+An EPIC cannot be marked complete based on percentage of tasks with files,
+functions or types implemented.
+
+Each task must have:
+
+```text
+TASK ID
+→ ACCEPTANCE CRITERIA
+→ IMPLEMENTATION
+→ TEST
+→ VERIFICATION
+```
+
+EPIC status is DONE only when ALL tasks are DONE.
+
+If:
+
+- 30/34 tasks are DONE;
+- 4/34 tasks are PARTIAL;
+
+then EPIC status MUST be PARTIAL.
+
+Never report `34/34` when any acceptance criterion is missing.

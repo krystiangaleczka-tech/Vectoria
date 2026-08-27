@@ -115,6 +115,34 @@ export class TextEditSession {
     this.caretIndex = nextCaret;
   }
 
+  /** Move caret between newline-delimited lines while preserving its code-point column. */
+  moveCaretVertical(direction: 'up' | 'down', extendSelection = false): void {
+    const codePoints = getCodePoints(this.textDraft);
+    const lines: Array<{ start: number; end: number }> = [];
+    let start = 0;
+    for (let index = 0; index <= codePoints.length; index += 1) {
+      if (index === codePoints.length || codePoints[index] === '\n') {
+        lines.push({ start, end: index });
+        start = index + 1;
+      }
+    }
+    const lineIndex = lines.findIndex((line) => this.caretIndex >= line.start && this.caretIndex <= line.end);
+    if (lineIndex < 0) return;
+    const targetIndex = direction === 'up' ? lineIndex - 1 : lineIndex + 1;
+    const target = lines[targetIndex];
+    if (!target) return;
+    const current = lines[lineIndex]!;
+    const column = this.caretIndex - current.start;
+    const nextCaret = Math.min(target.end, target.start + column);
+    if (extendSelection) {
+      const anchor = this.selectionRange ? this.selectionRange[0] : this.caretIndex;
+      this.selectionRange = anchor === nextCaret ? null : [anchor, nextCaret];
+    } else {
+      this.selectionRange = null;
+    }
+    this.caretIndex = nextCaret;
+  }
+
   setSelection(startCp: number, endCp: number): void {
     const total = this.totalCodePoints;
     const clampedStart = Math.max(0, Math.min(total, startCp));

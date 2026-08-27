@@ -13,6 +13,7 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@fontsource/inter": "5.3.0",
     "@vectoria/core": "workspace:*",
     "@vectoria/editor-engine": "workspace:*",
     "@vectoria/io": "workspace:*",

@@ -46,4 +46,14 @@ describe('TextEditSession', () => {
     session.selectParagraphAt(20); // inside 'Second line.'
     expect(session.getSelectedText()).toBe('Second line.');
   });
+
+  it('moves caret vertically while preserving code-point column', () => {
+    const session = new TextEditSession('obj-1', 'A\nWW\n😀');
+    session.moveCaret('home');
+    session.moveCaret('right');
+    session.moveCaretVertical('down');
+    expect(session.caret).toBe(3);
+    session.moveCaretVertical('down');
+    expect(session.caret).toBe(6);
+  });
 });

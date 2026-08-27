@@ -108,4 +108,17 @@ describe('Text Commands & Undo/Redo', () => {
     expect((docUndone.objects['t1'] as typeof t1).text).toBe('Hello Foo');
     expect((docUndone.objects['t2'] as typeof t2).text).toBe('Foo Bar');
   });
+
+  it('replaces every string occurrence and preserves rich-text runs', () => {
+    const doc = createDefaultDocument();
+    const textObj = createTextObject('t-runs', doc.activeLayerId, 'foo foo', {
+      runs: [{ start: 0, length: 7, fontWeight: 'bold' }],
+    });
+    const docWithText = { ...doc, objects: { ...doc.objects, [textObj.id]: textObj } };
+    const command = new BatchReplaceTextCommand([textObj.id], 'foo', 'bar');
+    const replaced = command.execute(docWithText);
+    expect((replaced.objects[textObj.id] as typeof textObj).text).toBe('bar bar');
+    expect((replaced.objects[textObj.id] as typeof textObj).runs).toEqual([{ start: 0, length: 7, fontWeight: 'bold' }]);
+    expect((command.undo(replaced).objects[textObj.id] as typeof textObj).text).toBe('foo foo');
+  });
 });
