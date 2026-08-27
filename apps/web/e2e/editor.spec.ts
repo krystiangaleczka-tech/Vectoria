@@ -535,4 +535,61 @@ test.describe('Vectoria MVP Skeleton', () => {
     await expect(page.getByTestId('history-panel')).toContainText('Simplify path');
     await expect(page.getByTestId('statusbar')).toContainText('1 object');
   });
+
+  test('create artistic text → edit in canvas → verify typography properties → convert to outlines', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    const canvas = page.getByTestId('canvas-viewport');
+    const box = await canvas.boundingBox();
+    if (!box) throw new Error('Canvas not found');
+
+    // Select Text Tool
+    await page.getByRole('button', { name: 'Text Tool' }).click();
+    await page.mouse.click(box.x + 250, box.y + 250);
+
+    // Verify object created in status bar
+    await expect(page.getByTestId('statusbar')).toContainText('1 object');
+
+    // Type text in session
+    await page.keyboard.type('Hello Vectoria!');
+    await page.keyboard.press('Escape');
+
+    // Properties panel shows typography controls
+    await page.getByRole('tab', { name: 'Właściwości' }).click();
+    await expect(page.getByTestId('prop-font-family')).toBeVisible();
+    await expect(page.getByTestId('prop-font-size')).toBeVisible();
+
+    // Convert text to outlines
+    await page.getByRole('button', { name: 'Convert to outlines' }).click();
+    await page.getByRole('tab', { name: 'Historia' }).click();
+    await expect(page.getByTestId('history-panel')).toContainText('Convert to Outlines');
+  });
+
+  test('Find & Replace dialog opens and replaces matching text across document', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+    const canvas = page.getByTestId('canvas-viewport');
+    const box = await canvas.boundingBox();
+    if (!box) throw new Error('Canvas not found');
+
+    // Create Text Object
+    await page.getByRole('button', { name: 'Text Tool' }).click();
+    await page.mouse.click(box.x + 200, box.y + 200);
+    await page.keyboard.type('Fox and Badger');
+    await page.keyboard.press('Escape');
+
+    // Open Find & Replace via TopBar menu
+    await page.getByRole('button', { name: 'Tekst' }).click();
+    await page.getByRole('menuitem', { name: 'Znajdź i zamień…' }).click();
+    await expect(page.getByTestId('find-replace-dialog')).toBeVisible();
+
+    // Perform replacement
+    await page.getByTestId('find-input').fill('Fox');
+    await page.getByTestId('replace-input').fill('Wolf');
+    await page.getByRole('button', { name: 'Zamień wszystko' }).click();
+
+    // History contains replacement command
+    await page.getByRole('tab', { name: 'Historia' }).click();
+    await expect(page.getByTestId('history-panel')).toContainText('Replace All Text');
+  });
 });

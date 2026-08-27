@@ -36,6 +36,9 @@ export interface TopBarProps {
   onGroup: () => void;
   onUngroup: () => void;
   onRepeatTransform: () => void;
+  onOpenFindReplace?: () => void;
+  onOpenUsedFonts?: () => void;
+  onOpenSpecialCharacters?: () => void;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -70,6 +73,9 @@ export const TopBar: React.FC<TopBarProps> = ({
   onGroup,
   onUngroup,
   onRepeatTransform,
+  onOpenFindReplace,
+  onOpenUsedFonts,
+  onOpenSpecialCharacters,
 }) => {
   return (
     <header
@@ -114,6 +120,9 @@ export const TopBar: React.FC<TopBarProps> = ({
         onGroup={onGroup}
         onUngroup={onUngroup}
         onRepeatTransform={onRepeatTransform}
+        onOpenFindReplace={onOpenFindReplace}
+        onOpenUsedFonts={onOpenUsedFonts}
+        onOpenSpecialCharacters={onOpenSpecialCharacters}
       />
       <DocumentTabs documentName={documentName} dirty={saveStatus !== 'saved-locally'} />
     </header>

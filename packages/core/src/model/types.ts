@@ -269,6 +269,61 @@ export interface PolylineObject extends SceneObjectBase {
   readonly points: readonly Vec2[];
 }
 
+export type FontWeight = 100 | 200 | 300 | 400 | 500 | 600 | 700 | 800 | 900 | 'normal' | 'bold' | 'lighter' | 'bolder';
+export type FontStyle = 'normal' | 'italic' | 'oblique';
+export type TextAlign = 'left' | 'center' | 'right' | 'justify';
+export type ListType = 'none' | 'bullet' | 'numbered';
+
+export interface TextRun {
+  readonly start: number; // Unicode code point offset
+  readonly length: number;
+  readonly fontFamily?: string;
+  readonly fontSize?: number;
+  readonly fontWeight?: FontWeight;
+  readonly fontStyle?: FontStyle;
+  readonly baselineShift?: number;
+  readonly fill?: FillStyle;
+  readonly isPlaceholder?: boolean;
+}
+
+export interface TextObject extends SceneObjectBase {
+  readonly type: 'text';
+  readonly text: string;
+  readonly fontFamily: string;
+  readonly fontSize: number;
+  readonly fontWeight: FontWeight;
+  readonly fontStyle: FontStyle;
+  readonly letterSpacing: number;
+  readonly lineHeight: number;
+  readonly textAlign: TextAlign;
+  readonly kerning: boolean;
+  readonly pathId?: ObjectId;
+  readonly runs?: readonly TextRun[];
+  readonly variableAxes?: Readonly<Record<string, number>>;
+}
+
+export interface TextFrameObject extends SceneObjectBase {
+  readonly type: 'text-frame';
+  readonly text: string;
+  readonly width: number;
+  readonly height: number;
+  readonly fontFamily: string;
+  readonly fontSize: number;
+  readonly fontWeight: FontWeight;
+  readonly fontStyle: FontStyle;
+  readonly letterSpacing: number;
+  readonly lineHeight: number;
+  readonly textAlign: TextAlign;
+  readonly kerning: boolean;
+  readonly columnCount: number;
+  readonly columnGutter: number;
+  readonly paragraphSpacing: number;
+  readonly indent: number;
+  readonly listType?: ListType;
+  readonly runs?: readonly TextRun[];
+  readonly variableAxes?: Readonly<Record<string, number>>;
+}
+
 export type SceneObject =
   | RectangleObject
   | EllipseObject
@@ -282,7 +337,9 @@ export type SceneObject =
   | RingObject
   | SpiralObject
   | CalloutObject
-  | PolylineObject;
+  | PolylineObject
+  | TextObject
+  | TextFrameObject;
 
 // Selection stays multi-object capable even while the MVP UI exposes one
 // active editing context at a time.

@@ -44,7 +44,17 @@ export type VectoriaIconName =
   | 'ring'
   | 'spiral'
   | 'callout'
-  | 'polyline';
+  | 'polyline'
+  | 'textFrame'
+  | 'alignLeft'
+  | 'alignCenter'
+  | 'alignRight'
+  | 'alignJustify'
+  | 'bulletList'
+  | 'numberedList'
+  | 'textOutlines'
+  | 'textOnPath'
+  | 'findReplace';
 
 export interface VectoriaIconProps {
   name: VectoriaIconName;
@@ -416,6 +426,103 @@ export const VectoriaIcon: React.FC<VectoriaIconProps> = ({
       return <svg {...iconProps}><path d="m14 4 6 6M12 6 4 14l6 6 8-8M4 20l-2 2" /></svg>;
     case 'bucket':
       return <svg {...iconProps}><path d="m5 4 15 15M4 8l7-4 9 9-4 7H7L3 16z" /><path d="M16 18h5" /></svg>;
+
+    case 'textFrame':
+      return (
+        <svg {...iconProps}>
+          <rect x="3" y="3" width="18" height="18" rx="2" strokeDasharray="3 3" />
+          <path d="M7 8h10M12 8v8" />
+        </svg>
+      );
+
+    case 'alignLeft':
+      return (
+        <svg {...iconProps}>
+          <line x1="17" y1="10" x2="3" y2="10" />
+          <line x1="21" y1="6" x2="3" y2="6" />
+          <line x1="21" y1="14" x2="3" y2="14" />
+          <line x1="17" y1="18" x2="3" y2="18" />
+        </svg>
+      );
+
+    case 'alignCenter':
+      return (
+        <svg {...iconProps}>
+          <line x1="18" y1="10" x2="6" y2="10" />
+          <line x1="21" y1="6" x2="3" y2="6" />
+          <line x1="21" y1="14" x2="3" y2="14" />
+          <line x1="18" y1="18" x2="6" y2="18" />
+        </svg>
+      );
+
+    case 'alignRight':
+      return (
+        <svg {...iconProps}>
+          <line x1="21" y1="10" x2="7" y2="10" />
+          <line x1="21" y1="6" x2="3" y2="6" />
+          <line x1="21" y1="14" x2="3" y2="14" />
+          <line x1="21" y1="18" x2="7" y2="18" />
+        </svg>
+      );
+
+    case 'alignJustify':
+      return (
+        <svg {...iconProps}>
+          <line x1="21" y1="6" x2="3" y2="6" />
+          <line x1="21" y1="10" x2="3" y2="10" />
+          <line x1="21" y1="14" x2="3" y2="14" />
+          <line x1="21" y1="18" x2="3" y2="18" />
+        </svg>
+      );
+
+    case 'bulletList':
+      return (
+        <svg {...iconProps}>
+          <line x1="8" y1="6" x2="21" y2="6" />
+          <line x1="8" y1="12" x2="21" y2="12" />
+          <line x1="8" y1="18" x2="21" y2="18" />
+          <circle cx="4" cy="6" r="1.5" fill="currentColor" />
+          <circle cx="4" cy="12" r="1.5" fill="currentColor" />
+          <circle cx="4" cy="18" r="1.5" fill="currentColor" />
+        </svg>
+      );
+
+    case 'numberedList':
+      return (
+        <svg {...iconProps}>
+          <line x1="10" y1="6" x2="21" y2="6" />
+          <line x1="10" y1="12" x2="21" y2="12" />
+          <line x1="10" y1="18" x2="21" y2="18" />
+          <path d="M4 6h2M5 6V4M4 12h2v-2H4v1h2M4 16h2v2H4v-1h2" />
+        </svg>
+      );
+
+    case 'textOutlines':
+      return (
+        <svg {...iconProps}>
+          <path d="M4 6V4h16v2M12 4v16M8 20h8" strokeDasharray="2 2" />
+          <circle cx="4" cy="4" r="1.5" fill="currentColor" />
+          <circle cx="20" cy="4" r="1.5" fill="currentColor" />
+          <circle cx="12" cy="20" r="1.5" fill="currentColor" />
+        </svg>
+      );
+
+    case 'textOnPath':
+      return (
+        <svg {...iconProps}>
+          <path d="M3 18c6 0 6-12 12-12s6 12 6 12" />
+          <path d="M9 7V5h4v2M11 5v7" />
+        </svg>
+      );
+
+    case 'findReplace':
+      return (
+        <svg {...iconProps}>
+          <circle cx="10" cy="10" r="7" />
+          <line x1="21" y1="21" x2="15" y2="15" />
+          <path d="m14 8 2 2-2 2" />
+        </svg>
+      );
 
     default:
       return null;

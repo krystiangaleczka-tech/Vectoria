@@ -1,5 +1,5 @@
-import type { DocumentModel, SceneObject, ObjectId, RectangleObject, EllipseObject, LineObject, PathObject, StrokeStyle, FillStyle, LinearGradientFill, RadialGradientFill, PatternFill, PolygonObject, StarObject, ArcObject, PieObject, RingObject, SpiralObject, CalloutObject, PolylineObject, ArrowheadStyle } from '@vectoria/core';
-import { getTransformMatrix, normalizeCornerRadii, getPolygonVertices, getStarVertices, getSpiralVertices, getCalloutVertices, expandObject, getCubicSegment, evaluateCubic } from '@vectoria/core';
+import type { DocumentModel, SceneObject, ObjectId, RectangleObject, EllipseObject, LineObject, PathObject, StrokeStyle, FillStyle, LinearGradientFill, RadialGradientFill, PatternFill, PolygonObject, StarObject, ArcObject, PieObject, RingObject, SpiralObject, CalloutObject, PolylineObject, ArrowheadStyle, TextObject, TextFrameObject } from '@vectoria/core';
+import { getTransformMatrix, normalizeCornerRadii, getPolygonVertices, getStarVertices, getSpiralVertices, getCalloutVertices, expandObject, getCubicSegment, evaluateCubic, computeTextFrameLayout } from '@vectoria/core';
 
 export function escapeXml(unsafe: string): string {
   return unsafe
@@ -194,9 +194,50 @@ function renderSceneObjectToSvg(
       return renderParametricPathToSvg(obj as ArcObject | PieObject | SpiralObject | CalloutObject, gradientMap);
     case 'ring':
       return renderRingToSvg(obj as RingObject, gradientMap);
+    case 'text':
+      return renderTextToSvg(obj as TextObject, gradientMap);
+    case 'text-frame':
+      return renderTextFrameToSvg(obj as TextFrameObject, gradientMap);
     default:
       return null;
   }
+}
+
+function renderTextToSvg(obj: TextObject, gradientMap: Map<FillStyle, string>): string {
+  const transformAttr = transformAttrOf(obj);
+  const fillAttr = resolveFillAttr(obj.style.fill, gradientMap);
+  const strokeAttr = obj.style.stroke ? buildStrokeAttr(obj.style.stroke) : '';
+  const opacityAttr = obj.style.opacity < 1 ? ` opacity="${obj.style.opacity}"` : '';
+  const textAnchor = obj.textAlign === 'center' ? 'middle' : obj.textAlign === 'right' ? 'end' : 'start';
+  const letterSpacingAttr = obj.letterSpacing !== 0 ? ` letter-spacing="${obj.letterSpacing}px"` : '';
+
+  if (obj.pathId) {
+    return `    <text transform="${transformAttr}" font-family="${escapeXml(obj.fontFamily)}" font-size="${obj.fontSize}" font-weight="${obj.fontWeight}" font-style="${obj.fontStyle}"${letterSpacingAttr}${fillAttr}${strokeAttr}${opacityAttr}><textPath href="#${obj.pathId}">${escapeXml(obj.text)}</textPath></text>`;
+  }
+
+  const lines = obj.text.split('\n');
+  const lineSpacing = obj.fontSize * (obj.lineHeight > 0 ? obj.lineHeight : 1.2);
+
+  if (lines.length === 1) {
+    return `    <text transform="${transformAttr}" y="${obj.fontSize}" font-family="${escapeXml(obj.fontFamily)}" font-size="${obj.fontSize}" font-weight="${obj.fontWeight}" font-style="${obj.fontStyle}" text-anchor="${textAnchor}"${letterSpacingAttr}${fillAttr}${strokeAttr}${opacityAttr}>${escapeXml(lines[0] || '')}</text>`;
+  }
+
+  const tspans = lines.map((line, idx) => `      <tspan x="0" y="${(idx + 1) * lineSpacing}">${escapeXml(line)}</tspan>`).join('\n');
+  return `    <text transform="${transformAttr}" font-family="${escapeXml(obj.fontFamily)}" font-size="${obj.fontSize}" font-weight="${obj.fontWeight}" font-style="${obj.fontStyle}" text-anchor="${textAnchor}"${letterSpacingAttr}${fillAttr}${strokeAttr}${opacityAttr}>\n${tspans}\n    </text>`;
+}
+
+function renderTextFrameToSvg(obj: TextFrameObject, gradientMap: Map<FillStyle, string>): string {
+  const transformAttr = transformAttrOf(obj);
+  const fillAttr = resolveFillAttr(obj.style.fill, gradientMap);
+  const strokeAttr = obj.style.stroke ? buildStrokeAttr(obj.style.stroke) : '';
+  const opacityAttr = obj.style.opacity < 1 ? ` opacity="${obj.style.opacity}"` : '';
+  const textAnchor = obj.textAlign === 'center' ? 'middle' : obj.textAlign === 'right' ? 'end' : 'start';
+  const letterSpacingAttr = obj.letterSpacing !== 0 ? ` letter-spacing="${obj.letterSpacing}px"` : '';
+
+  const layout = computeTextFrameLayout(obj);
+  const tspans = layout.lines.map((line) => `      <tspan x="${line.x}" y="${line.baseline}">${escapeXml(line.text)}</tspan>`).join('\n');
+
+  return `    <text transform="${transformAttr}" font-family="${escapeXml(obj.fontFamily)}" font-size="${obj.fontSize}" font-weight="${obj.fontWeight}" font-style="${obj.fontStyle}" text-anchor="${textAnchor}"${letterSpacingAttr}${fillAttr}${strokeAttr}${opacityAttr}>\n${tspans}\n    </text>`;
 }
 
 /** Shared transform attribute from the object's canonical matrix. */

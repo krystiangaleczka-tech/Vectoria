@@ -21,6 +21,8 @@ import type {
   CalloutObject,
   PolylineObject,
   SceneObject,
+  TextObject,
+  TextFrameObject,
 } from '@vectoria/core';
 import {
   CreateObjectsCommand,
@@ -54,8 +56,11 @@ import {
   nearestPointOnPolyline,
   SetObjectStyleCommand,
   ApplyStyleCommand,
+  computeArtisticTextLayout,
+  computeTextFrameLayout,
+  SetTextContentCommand,
 } from '@vectoria/core';
- import { Camera, DragSession, SelectTool, DirectSelectTool, PenTool, PencilTool, BrushTool, SmoothTool, CornerTool, EraserTool, KnifeTool, ScissorsTool, WidthTool, SnapService, IsolationService, LassoSession, calculateObjectSnap, ShapeTool, PolylineTool, EyedropperTool, PaintBucketTool, type GridSettings, type SnapResult, type ObjectSnapResult, type StyleSampleTarget } from '@vectoria/editor-engine';
+ import { Camera, DragSession, SelectTool, DirectSelectTool, PenTool, PencilTool, BrushTool, SmoothTool, CornerTool, EraserTool, KnifeTool, ScissorsTool, WidthTool, SnapService, IsolationService, LassoSession, calculateObjectSnap, ShapeTool, PolylineTool, EyedropperTool, PaintBucketTool, TextTool, TextEditSession, type GridSettings, type SnapResult, type ObjectSnapResult, type StyleSampleTarget } from '@vectoria/editor-engine';
 import { mat3TransformPoint, parseColor } from '@vectoria/shared';
 import {
   RenderLoop,
@@ -94,7 +99,7 @@ export interface CanvasViewportProps {
 }
 
 interface DragState {
-   type: 'pan' | 'create-shape' | 'move-object' | 'move-node' | 'move-handle' | 'resize-object' | 'rotate-object' | 'gradient-handle' | 'style-sample' | 'marquee' | 'lasso' | 'node-lasso';
+   type: 'pan' | 'create-shape' | 'move-object' | 'move-node' | 'move-handle' | 'resize-object' | 'rotate-object' | 'gradient-handle' | 'style-sample' | 'marquee' | 'lasso' | 'node-lasso' | 'text-create';
   shape?: BasicShapeTool;
   startScreen: Vec2;
   startWorld: Vec2;
@@ -236,9 +241,12 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   if (!scissorsToolRef.current) scissorsToolRef.current = new ScissorsTool();
   if (!widthToolRef.current) widthToolRef.current = new WidthTool();
   if (!smoothToolRef.current) smoothToolRef.current = new SmoothTool();
-  if (!cornerToolRef.current) cornerToolRef.current = new CornerTool();
   if (!eyedropperToolRef.current) eyedropperToolRef.current = new EyedropperTool();
   if (!paintBucketToolRef.current) paintBucketToolRef.current = new PaintBucketTool();
+  const textToolRef = useRef<TextTool | null>(null);
+  if (!textToolRef.current) textToolRef.current = new TextTool();
+  const textEditSessionRef = useRef<TextEditSession | null>(null);
+  const [textEditVersion, setTextEditVersion] = useState(0);
   const freehandOperationRef = useRef<'pencil' | 'brush' | 'smooth' | 'eraser' | 'knife' | 'scissors' | 'width' | null>(null);
   const widthStartScreenRef = useRef<Vec2 | null>(null);
   const smoothStartScreenRef = useRef<Vec2 | null>(null);
@@ -456,9 +464,97 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         widthPoints: widthPreview,
       });
     }
+
+    // Text frame drag creation preview
+    if (activeTool === 'text' && dragStateRef.current?.type === 'text-create') {
+      const dpr = window.devicePixelRatio || 1;
+      const preview = textToolRef.current?.preview;
+      if (preview && preview.isFrame) {
+        overlayCtx.save();
+        overlayCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        overlayCtx.translate(camera.pan.x, camera.pan.y);
+        overlayCtx.scale(camera.zoom, camera.zoom);
+        overlayCtx.strokeStyle = '#5caeff';
+        overlayCtx.lineWidth = 1 / camera.zoom;
+        overlayCtx.setLineDash([4 / camera.zoom, 4 / camera.zoom]);
+        overlayCtx.strokeRect(preview.x, preview.y, preview.width, preview.height);
+        overlayCtx.restore();
+      }
+    }
+
+    // Text editing session overlay (caret + selection highlight)
+    const textSession = textEditSessionRef.current;
+    if (textSession) {
+      const obj = doc.objects[textSession.targetObjectId] as TextObject | TextFrameObject | undefined;
+      if (obj) {
+        const matrix = getTransformMatrix(obj.transform);
+        const dpr = window.devicePixelRatio || 1;
+        overlayCtx.save();
+        overlayCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        overlayCtx.translate(camera.pan.x, camera.pan.y);
+        overlayCtx.scale(camera.zoom, camera.zoom);
+        overlayCtx.transform(matrix[0], matrix[1], matrix[3], matrix[4], matrix[6], matrix[7]);
+
+        const layout = obj.type === 'text' ? computeArtisticTextLayout(obj) : computeTextFrameLayout(obj);
+        const sel = textSession.selection;
+        const caretIndex = textSession.caret;
+
+        // Selection highlight
+        if (sel && sel[0] !== sel[1]) {
+          const selStart = Math.min(sel[0], sel[1]);
+          const selEnd = Math.max(sel[0], sel[1]);
+          overlayCtx.fillStyle = 'rgba(92, 174, 255, 0.35)';
+
+          for (const line of layout.lines) {
+            for (const glyph of line.glyphs) {
+              if (glyph.codePointIndex >= selStart && glyph.codePointIndex < selEnd) {
+                overlayCtx.fillRect(glyph.x, line.y, glyph.width, line.height);
+              }
+            }
+          }
+        }
+
+        // Caret (blinking based on timestamp)
+        const blinkVisible = Math.floor(performance.now() / 500) % 2 === 0;
+        if (blinkVisible) {
+          let caretX = 0;
+          let caretY = 0;
+          let caretH = obj.fontSize * (obj.lineHeight || 1.2);
+
+          let found = false;
+          for (const line of layout.lines) {
+            for (const glyph of line.glyphs) {
+              if (glyph.codePointIndex === caretIndex) {
+                caretX = glyph.x;
+                caretY = line.y;
+                caretH = line.height;
+                found = true;
+                break;
+              }
+            }
+            if (found) break;
+            if (line.glyphs.length > 0) {
+              const lastGlyph = line.glyphs[line.glyphs.length - 1]!;
+              if (caretIndex > lastGlyph.codePointIndex) {
+                caretX = lastGlyph.x + lastGlyph.width;
+                caretY = line.y;
+                caretH = line.height;
+              }
+            }
+          }
+
+          overlayCtx.fillStyle = '#5caeff';
+          overlayCtx.fillRect(caretX, caretY, 2 / camera.zoom, caretH);
+        }
+
+        overlayCtx.restore();
+      }
+    }
+
     void penVersion;
     void freehandVersion;
-  }, [doc, camera, selectedIds, dragPreview, stylePreview, pathPreview, geometryPreview, cornerPreview, activeTool, penVersion, polylineVersion, freehandVersion, freehandSettings, showGrid, gridSettings, selection, selectedObjectId, selectedObjectIds]);
+    void textEditVersion;
+  }, [doc, camera, selectedIds, dragPreview, stylePreview, pathPreview, geometryPreview, cornerPreview, activeTool, penVersion, polylineVersion, freehandVersion, freehandSettings, showGrid, gridSettings, selection, selectedObjectId, selectedObjectIds, textEditVersion]);
 
   // Initialize render loop
   useEffect(() => {
@@ -572,6 +668,40 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     }
 
     if (e.button !== 0) return; // Left click only from here
+
+    // Close active text edit session if clicking outside
+    if (textEditSessionRef.current && activeTool !== 'text') {
+      const session = textEditSessionRef.current;
+      const currentObj = doc.objects[session.targetObjectId] as TextObject | TextFrameObject | undefined;
+      if (currentObj && session.text !== currentObj.text) {
+        onExecuteCommand(new SetTextContentCommand(session.targetObjectId, session.text));
+      }
+      textEditSessionRef.current = null;
+      setTextEditVersion((v) => v + 1);
+    }
+
+    if (activeTool === 'text') {
+      try { (e.target as HTMLElement).setPointerCapture(e.pointerId); } catch { /* synthetic pointer */ }
+      if (textEditSessionRef.current) {
+        const session = textEditSessionRef.current;
+        const currentObj = doc.objects[session.targetObjectId] as TextObject | TextFrameObject | undefined;
+        if (currentObj && session.text !== currentObj.text) {
+          onExecuteCommand(new SetTextContentCommand(session.targetObjectId, session.text));
+        }
+        textEditSessionRef.current = null;
+        setTextEditVersion((v) => v + 1);
+      }
+      textToolRef.current!.pointerDown(worldPos);
+      dragStateRef.current = {
+        type: 'text-create',
+        startScreen: screenPos,
+        startWorld: worldPos,
+        currentWorld: worldPos,
+        pointerId: e.pointerId,
+      };
+      renderLoopRef.current?.invalidate();
+      return;
+    }
 
     if (activeTool === 'zoom') {
       camera.zoomAtPoint(1.25, screenPos);
@@ -890,6 +1020,10 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       drag.currentWorld = worldPos;
       shapeToolRef.current?.pointerMove({ screenPoint: screenPos, worldPoint: worldPos, shiftKey: e.shiftKey, altKey: e.altKey });
        renderLoopRef.current?.invalidate();
+    } else if (drag.type === 'text-create') {
+      drag.currentWorld = worldPos;
+      textToolRef.current?.pointerMove(worldPos);
+      renderLoopRef.current?.invalidate();
     } else if ((drag.type === 'move-node' || drag.type === 'move-handle') && drag.objectIds?.[0] && drag.initialNodes) {
       const objectId = drag.objectIds[0];
       const object = doc.objects[objectId];
@@ -1112,6 +1246,14 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
            onSelectObject(newId);
          }
        }
+    } else if (drag.type === 'text-create') {
+      const result = textToolRef.current!.pointerUp(drag.currentWorld, doc.activeLayerId);
+      if (result) {
+        onExecuteCommand(result.command);
+        onSelectObject(result.objectId);
+        textEditSessionRef.current = new TextEditSession(result.objectId, result.isFrame ? 'Type your text here...' : 'Text');
+        setTextEditVersion((v) => v + 1);
+      }
     } else if (drag.type === 'move-object') {
       const transforms = new Map(Object.entries(dragPreview) as [ObjectId, import('@vectoria/core').Transform2D][]);
       if (transforms.size > 0) {
@@ -1290,6 +1432,105 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         return;
       }
 
+      if (textEditSessionRef.current) {
+        const session = textEditSessionRef.current;
+        const currentObj = doc.objects[session.targetObjectId] as TextObject | TextFrameObject | undefined;
+
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          textEditSessionRef.current = null;
+          setTextEditVersion((v) => v + 1);
+          renderLoopRef.current?.invalidate();
+          return;
+        }
+
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          session.insertText('\n');
+          if (currentObj) {
+            onExecuteCommand(new SetTextContentCommand(session.targetObjectId, session.text));
+          }
+          setTextEditVersion((v) => v + 1);
+          renderLoopRef.current?.invalidate();
+          return;
+        }
+
+        if (e.key === 'Backspace') {
+          e.preventDefault();
+          session.deleteBackward();
+          if (currentObj) {
+            onExecuteCommand(new SetTextContentCommand(session.targetObjectId, session.text));
+          }
+          setTextEditVersion((v) => v + 1);
+          renderLoopRef.current?.invalidate();
+          return;
+        }
+
+        if (e.key === 'Delete') {
+          e.preventDefault();
+          session.deleteForward();
+          if (currentObj) {
+            onExecuteCommand(new SetTextContentCommand(session.targetObjectId, session.text));
+          }
+          setTextEditVersion((v) => v + 1);
+          renderLoopRef.current?.invalidate();
+          return;
+        }
+
+        if (e.key === 'ArrowLeft') {
+          e.preventDefault();
+          session.moveCaret('left', e.shiftKey);
+          setTextEditVersion((v) => v + 1);
+          renderLoopRef.current?.invalidate();
+          return;
+        }
+
+        if (e.key === 'ArrowRight') {
+          e.preventDefault();
+          session.moveCaret('right', e.shiftKey);
+          setTextEditVersion((v) => v + 1);
+          renderLoopRef.current?.invalidate();
+          return;
+        }
+
+        if (e.key === 'Home') {
+          e.preventDefault();
+          session.moveCaret('home', e.shiftKey);
+          setTextEditVersion((v) => v + 1);
+          renderLoopRef.current?.invalidate();
+          return;
+        }
+
+        if (e.key === 'End') {
+          e.preventDefault();
+          session.moveCaret('end', e.shiftKey);
+          setTextEditVersion((v) => v + 1);
+          renderLoopRef.current?.invalidate();
+          return;
+        }
+
+        if ((e.key === 'a' || e.key === 'A') && (e.ctrlKey || e.metaKey)) {
+          e.preventDefault();
+          session.selectAll();
+          setTextEditVersion((v) => v + 1);
+          renderLoopRef.current?.invalidate();
+          return;
+        }
+
+        if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+          e.preventDefault();
+          session.insertText(e.key);
+          if (currentObj) {
+            onExecuteCommand(new SetTextContentCommand(session.targetObjectId, session.text));
+          }
+          setTextEditVersion((v) => v + 1);
+          renderLoopRef.current?.invalidate();
+          return;
+        }
+
+        return;
+      }
+
       if (e.key === 'Alt') {
         const wasAltKey = altKeyRef.current;
         altKeyRef.current = e.altKey;
@@ -1390,6 +1631,29 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     };
   }, [selectedObjectId, selectedObjectIds, doc, onExecuteCommand, onSelectObject, activeTool, commitPen, commitPolyline]);
 
+  const handleDoubleClick = (e: React.MouseEvent) => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const screenPos = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    const worldPos = camera.screenToWorld(screenPos);
+    const hit = selectTool.pick({
+      document: doc,
+      selection,
+      screenPoint: screenPos,
+      worldPoint: worldPos,
+      zoom: camera.zoom,
+      additive: false,
+    }).hit;
+
+    if (hit && (doc.objects[hit.objectId]?.type === 'text' || doc.objects[hit.objectId]?.type === 'text-frame')) {
+      const obj = doc.objects[hit.objectId] as TextObject | TextFrameObject;
+      textEditSessionRef.current = new TextEditSession(obj.id, obj.text);
+      setTextEditVersion((v) => v + 1);
+      onSelectObject(obj.id);
+      renderLoopRef.current?.invalidate();
+    }
+  };
+
   return (
     <div
       ref={containerRef}
@@ -1397,6 +1661,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       onWheel={handleWheel}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
+      onDoubleClick={handleDoubleClick}
       onPointerUp={finishInteraction}
       onPointerCancel={cancelInteraction}
       onLostPointerCapture={cancelInteraction}

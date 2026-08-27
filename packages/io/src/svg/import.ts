@@ -140,7 +140,7 @@ export function importSvgToDocument(svgText: string, name = 'Imported SVG'): Doc
     const foreground = pattern.querySelector('circle')?.getAttribute('fill') ?? pattern.querySelector('path')?.getAttribute('stroke');
     if (id && background && foreground) definitions.set(id, { type: 'pattern', kind: pattern.querySelector('circle') ? 'dots' : pattern.querySelector('path')?.getAttribute('d')?.includes('H') ? 'grid' : 'hatch', foreground, background, size: Math.max(2, number(pattern, 'width', 12)) });
   }
-  const elements = Array.from(root.querySelectorAll('rect, ellipse, circle, line, polygon, polyline, path')).filter((element) => !element.closest('defs'));
+  const elements = Array.from(root.querySelectorAll('rect, ellipse, circle, line, polygon, polyline, path, text')).filter((element) => !element.closest('defs'));
   // Arrowhead markers: type inferred from the child shape, size from markerWidth/2.
   const markers = new Map<string, ArrowheadStyle>();
   for (const marker of Array.from(root.querySelectorAll('marker'))) {
@@ -177,6 +177,40 @@ export function importSvgToDocument(svgText: string, name = 'Imported SVG'): Doc
       }
     }
     if (tag === 'path') { const data = element.getAttribute('d') || ''; const nodes = parsePathData(data).map((node, index) => ({ ...node, id: `${id}-node-${index + 1}` })); if (nodes.length >= 2) object = { ...base, type: 'path', transform: createTransform({ x: 0, y: 0 }), nodes, closed: /z\s*$/i.test(data) }; }
+    if (tag === 'text') {
+      const textContent = element.textContent || '';
+      const textPath = element.querySelector('textPath');
+      const pathHref = textPath?.getAttribute('href') || textPath?.getAttribute('xlink:href');
+      const pathId = pathHref ? pathHref.replace(/^#/, '') : undefined;
+      const actualText = textPath ? (textPath.textContent || '') : textContent;
+      const x = number(element, 'x', 0);
+      const y = number(element, 'y', 0);
+      const fontSize = number(element, 'font-size', 16);
+      const fontFamily = element.getAttribute('font-family') || 'Inter, sans-serif';
+      const fontWeight = element.getAttribute('font-weight') || 400;
+      const fontStyle = element.getAttribute('font-style') || 'normal';
+      const letterSpacing = number(element, 'letter-spacing', 0);
+      const parsedWeight = Number(fontWeight);
+      const validWeight: import('@vectoria/core').FontWeight = Number.isFinite(parsedWeight)
+        ? (parsedWeight as import('@vectoria/core').FontWeight)
+        : (fontWeight === 'bold' || fontWeight === 'bolder' || fontWeight === 'lighter' ? fontWeight : 400);
+
+      object = {
+        ...base,
+        type: 'text',
+        transform: createTransform({ x, y }),
+        text: actualText.trim(),
+        fontFamily,
+        fontSize,
+        fontWeight: validWeight,
+        fontStyle: fontStyle === 'italic' || fontStyle === 'oblique' ? fontStyle : 'normal',
+        letterSpacing,
+        lineHeight: 1.2,
+        textAlign: 'left',
+        kerning: true,
+        pathId,
+      };
+    }
     if (object) {
       objects[id] = object;
       objectIds.push(id);

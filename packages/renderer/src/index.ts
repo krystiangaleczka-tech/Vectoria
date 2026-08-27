@@ -1,8 +1,8 @@
 import type { Camera } from '@vectoria/editor-engine';
 import type { Vec2 } from '@vectoria/shared';
-import type { DocumentModel, Artboard, RectangleObject, EllipseObject, LineObject, PathObject, ObjectId, Transform2D, LinearGradientFill, RadialGradientFill, AngularGradientFill, PatternFill, GeometryPreview, SceneObject, PolygonObject, StarObject, ArcObject, PieObject, RingObject, SpiralObject, CalloutObject, PolylineObject, StrokeStyle, ArrowheadStyle, FillStyle } from '@vectoria/core';
+import type { DocumentModel, Artboard, RectangleObject, EllipseObject, LineObject, PathObject, ObjectId, Transform2D, LinearGradientFill, RadialGradientFill, AngularGradientFill, PatternFill, GeometryPreview, SceneObject, PolygonObject, StarObject, ArcObject, PieObject, RingObject, SpiralObject, CalloutObject, PolylineObject, StrokeStyle, ArrowheadStyle, FillStyle, TextObject, TextFrameObject } from '@vectoria/core';
 import type { SnapResult } from '@vectoria/editor-engine';
-import { getTransformMatrix, getObjectBounds, rectsIntersect, normalizeCornerRadii, flattenPath, widthAtT, getPolygonVertices, getStarVertices, getSpiralVertices, getCalloutVertices, getArrowheadVertices, expandObject } from '@vectoria/core';
+import { getTransformMatrix, getObjectBounds, rectsIntersect, normalizeCornerRadii, flattenPath, widthAtT, getPolygonVertices, getStarVertices, getSpiralVertices, getCalloutVertices, getArrowheadVertices, expandObject, computeArtisticTextLayout, computeTextFrameLayout, computeTextOnPathLayout } from '@vectoria/core';
 import { mat3TransformPoint } from '@vectoria/shared';
 import { RenderMetrics } from './metrics.js';
 export { RenderQualityPolicy, type RenderQuality } from './quality.js';
@@ -574,8 +574,113 @@ function renderSceneObject(ctx: CanvasRenderingContext2D, obj: SceneObject, doc?
     case 'polyline':
       renderParametric(ctx, obj);
       break;
+    case 'text':
+      renderText(ctx, obj, doc);
+      break;
+    case 'text-frame':
+      renderTextFrame(ctx, obj, doc);
+      break;
     case 'group': obj.childIds.forEach((childId) => { const child = doc?.objects[childId]; if (child?.visible) renderSceneObject(ctx, child, doc); }); break;
   }
+}
+
+function renderText(ctx: CanvasRenderingContext2D, obj: TextObject, doc?: DocumentModel): void {
+  const matrix = getTransformMatrix(obj.transform);
+  ctx.save();
+  ctx.transform(matrix[0], matrix[1], matrix[3], matrix[4], matrix[6], matrix[7]);
+  ctx.globalAlpha = obj.style.opacity;
+
+  // Text on Path support
+  if (obj.pathId && doc?.objects[obj.pathId]?.type === 'path') {
+    const pathObj = doc.objects[obj.pathId] as PathObject;
+    const pathLayout = computeTextOnPathLayout(obj, pathObj.nodes, pathObj.closed);
+    ctx.font = `${obj.fontStyle !== 'normal' ? obj.fontStyle + ' ' : ''}${obj.fontWeight} ${obj.fontSize}px ${obj.fontFamily}`;
+    ctx.textBaseline = 'alphabetic';
+
+    for (const line of pathLayout.lines) {
+      for (const glyph of line.glyphs) {
+        ctx.save();
+        ctx.translate(glyph.x, glyph.y);
+        if (glyph.rotation) ctx.rotate(glyph.rotation);
+        if (obj.style.fill.type !== 'none') {
+          ctx.fillStyle = resolveFill(ctx, obj.style.fill);
+          ctx.fillText(glyph.char, -glyph.width / 2, 0);
+        }
+        if (obj.style.stroke) {
+          ctx.strokeStyle = obj.style.stroke.color;
+          ctx.lineWidth = obj.style.stroke.width;
+          ctx.strokeText(glyph.char, -glyph.width / 2, 0);
+        }
+        ctx.restore();
+      }
+    }
+    ctx.restore();
+    return;
+  }
+
+  const layout = computeArtisticTextLayout(obj);
+  ctx.font = `${obj.fontStyle !== 'normal' ? obj.fontStyle + ' ' : ''}${obj.fontWeight} ${obj.fontSize}px ${obj.fontFamily}`;
+  ctx.textBaseline = 'alphabetic';
+
+  for (const line of layout.lines) {
+    if (obj.style.fill.type !== 'none') {
+      ctx.fillStyle = resolveFill(ctx, obj.style.fill);
+      ctx.fillText(line.text, line.x, line.baseline);
+    }
+    if (obj.style.stroke) {
+      ctx.strokeStyle = obj.style.stroke.color;
+      ctx.lineWidth = obj.style.stroke.width;
+      ctx.strokeText(line.text, line.x, line.baseline);
+    }
+  }
+
+  ctx.restore();
+}
+
+function renderTextFrame(ctx: CanvasRenderingContext2D, obj: TextFrameObject, _doc?: DocumentModel): void {
+  const matrix = getTransformMatrix(obj.transform);
+  ctx.save();
+  ctx.transform(matrix[0], matrix[1], matrix[3], matrix[4], matrix[6], matrix[7]);
+  ctx.globalAlpha = obj.style.opacity;
+
+  const layout = computeTextFrameLayout(obj);
+  ctx.font = `${obj.fontStyle !== 'normal' ? obj.fontStyle + ' ' : ''}${obj.fontWeight} ${obj.fontSize}px ${obj.fontFamily}`;
+  ctx.textBaseline = 'alphabetic';
+
+  for (const line of layout.lines) {
+    if (line.listMarker) {
+      if (obj.style.fill.type !== 'none') {
+        ctx.fillStyle = resolveFill(ctx, obj.style.fill);
+        ctx.fillText(line.listMarker.text, line.listMarker.x, line.listMarker.y);
+      }
+    }
+
+    if (obj.textAlign === 'justify' && !line.isLastLineOfParagraph) {
+      for (const glyph of line.glyphs) {
+        if (obj.style.fill.type !== 'none') {
+          ctx.fillStyle = resolveFill(ctx, obj.style.fill);
+          ctx.fillText(glyph.char, glyph.x, line.baseline);
+        }
+        if (obj.style.stroke) {
+          ctx.strokeStyle = obj.style.stroke.color;
+          ctx.lineWidth = obj.style.stroke.width;
+          ctx.strokeText(glyph.char, glyph.x, line.baseline);
+        }
+      }
+    } else {
+      if (obj.style.fill.type !== 'none') {
+        ctx.fillStyle = resolveFill(ctx, obj.style.fill);
+        ctx.fillText(line.text, line.x, line.baseline);
+      }
+      if (obj.style.stroke) {
+        ctx.strokeStyle = obj.style.stroke.color;
+        ctx.lineWidth = obj.style.stroke.width;
+        ctx.strokeText(line.text, line.x, line.baseline);
+      }
+    }
+  }
+
+  ctx.restore();
 }
 
 function renderRectangle(

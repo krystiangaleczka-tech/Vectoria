@@ -34,6 +34,9 @@ interface AppMenuBarProps {
   onGroup: () => void;
   onUngroup: () => void;
   onRepeatTransform: () => void;
+  onOpenFindReplace?: () => void;
+  onOpenUsedFonts?: () => void;
+  onOpenSpecialCharacters?: () => void;
 }
 
 type MenuName = 'Plik' | 'Edycja' | 'Obiekt' | 'Tekst' | 'Widok' | 'Okno' | 'Pomoc';
@@ -69,6 +72,9 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
   onGroup,
   onUngroup,
   onRepeatTransform,
+  onOpenFindReplace,
+  onOpenUsedFonts,
+  onOpenSpecialCharacters,
 }) => {
   const [openMenu, setOpenMenu] = useState<MenuName | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -128,6 +134,14 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
         <MenuItem label="Repeat transform" shortcut="Cmd+Shift+R" disabled={selectedObjectIds.length === 0} onClick={() => run(onRepeatTransform)} />
         <MenuItem label="Convert to curves" disabled={selectedObjectIds.length === 0} onClick={() => run(() => onConvertToCurves(selectedObjectIds))} />
         <MenuItem label="Clean Up document" onClick={() => run(onOpenCleanup)} />
+      </>;
+    }
+    if (menu === 'Tekst') {
+      return <>
+        <MenuItem label="Znajdź i zamień…" shortcut="Ctrl+F" onClick={() => run(() => onOpenFindReplace?.())} />
+        <MenuItem label="Użyte czcionki…" onClick={() => run(() => onOpenUsedFonts?.())} />
+        <MenuItem label="Wstaw znak specjalny…" onClick={() => run(() => onOpenSpecialCharacters?.())} />
+        <MenuItem label="Zamień tekst na krzywe" disabled={selectedObjectIds.length === 0} onClick={() => run(() => onConvertToCurves(selectedObjectIds))} />
       </>;
     }
     if (menu === 'Okno') {

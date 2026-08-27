@@ -6,6 +6,7 @@ import { getPolygonVertices } from '../geometry/polygon.js';
 import { getStarVertices } from '../geometry/star.js';
 import { approximateArc } from '../geometry/arc.js';
 import { getSpiralVertices } from '../geometry/spiral.js';
+import { computeArtisticTextLayout } from '../geometry/text-layout.js';
 
 /** Axis-aligned world-space bounds used by viewport culling and selection. */
 export function getObjectBounds(object: SceneObject, document?: import('./types.js').DocumentModel): Rect {
@@ -55,6 +56,22 @@ export function getObjectBounds(object: SceneObject, document?: import('./types.
           { x: 0, y: 0 }, { x: object.width, y: 0 },
           { x: object.width, y: object.height }, { x: 0, y: object.height },
           object.tailTip
+        ];
+      case 'text': {
+        const layout = computeArtisticTextLayout(object);
+        return [
+          { x: 0, y: 0 },
+          { x: layout.width, y: 0 },
+          { x: layout.width, y: layout.height },
+          { x: 0, y: layout.height },
+        ];
+      }
+      case 'text-frame':
+        return [
+          { x: 0, y: 0 },
+          { x: object.width, y: 0 },
+          { x: object.width, y: object.height },
+          { x: 0, y: object.height },
         ];
     }
   })();

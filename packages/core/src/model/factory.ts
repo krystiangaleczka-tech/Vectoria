@@ -108,3 +108,90 @@ export function createDefaultDocument(options: CreateDocumentOptions = {}): Docu
     updatedAt: now,
   };
 }
+
+export const defaultTextStyle: ObjectStyle = {
+  fill: { type: 'solid', color: '#1b1b19' },
+  stroke: null,
+  opacity: 1,
+  blendMode: 'normal',
+};
+
+export function createTextObject(
+  id: string,
+  layerId: string,
+  text: string,
+  options: Partial<import('./types.js').TextObject> = {},
+): import('./types.js').TextObject {
+  return {
+    id,
+    type: 'text',
+    name: options.name || 'Text',
+    layerId,
+    visible: options.visible !== false,
+    locked: Boolean(options.locked),
+    transform: options.transform || {
+      position: { x: 0, y: 0 },
+      rotation: 0,
+      scale: { x: 1, y: 1 },
+      skew: { x: 0, y: 0 },
+      pivot: { x: 0, y: 0 },
+    },
+    style: options.style || defaultTextStyle,
+    text,
+    fontFamily: options.fontFamily || 'Inter, sans-serif',
+    fontSize: options.fontSize && options.fontSize > 0 ? options.fontSize : 24,
+    fontWeight: options.fontWeight ?? 400,
+    fontStyle: options.fontStyle ?? 'normal',
+    letterSpacing: options.letterSpacing ?? 0,
+    lineHeight: options.lineHeight && options.lineHeight > 0 ? options.lineHeight : 1.2,
+    textAlign: options.textAlign ?? 'left',
+    kerning: options.kerning !== false,
+    pathId: options.pathId,
+    runs: options.runs,
+    variableAxes: options.variableAxes,
+  };
+}
+
+export function createTextFrameObject(
+  id: string,
+  layerId: string,
+  text: string,
+  width: number,
+  height: number,
+  options: Partial<import('./types.js').TextFrameObject> = {},
+): import('./types.js').TextFrameObject {
+  return {
+    id,
+    type: 'text-frame',
+    name: options.name || 'Text Frame',
+    layerId,
+    visible: options.visible !== false,
+    locked: Boolean(options.locked),
+    transform: options.transform || {
+      position: { x: 0, y: 0 },
+      rotation: 0,
+      scale: { x: 1, y: 1 },
+      skew: { x: 0, y: 0 },
+      pivot: { x: 0, y: 0 },
+    },
+    style: options.style || defaultTextStyle,
+    text,
+    width: Math.max(10, width),
+    height: Math.max(10, height),
+    fontFamily: options.fontFamily || 'Inter, sans-serif',
+    fontSize: options.fontSize && options.fontSize > 0 ? options.fontSize : 16,
+    fontWeight: options.fontWeight ?? 400,
+    fontStyle: options.fontStyle ?? 'normal',
+    letterSpacing: options.letterSpacing ?? 0,
+    lineHeight: options.lineHeight && options.lineHeight > 0 ? options.lineHeight : 1.4,
+    textAlign: options.textAlign ?? 'left',
+    kerning: options.kerning !== false,
+    columnCount: Math.max(1, Math.min(8, options.columnCount ?? 1)),
+    columnGutter: Math.max(0, options.columnGutter ?? 16),
+    paragraphSpacing: Math.max(0, options.paragraphSpacing ?? 8),
+    indent: Math.max(0, options.indent ?? 0),
+    listType: options.listType ?? 'none',
+    runs: options.runs,
+    variableAxes: options.variableAxes,
+  };
+}

@@ -1,7 +1,7 @@
 import type { Vec2 } from '@vectoria/shared';
 import { rectContainsPoint } from '@vectoria/shared';
-import type { DocumentModel, SceneObject, ObjectId, RectangleObject, EllipseObject, LineObject, PathObject, PolygonObject, StarObject, ArcObject, PieObject, RingObject, SpiralObject, CalloutObject, PolylineObject } from '@vectoria/core';
-import { getTransformMatrix, getObjectBounds, normalizeCornerRadii, getPolygonVertices, getStarVertices, approximateArc, getSpiralVertices, getCalloutVertices } from '@vectoria/core';
+import type { DocumentModel, SceneObject, ObjectId, RectangleObject, EllipseObject, LineObject, PathObject, PolygonObject, StarObject, ArcObject, PieObject, RingObject, SpiralObject, CalloutObject, PolylineObject, TextObject, TextFrameObject } from '@vectoria/core';
+import { getTransformMatrix, getObjectBounds, normalizeCornerRadii, getPolygonVertices, getStarVertices, approximateArc, getSpiralVertices, getCalloutVertices, computeArtisticTextLayout } from '@vectoria/core';
 import { mat3Inverse, mat3TransformPoint } from '@vectoria/shared';
 import type { Rect } from '@vectoria/shared';
 
@@ -125,11 +125,46 @@ function hitTestObject(obj: SceneObject, worldPoint: Vec2, toleranceWorld: numbe
     case 'spiral':
     case 'polyline':
       return hitTestOpenChain(obj as SpiralObject | PolylineObject, worldPoint, toleranceWorld);
+    case 'text':
+      return hitTestText(obj as TextObject, worldPoint, toleranceWorld);
+    case 'text-frame':
+      return hitTestTextFrame(obj as TextFrameObject, worldPoint, toleranceWorld);
     case 'group':
       return false;
     default:
       return false;
   }
+}
+
+function hitTestText(obj: TextObject, worldPoint: Vec2, toleranceWorld: number): boolean {
+  const matrix = getTransformMatrix(obj.transform);
+  const inv = mat3Inverse(matrix);
+  if (!inv) return false;
+  const local = mat3TransformPoint(inv, worldPoint);
+  const layout = computeArtisticTextLayout(obj);
+  const minX = layout.lines[0]?.x ?? 0;
+  const maxX = minX + layout.width;
+  const minY = 0;
+  const maxY = layout.height;
+  return (
+    local.x >= minX - toleranceWorld &&
+    local.x <= maxX + toleranceWorld &&
+    local.y >= minY - toleranceWorld &&
+    local.y <= maxY + toleranceWorld
+  );
+}
+
+function hitTestTextFrame(obj: TextFrameObject, worldPoint: Vec2, toleranceWorld: number): boolean {
+  const matrix = getTransformMatrix(obj.transform);
+  const inv = mat3Inverse(matrix);
+  if (!inv) return false;
+  const local = mat3TransformPoint(inv, worldPoint);
+  return (
+    local.x >= -toleranceWorld &&
+    local.x <= obj.width + toleranceWorld &&
+    local.y >= -toleranceWorld &&
+    local.y <= obj.height + toleranceWorld
+  );
 }
 
 /** Vertex-loop shapes: point-in-polygon when filled, segment distance otherwise. */

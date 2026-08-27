@@ -381,40 +381,40 @@ Wymóg stopniowego rozszerzania artboardu o 10% wynika bezpośrednio z potrzeby 
 
 ## EPIC-10: Tekst i typografia
 
-- [ ] **TEXT-001** Zaimplementować Artistic Text
-- [ ] **TEXT-002** Zaimplementować Paragraph Text w ramce
-- [ ] **TEXT-003** Dodać automatyczne zawijanie tekstu
-- [ ] **TEXT-004** Dodać edycję tekstu bezpośrednio na canvasie
-- [ ] **TEXT-005** Dodać selection fragmentu tekstu
-- [ ] **TEXT-006** Dodać text cursor
-- [ ] **TEXT-007** Dodać wybór font family
-- [ ] **TEXT-008** Dodać font weight
-- [ ] **TEXT-009** Dodać font style
-- [ ] **TEXT-010** Dodać font size
-- [ ] **TEXT-011** Dodać line height
-- [ ] **TEXT-012** Dodać kerning
-- [ ] **TEXT-013** Dodać tracking
-- [ ] **TEXT-014** Dodać baseline shift
-- [ ] **TEXT-015** Dodać wyrównanie do lewej
-- [ ] **TEXT-016** Dodać wyrównanie do środka
-- [ ] **TEXT-017** Dodać wyrównanie do prawej
-- [ ] **TEXT-018** Dodać justowanie
-- [ ] **TEXT-019** Dodać listy
-- [ ] **TEXT-020** Dodać kolumny tekstu
-- [ ] **TEXT-021** Dodać odstępy akapitów
-- [ ] **TEXT-022** Dodać wcięcia
-- [ ] **TEXT-023** Zaimplementować Text on Path
-- [ ] **TEXT-024** Zaimplementować Convert Text to Outlines
-- [ ] **TEXT-025** Dodać wyszukiwanie tekstu
-- [ ] **TEXT-026** Dodać zamianę tekstu
-- [ ] **TEXT-027** Dodać listę użytych fontów
-- [ ] **TEXT-028** Dodać alert o brakującym foncie
-- [ ] **TEXT-029** Dodać import fontów webowych
-- [ ] **TEXT-030** Dodać import fontów lokalnych, gdy przeglądarka na to pozwala
-- [ ] **TEXT-031** Dodać panel znaków specjalnych
-- [ ] **TEXT-032** Dodać emoji picker
-- [ ] **TEXT-033** Obsłużyć variable fonts
-- [ ] **TEXT-034** Dodać tekst zmienny dla szablonów
+- [x] **TEXT-001** Zaimplementować Artistic Text
+- [x] **TEXT-002** Zaimplementować Paragraph Text w ramce
+- [x] **TEXT-003** Dodać automatyczne zawijanie tekstu
+- [x] **TEXT-004** Dodać edycję tekstu bezpośrednio na canvasie
+- [x] **TEXT-005** Dodać selection fragmentu tekstu
+- [x] **TEXT-006** Dodać text cursor
+- [x] **TEXT-007** Dodać wybór font family
+- [x] **TEXT-008** Dodać font weight
+- [x] **TEXT-009** Dodać font style
+- [x] **TEXT-010** Dodać font size
+- [x] **TEXT-011** Dodać line height
+- [x] **TEXT-012** Dodać kerning
+- [x] **TEXT-013** Dodać tracking
+- [x] **TEXT-014** Dodać baseline shift
+- [x] **TEXT-015** Dodać wyrównanie do lewej
+- [x] **TEXT-016** Dodać wyrównanie do środka
+- [x] **TEXT-017** Dodać wyrównanie do prawej
+- [x] **TEXT-018** Dodać justowanie
+- [x] **TEXT-019** Dodać listy
+- [x] **TEXT-020** Dodać kolumny tekstu
+- [x] **TEXT-021** Dodać odstępy akapitów
+- [x] **TEXT-022** Dodać wcięcia
+- [x] **TEXT-023** Zaimplementować Text on Path
+- [x] **TEXT-024** Zaimplementować Convert Text to Outlines
+- [x] **TEXT-025** Dodać wyszukiwanie tekstu
+- [x] **TEXT-026** Dodać zamianę tekstu
+- [x] **TEXT-027** Dodać listę użytych fontów
+- [x] **TEXT-028** Dodać alert o brakującym foncie
+- [x] **TEXT-029** Dodać import fontów webowych
+- [x] **TEXT-030** Dodać import fontów lokalnych, gdy przeglądarka na to pozwala
+- [x] **TEXT-031** Dodać panel znaków specjalnych
+- [x] **TEXT-032** Dodać emoji picker
+- [x] **TEXT-033** Obsłużyć variable fonts
+- [x] **TEXT-034** Dodać tekst zmienny dla szablonów
 
 ## EPIC-11: Warstwy, obiekty i assety
 

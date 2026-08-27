@@ -6,3 +6,4 @@ export * from './svg/export.js';
 export * from './svg/import.js';
 export * from './palettes/import.js';
 export * from './storage/palette-repository.js';
+export * from './fonts/font-service.js';

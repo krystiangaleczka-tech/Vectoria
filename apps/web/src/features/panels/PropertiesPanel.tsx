@@ -66,6 +66,9 @@ export interface PropertiesPanelProps {
   onUpdateGroupTransform?: (ids: readonly ObjectId[], scaleX: number, scaleY: number, pivotWorld: { x: number; y: number }) => void;
   onUpdateParametric?: (id: ObjectId, patch: ParametricPatch) => void;
   onUpdateArrowheads?: (id: ObjectId, markerStart: ArrowheadStyle | null, markerEnd: ArrowheadStyle | null) => void;
+  onUpdateTypography?: (id: ObjectId, patch: Partial<import('@vectoria/core').TextFrameObject>) => void;
+  onConvertToOutlines?: (id: ObjectId) => void;
+  onSetTextOnPath?: (id: ObjectId, pathId?: ObjectId) => void;
 }
 
 const dimensions = (object: SceneObject): { width: number; height: number } | null =>
@@ -100,10 +103,13 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   onGeometryAction,
   onApplyGeometryPreview,
   onCancelGeometryPreview,
-   onOpenCleanup,
-   onUpdateGroupTransform,
-   onUpdateParametric,
-   onUpdateArrowheads,
+  onOpenCleanup,
+  onUpdateGroupTransform,
+  onUpdateParametric,
+  onUpdateArrowheads,
+  onUpdateTypography,
+  onConvertToOutlines,
+  onSetTextOnPath,
  }) => {
   const [aspectLocked, setAspectLocked] = React.useState(true);
   const [alignTarget, setAlignTarget] = React.useState<'selection' | 'artboard' | 'key'>('selection');
@@ -294,6 +300,213 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
             <label className="dialog-label">End<select data-testid="prop-marker-end" value={selected.style.stroke.markerEnd?.type ?? 'none'} disabled={selected.locked} onChange={(event) => { const type = event.target.value as ArrowheadStyle['type'] | 'none'; const size = selected.style.stroke?.markerStart?.size ?? selected.style.stroke?.markerEnd?.size ?? 12; onUpdateArrowheads?.(selected.id, selected.style.stroke?.markerStart ?? null, type === 'none' ? null : { type, size }); }}><option value="none">Brak</option><option value="arrow">Strzałka</option><option value="triangle">Trójkąt</option><option value="circle">Kółko</option><option value="square">Kwadrat</option></select></label>
             {(selected.style.stroke.markerStart || selected.style.stroke.markerEnd) && <NumberInput data-testid="prop-marker-size" label="Rozmiar" disabled={selected.locked} min={1} decimals={1} unit={doc.unit} value={convertUnit(selected.style.stroke.markerEnd?.size ?? selected.style.stroke.markerStart?.size ?? 12, 'px', doc.unit)} onChange={(value) => { const px = convertUnit(value, doc.unit, 'px'); const start = selected.style.stroke?.markerStart ? { ...selected.style.stroke.markerStart, size: px } : null; const end = selected.style.stroke?.markerEnd ? { ...selected.style.stroke.markerEnd, size: px } : null; onUpdateArrowheads?.(selected.id, start, end); }} />}
           </section>}
+          {(selected.type === 'text' || selected.type === 'text-frame') && (
+            <section className="property-section" aria-label="Typography">
+              <div className="panel-section-heading"><span>Typografia</span></div>
+              <div className="property-grid">
+                <label className="dialog-label">
+                  Font
+                  <select
+                    data-testid="prop-font-family"
+                    value={selected.fontFamily}
+                    disabled={selected.locked}
+                    onChange={(e) => onUpdateTypography?.(selected.id, { fontFamily: e.target.value })}
+                  >
+                    <option value="Inter, sans-serif">Inter</option>
+                    <option value="Roboto, sans-serif">Roboto</option>
+                    <option value="Outfit, sans-serif">Outfit</option>
+                    <option value="Open Sans, sans-serif">Open Sans</option>
+                    <option value="Montserrat, sans-serif">Montserrat</option>
+                    <option value="Arial, sans-serif">Arial</option>
+                    <option value="Helvetica, sans-serif">Helvetica</option>
+                    <option value="Times New Roman, serif">Times New Roman</option>
+                    <option value="Georgia, serif">Georgia</option>
+                    <option value="Courier New, monospace">Courier New</option>
+                  </select>
+                </label>
+                <NumberInput
+                  data-testid="prop-font-size"
+                  label="Rozmiar"
+                  disabled={selected.locked}
+                  min={1}
+                  max={1000}
+                  decimals={1}
+                  unit="px"
+                  value={selected.fontSize}
+                  onChange={(value) => onUpdateTypography?.(selected.id, { fontSize: Math.max(1, value) })}
+                />
+                <label className="dialog-label">
+                  Waga
+                  <select
+                    data-testid="prop-font-weight"
+                    value={String(selected.fontWeight)}
+                    disabled={selected.locked}
+                    onChange={(e) => {
+                      const num = Number(e.target.value) as import('@vectoria/core').FontWeight;
+                      onUpdateTypography?.(selected.id, { fontWeight: num });
+                    }}
+                  >
+                    <option value="100">100 — Thin</option>
+                    <option value="300">300 — Light</option>
+                    <option value="400">400 — Regular</option>
+                    <option value="500">500 — Medium</option>
+                    <option value="600">600 — SemiBold</option>
+                    <option value="700">700 — Bold</option>
+                    <option value="800">800 — ExtraBold</option>
+                    <option value="900">900 — Black</option>
+                  </select>
+                </label>
+                <label className="dialog-label">
+                  Styl
+                  <select
+                    data-testid="prop-font-style"
+                    value={selected.fontStyle}
+                    disabled={selected.locked}
+                    onChange={(e) => onUpdateTypography?.(selected.id, { fontStyle: e.target.value as 'normal' | 'italic' | 'oblique' })}
+                  >
+                    <option value="normal">Normal</option>
+                    <option value="italic">Italic</option>
+                    <option value="oblique">Oblique</option>
+                  </select>
+                </label>
+                <NumberInput
+                  data-testid="prop-line-height"
+                  label="Interlinia"
+                  disabled={selected.locked}
+                  min={0.5}
+                  max={5}
+                  step={0.1}
+                  decimals={2}
+                  unit=""
+                  value={selected.lineHeight}
+                  onChange={(value) => onUpdateTypography?.(selected.id, { lineHeight: Math.max(0.5, value) })}
+                />
+                <NumberInput
+                  data-testid="prop-letter-spacing"
+                  label="Tracking"
+                  disabled={selected.locked}
+                  min={-50}
+                  max={200}
+                  decimals={1}
+                  unit="px"
+                  value={selected.letterSpacing}
+                  onChange={(value) => onUpdateTypography?.(selected.id, { letterSpacing: value })}
+                />
+                <label className="dialog-label">
+                  Wyrównanie
+                  <select
+                    data-testid="prop-text-align"
+                    value={selected.textAlign}
+                    disabled={selected.locked}
+                    onChange={(e) => onUpdateTypography?.(selected.id, { textAlign: e.target.value as 'left' | 'center' | 'right' | 'justify' })}
+                  >
+                    <option value="left">Do lewej</option>
+                    <option value="center">Do środka</option>
+                    <option value="right">Do prawej</option>
+                    <option value="justify">Justowanie</option>
+                  </select>
+                </label>
+                <label className="dialog-label">
+                  Kerning
+                  <select
+                    data-testid="prop-kerning"
+                    value={selected.kerning ? 'on' : 'off'}
+                    disabled={selected.locked}
+                    onChange={(e) => onUpdateTypography?.(selected.id, { kerning: e.target.value === 'on' })}
+                  >
+                    <option value="on">Włączony</option>
+                    <option value="off">Wyłączony</option>
+                  </select>
+                </label>
+                {selected.type === 'text-frame' && (
+                  <>
+                    <NumberInput
+                      data-testid="prop-columns"
+                      label="Kolumny"
+                      disabled={selected.locked}
+                      min={1}
+                      max={8}
+                      decimals={0}
+                      unit=""
+                      value={selected.columnCount}
+                      onChange={(value) => onUpdateTypography?.(selected.id, { columnCount: Math.max(1, Math.min(8, Math.round(value))) })}
+                    />
+                    <NumberInput
+                      data-testid="prop-gutter"
+                      label="Gutter"
+                      disabled={selected.locked}
+                      min={0}
+                      decimals={1}
+                      unit={doc.unit}
+                      value={convertUnit(selected.columnGutter, 'px', doc.unit)}
+                      onChange={(value) => onUpdateTypography?.(selected.id, { columnGutter: convertUnit(value, doc.unit, 'px') })}
+                    />
+                    <NumberInput
+                      data-testid="prop-para-spacing"
+                      label="Odstęp akapitu"
+                      disabled={selected.locked}
+                      min={0}
+                      decimals={1}
+                      unit={doc.unit}
+                      value={convertUnit(selected.paragraphSpacing, 'px', doc.unit)}
+                      onChange={(value) => onUpdateTypography?.(selected.id, { paragraphSpacing: convertUnit(value, doc.unit, 'px') })}
+                    />
+                    <NumberInput
+                      data-testid="prop-indent"
+                      label="Wcięcie"
+                      disabled={selected.locked}
+                      min={0}
+                      decimals={1}
+                      unit={doc.unit}
+                      value={convertUnit(selected.indent, 'px', doc.unit)}
+                      onChange={(value) => onUpdateTypography?.(selected.id, { indent: convertUnit(value, doc.unit, 'px') })}
+                    />
+                    <label className="dialog-label">
+                      Lista
+                      <select
+                        data-testid="prop-list-type"
+                        value={selected.listType ?? 'none'}
+                        disabled={selected.locked}
+                        onChange={(e) => onUpdateTypography?.(selected.id, { listType: e.target.value as 'none' | 'bullet' | 'numbered' })}
+                      >
+                        <option value="none">Brak</option>
+                        <option value="bullet">Wypunktowanie (•)</option>
+                        <option value="numbered">Numerowana (1.)</option>
+                      </select>
+                    </label>
+                  </>
+                )}
+                {selected.type === 'text' && (
+                  <label className="dialog-label">
+                    Text on Path
+                    <select
+                      data-testid="prop-text-path"
+                      value={selected.pathId ?? ''}
+                      disabled={selected.locked}
+                      onChange={(e) => onSetTextOnPath?.(selected.id, e.target.value ? e.target.value : undefined)}
+                    >
+                      <option value="">Brak ścieżki</option>
+                      {Object.values(doc.objects)
+                        .filter((o) => o.type === 'path')
+                        .map((p) => (
+                          <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                    </select>
+                  </label>
+                )}
+              </div>
+              <div className="property-actions">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={selected.locked}
+                  onClick={() => onConvertToOutlines?.(selected.id)}
+                >
+                  Convert to outlines
+                </Button>
+              </div>
+            </section>
+          )}
           <section className="property-section">
             <div className="panel-section-heading"><span>Wygląd</span></div>
               <ColorControl label="Fill" disabled={selected.locked} color={selected.style.fill.type === 'solid' ? selected.style.fill.color : null} onChange={(value) => onUpdateFill(selected.id, value)} />

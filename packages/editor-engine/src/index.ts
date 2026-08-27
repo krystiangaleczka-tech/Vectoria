@@ -39,3 +39,5 @@ export { CalloutTool } from './tools/callout-tool.js';
 export { PolylineTool, type PolylineToolResult } from './tools/polyline-tool.js';
 export { EyedropperTool, type EyedropperResult, type EyedropperState, type StyleSampleTarget, type StyleToolPointerEvent } from './tools/eyedropper-tool.js';
 export { PaintBucketTool, type PaintBucketResult, type PaintBucketState } from './tools/paint-bucket-tool.js';
+export { TextTool, type TextToolPreview, type TextToolCommitResult } from './tools/text-tool.js';
+export { TextEditSession } from './interaction/text-edit-session.js';

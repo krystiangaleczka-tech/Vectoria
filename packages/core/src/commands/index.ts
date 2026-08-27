@@ -89,3 +89,13 @@ export {
 } from './freehand-commands.js';
 export { BooleanCommand, CompoundPathCommand, MaskCommand, UpdateMaskContentCommand, ExpandAppearanceCommand } from './boolean.js';
 export { ApplyStyleCommand, ApplySavedObjectStyleCommand, ApplyPaletteColorCommand, SaveObjectStyleCommand, DeleteObjectStyleCommand, DuplicateObjectStyleCommand, UpdateGlobalColorCommand, UpsertPaletteCommand, DeletePaletteCommand, DuplicatePaletteCommand } from './style-commands.js';
+export {
+  CreateTextObjectCommand,
+  CreateTextFrameCommand,
+  SetTextContentCommand,
+  UpdateTextPropertiesCommand,
+  SetTextOnPathCommand,
+  ConvertTextToOutlinesCommand,
+  BatchReplaceTextCommand,
+  type TextPropertiesUpdate,
+} from './text-commands.js';

@@ -184,12 +184,78 @@ export const GroupObjectSchema = z.object({
   childIds: z.array(z.string().min(1)),
 });
 
+export const TextRunSchema = z.object({
+  start: z.number().int().nonnegative(),
+  length: z.number().int().nonnegative(),
+  fontFamily: z.string().optional(),
+  fontSize: z.number().positive().finite().optional(),
+  fontWeight: z.union([z.number(), z.string()]).optional(),
+  fontStyle: z.enum(['normal', 'italic', 'oblique']).optional(),
+  baselineShift: z.number().finite().optional(),
+  fill: FillStyleSchema.optional(),
+  isPlaceholder: z.boolean().optional(),
+});
+
+export const TextObjectSchema = z.object({
+  type: z.literal('text'),
+  id: z.string().min(1),
+  name: z.string(),
+  layerId: z.string().min(1),
+  visible: z.boolean(),
+  locked: z.boolean(),
+  transform: Transform2DSchema,
+  style: ObjectStyleSchema,
+  text: z.string(),
+  fontFamily: z.string(),
+  fontSize: z.number().positive().finite(),
+  fontWeight: z.union([z.number(), z.string()]),
+  fontStyle: z.enum(['normal', 'italic', 'oblique']),
+  letterSpacing: z.number().finite(),
+  lineHeight: z.number().positive().finite(),
+  textAlign: z.enum(['left', 'center', 'right', 'justify']),
+  kerning: z.boolean(),
+  pathId: z.string().optional(),
+  runs: z.array(TextRunSchema).optional(),
+  variableAxes: z.record(z.number().finite()).optional(),
+});
+
+export const TextFrameObjectSchema = z.object({
+  type: z.literal('text-frame'),
+  id: z.string().min(1),
+  name: z.string(),
+  layerId: z.string().min(1),
+  visible: z.boolean(),
+  locked: z.boolean(),
+  transform: Transform2DSchema,
+  style: ObjectStyleSchema,
+  text: z.string(),
+  width: z.number().positive().finite(),
+  height: z.number().positive().finite(),
+  fontFamily: z.string(),
+  fontSize: z.number().positive().finite(),
+  fontWeight: z.union([z.number(), z.string()]),
+  fontStyle: z.enum(['normal', 'italic', 'oblique']),
+  letterSpacing: z.number().finite(),
+  lineHeight: z.number().positive().finite(),
+  textAlign: z.enum(['left', 'center', 'right', 'justify']),
+  kerning: z.boolean(),
+  columnCount: z.number().int().min(1).max(8),
+  columnGutter: z.number().nonnegative().finite(),
+  paragraphSpacing: z.number().nonnegative().finite(),
+  indent: z.number().nonnegative().finite(),
+  listType: z.enum(['none', 'bullet', 'numbered']).optional(),
+  runs: z.array(TextRunSchema).optional(),
+  variableAxes: z.record(z.number().finite()).optional(),
+});
+
 export const SceneObjectSchema = z.discriminatedUnion('type', [
   RectangleObjectSchema,
   EllipseObjectSchema,
   LineObjectSchema,
   PathObjectSchema,
   GroupObjectSchema,
+  TextObjectSchema,
+  TextFrameObjectSchema,
 ]);
 
 export const PaletteColorSchema = z.object({ id: z.string().min(1), name: z.string(), color: ColorSchema });

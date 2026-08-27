@@ -74,6 +74,11 @@ import {
   createDefaultDocument,
   getObjectBounds,
   AddGuideCommand,
+  UpdateTextPropertiesCommand,
+  ConvertTextToOutlinesCommand,
+  SetTextOnPathCommand,
+  BatchReplaceTextCommand,
+  SetTextContentCommand,
 } from '@vectoria/core';
 import { Camera, emptySelection, selectionService, GeometryOperationSession, BooleanOperationSession } from '@vectoria/editor-engine';
 import {
@@ -101,6 +106,9 @@ import { ContextualControlBar, type FreehandSettings } from '../features/panels/
 import { RightDock } from '../features/panels/RightDock.js';
 import { StatusBar } from '../features/statusbar/StatusBar.js';
 import { NewDocumentDialog } from '../features/dialogs/NewDocumentDialog.js';
+import { UsedFontsPanel } from '../features/panels/UsedFontsPanel.js';
+import { FindReplaceDialog } from '../features/dialogs/FindReplaceDialog.js';
+import { SpecialCharactersPopover } from '../features/dialogs/SpecialCharactersPopover.js';
 import type { DockPanel } from '../features/panels/RightDock.js';
 import type { PathAction } from '../features/panels/PropertiesPanel.js';
 import type { GeometryAction } from '../features/properties/GeometryProperties.js';
@@ -148,6 +156,9 @@ export const EditorApp: React.FC = () => {
   const [geometryPreview, setGeometryPreview] = useState<GeometryPreview | null>(null);
   const [cleanupSelectedFindingIds, setCleanupSelectedFindingIds] = useState<readonly string[]>([]);
   const [destructiveGeometryConfirmOpen, setDestructiveGeometryConfirmOpen] = useState(false);
+  const [usedFontsOpen, setUsedFontsOpen] = useState(false);
+  const [findReplaceOpen, setFindReplaceOpen] = useState(false);
+  const [specialCharsOpen, setSpecialCharsOpen] = useState(false);
 
   const history = useMemo(() => new CommandHistory(), []);
   const camera = useMemo(() => new Camera(), []);
@@ -909,6 +920,55 @@ export const EditorApp: React.FC = () => {
     handleExecuteCommand(new AddGuideCommand({ id: generateId(), axis, position, visible: true, locked: false }));
   }, [handleExecuteCommand]);
 
+  const handleUpdateTypography = useCallback((id: ObjectId, patch: Partial<import('@vectoria/core').TextFrameObject>) => {
+    handleExecuteCommand(new UpdateTextPropertiesCommand(id, patch));
+  }, [handleExecuteCommand]);
+
+  const handleConvertToOutlines = useCallback((id: ObjectId) => {
+    handleExecuteCommand(new ConvertTextToOutlinesCommand(id));
+  }, [handleExecuteCommand]);
+
+  const handleSetTextOnPath = useCallback((id: ObjectId, pathId?: ObjectId) => {
+    handleExecuteCommand(new SetTextOnPathCommand(id, pathId));
+  }, [handleExecuteCommand]);
+
+  const handleBatchReplaceText = useCallback((search: string, replace: string, options: { matchCase: boolean; wholeWord: boolean }) => {
+    if (!doc) return;
+    const textObjectIds = Object.values(doc.objects)
+      .filter((obj) => obj.type === 'text' || obj.type === 'text-frame')
+      .map((obj) => obj.id);
+    const flags = options.matchCase ? 'g' : 'gi';
+    const escaped = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = options.wholeWord ? new RegExp(`\\b${escaped}\\b`, flags) : new RegExp(escaped, flags);
+    handleExecuteCommand(new BatchReplaceTextCommand(textObjectIds, regex, replace));
+  }, [doc, handleExecuteCommand]);
+
+  const handleReplaceSingleMatch = useCallback((id: ObjectId, newText: string) => {
+    const obj = doc?.objects[id];
+    if (obj && (obj.type === 'text' || obj.type === 'text-frame')) {
+      handleExecuteCommand(new SetTextContentCommand(id, newText));
+    }
+  }, [doc, handleExecuteCommand]);
+
+  const handleInsertSpecialCharacter = useCallback((char: string) => {
+    if (selectedObjectId && doc) {
+      const obj = doc.objects[selectedObjectId];
+      if (obj && (obj.type === 'text' || obj.type === 'text-frame')) {
+        handleExecuteCommand(new SetTextContentCommand(selectedObjectId, obj.text + char));
+      }
+    }
+    setSpecialCharsOpen(false);
+  }, [doc, selectedObjectId, handleExecuteCommand]);
+
+  const handleReplaceFontFamily = useCallback((sourceFont: string, targetFont: string) => {
+    if (!doc) return;
+    for (const obj of Object.values(doc.objects)) {
+      if ((obj.type === 'text' || obj.type === 'text-frame') && obj.fontFamily === sourceFont) {
+        handleExecuteCommand(new UpdateTextPropertiesCommand(obj.id, { fontFamily: targetFont }));
+      }
+    }
+  }, [doc, handleExecuteCommand]);
+
   // Global Keyboard Shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -959,6 +1019,9 @@ export const EditorApp: React.FC = () => {
       } else if (cmdKey && e.key.toLowerCase() === 'y') {
         e.preventDefault();
         handleRedo();
+      } else if (cmdKey && e.key.toLowerCase() === 'f') {
+        e.preventDefault();
+        setFindReplaceOpen(true);
       } else if (cmdKey && e.key === '0') {
         e.preventDefault();
         handleZoom100();
@@ -980,6 +1043,8 @@ export const EditorApp: React.FC = () => {
               setActiveTool('ellipse');
             } else if (e.key === '\\') {
               setActiveTool('line');
+          } else if (e.key.toLowerCase() === 't') {
+              setActiveTool('text');
           } else if (e.key.toLowerCase() === 'p') {
               setActiveTool('pen');
            } else if (e.key.toLowerCase() === 'n') {
@@ -1141,6 +1206,9 @@ export const EditorApp: React.FC = () => {
           onGroup={handleGroup}
           onUngroup={handleUngroup}
           onRepeatTransform={handleRepeatTransform}
+          onOpenFindReplace={() => setFindReplaceOpen(true)}
+          onOpenUsedFonts={() => setUsedFontsOpen(true)}
+          onOpenSpecialCharacters={() => setSpecialCharsOpen(true)}
         />
 
       {bootstrapState.status === 'recovery-error' && (
@@ -1217,6 +1285,9 @@ export const EditorApp: React.FC = () => {
            onUpdateGroupTransform={handleUpdateGroupTransform}
           onUpdateParametric={handleUpdateParametric}
           onUpdateArrowheads={handleUpdateArrowheads}
+          onUpdateTypography={handleUpdateTypography}
+          onConvertToOutlines={handleConvertToOutlines}
+          onSetTextOnPath={handleSetTextOnPath}
           onUpdateLineEndpoint={handleUpdateLineEndpoint}
           onUpdateCornerRadius={handleUpdateCornerRadius}
           onUpdateFill={handleUpdateFill}
@@ -1271,7 +1342,7 @@ export const EditorApp: React.FC = () => {
       {/* Status Bar */}
       <StatusBar
         toolHint={toolHint}
-          activeTool={activeTool === 'select' ? 'Select' : activeTool === 'direct-select' ? 'Direct Select' : activeTool === 'lasso' ? 'Lasso' : activeTool === 'node-lasso' ? 'Node Lasso' : activeTool === 'rectangle' ? 'Rectangle' : activeTool === 'ellipse' ? 'Ellipse' : activeTool === 'line' ? 'Line' : activeTool === 'pen' ? 'Pen' : activeTool === 'pencil' ? 'Pencil' : activeTool === 'brush' ? 'Brush' : activeTool === 'smooth' ? 'Smooth' : activeTool === 'corner' ? 'Corner' : activeTool === 'eraser' ? 'Eraser' : activeTool === 'knife' ? 'Knife' : activeTool === 'scissors' ? 'Scissors' : activeTool === 'width' ? 'Width' : activeTool === 'eyedropper' ? 'Eyedropper' : activeTool === 'bucket' ? 'Bucket' : activeTool === 'hand' ? 'Hand' : 'Zoom'}
+          activeTool={activeTool === 'select' ? 'Select' : activeTool === 'direct-select' ? 'Direct Select' : activeTool === 'lasso' ? 'Lasso' : activeTool === 'node-lasso' ? 'Node Lasso' : activeTool === 'rectangle' ? 'Rectangle' : activeTool === 'ellipse' ? 'Ellipse' : activeTool === 'line' ? 'Line' : activeTool === 'text' ? 'Text' : activeTool === 'pen' ? 'Pen' : activeTool === 'pencil' ? 'Pencil' : activeTool === 'brush' ? 'Brush' : activeTool === 'smooth' ? 'Smooth' : activeTool === 'corner' ? 'Corner' : activeTool === 'eraser' ? 'Eraser' : activeTool === 'knife' ? 'Knife' : activeTool === 'scissors' ? 'Scissors' : activeTool === 'width' ? 'Width' : activeTool === 'eyedropper' ? 'Eyedropper' : activeTool === 'bucket' ? 'Bucket' : activeTool === 'hand' ? 'Hand' : 'Zoom'}
         selectedObjectName={selectedObjectId ? doc.objects[selectedObjectId]?.name ?? null : null}
         selectedObjectCount={selectedObjectIds.length}
         cursorWorld={cursorWorld}
@@ -1285,6 +1356,25 @@ export const EditorApp: React.FC = () => {
        />
        {newDocumentOpen && <NewDocumentDialog onClose={() => setNewDocumentOpen(false)} onCreate={handleCreateDocument} />}
        {destructiveGeometryConfirmOpen && geometryPreview && <div className="dialog-backdrop" role="presentation"><section ref={geometryConfirmDialogRef} className="geometry-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="geometry-confirm-title"><div className="dialog-eyebrow">Destructive geometry edit</div><h2 id="geometry-confirm-title">Convert to curves?</h2><p className="dialog-description">Selected parametric objects will become paths. Visual geometry, style and transform stay unchanged, but shape parameters will no longer be editable.</p><div className="geometry-confirm-summary" role="status">{geometryPreview.proposed.length} object(s) ready. Undo remains available.</div><div className="dialog-actions"><Button size="sm" variant="ghost" onClick={handleCancelGeometryPreview}>Cancel</Button><Button size="sm" variant="danger" autoFocus onClick={() => handleApplyGeometryPreview(true)}>Convert to curves</Button></div></section></div>}
+       <UsedFontsPanel
+         document={doc}
+         isOpen={usedFontsOpen}
+         onClose={() => setUsedFontsOpen(false)}
+         onReplaceFont={handleReplaceFontFamily}
+       />
+       <FindReplaceDialog
+         document={doc}
+         isOpen={findReplaceOpen}
+         onClose={() => setFindReplaceOpen(false)}
+         onSelectObject={handleSelectObject}
+         onReplaceMatch={handleReplaceSingleMatch}
+         onReplaceAll={handleBatchReplaceText}
+       />
+       <SpecialCharactersPopover
+         isOpen={specialCharsOpen}
+         onClose={() => setSpecialCharsOpen(false)}
+         onSelectCharacter={handleInsertSpecialCharacter}
+       />
     </div>
   );
 };

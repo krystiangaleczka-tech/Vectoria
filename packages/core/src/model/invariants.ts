@@ -306,6 +306,51 @@ export function validateInvariants(doc: DocumentModel): InvariantViolation[] {
           }
         }
 
+        if (obj.type === 'text') {
+          if (!Number.isFinite(obj.fontSize) || obj.fontSize <= 0) {
+            violations.push({ code: 'INVALID_FONT_SIZE', message: `Object '${objectId}' text fontSize must be positive and finite.` });
+          }
+          if (!Number.isFinite(obj.letterSpacing)) {
+            violations.push({ code: 'INVALID_LETTER_SPACING', message: `Object '${objectId}' text letterSpacing must be finite.` });
+          }
+          if (!Number.isFinite(obj.lineHeight) || obj.lineHeight <= 0) {
+            violations.push({ code: 'INVALID_LINE_HEIGHT', message: `Object '${objectId}' text lineHeight must be positive and finite.` });
+          }
+          if (obj.pathId && (!(obj.pathId in doc.objects) || doc.objects[obj.pathId]?.type !== 'path')) {
+            violations.push({ code: 'INVALID_TEXT_PATH_TARGET', message: `Object '${objectId}' text pathId '${obj.pathId}' must point to an existing path object.` });
+          }
+        }
+
+        if (obj.type === 'text-frame') {
+          if (!Number.isFinite(obj.width) || obj.width <= 0) {
+            violations.push({ code: 'INVALID_TEXT_FRAME_WIDTH', message: `Object '${objectId}' text-frame width must be positive and finite.` });
+          }
+          if (!Number.isFinite(obj.height) || obj.height <= 0) {
+            violations.push({ code: 'INVALID_TEXT_FRAME_HEIGHT', message: `Object '${objectId}' text-frame height must be positive and finite.` });
+          }
+          if (!Number.isFinite(obj.fontSize) || obj.fontSize <= 0) {
+            violations.push({ code: 'INVALID_FONT_SIZE', message: `Object '${objectId}' text-frame fontSize must be positive and finite.` });
+          }
+          if (!Number.isFinite(obj.letterSpacing)) {
+            violations.push({ code: 'INVALID_LETTER_SPACING', message: `Object '${objectId}' text-frame letterSpacing must be finite.` });
+          }
+          if (!Number.isFinite(obj.lineHeight) || obj.lineHeight <= 0) {
+            violations.push({ code: 'INVALID_LINE_HEIGHT', message: `Object '${objectId}' text-frame lineHeight must be positive and finite.` });
+          }
+          if (!Number.isInteger(obj.columnCount) || obj.columnCount < 1 || obj.columnCount > 8) {
+            violations.push({ code: 'INVALID_COLUMN_COUNT', message: `Object '${objectId}' text-frame columnCount must be an integer between 1 and 8.` });
+          }
+          if (!Number.isFinite(obj.columnGutter) || obj.columnGutter < 0) {
+            violations.push({ code: 'INVALID_COLUMN_GUTTER', message: `Object '${objectId}' text-frame columnGutter must be non-negative and finite.` });
+          }
+          if (!Number.isFinite(obj.paragraphSpacing) || obj.paragraphSpacing < 0) {
+            violations.push({ code: 'INVALID_PARAGRAPH_SPACING', message: `Object '${objectId}' text-frame paragraphSpacing must be non-negative and finite.` });
+          }
+          if (!Number.isFinite(obj.indent) || obj.indent < 0) {
+            violations.push({ code: 'INVALID_TEXT_INDENT', message: `Object '${objectId}' text-frame indent must be non-negative and finite.` });
+          }
+        }
+
         // All numbers must be finite
         const { transform } = obj;
         const numbers = [
