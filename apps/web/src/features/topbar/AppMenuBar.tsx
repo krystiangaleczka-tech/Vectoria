@@ -37,6 +37,7 @@ interface AppMenuBarProps {
   onOpenFindReplace?: () => void;
   onOpenUsedFonts?: () => void;
   onOpenSpecialCharacters?: () => void;
+  onOpenWebFontImport?: () => void;
   outlineMode?: boolean;
   onToggleOutlineMode?: () => void;
 }
@@ -77,6 +78,7 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
   onOpenFindReplace,
   onOpenUsedFonts,
   onOpenSpecialCharacters,
+  onOpenWebFontImport,
   outlineMode,
   onToggleOutlineMode,
 }) => {
@@ -145,6 +147,7 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
       return <>
         <MenuItem label="Znajdź i zamień…" shortcut="Ctrl+F" onClick={() => run(() => onOpenFindReplace?.())} />
         <MenuItem label="Użyte czcionki…" onClick={() => run(() => onOpenUsedFonts?.())} />
+        <MenuItem label="Importuj font webowy…" onClick={() => run(() => onOpenWebFontImport?.())} />
         <MenuItem label="Wstaw znak specjalny…" onClick={() => run(() => onOpenSpecialCharacters?.())} />
         <MenuItem label="Zamień tekst na krzywe" disabled={selectedObjectIds.length === 0} onClick={() => run(() => onConvertToCurves(selectedObjectIds))} />
       </>;

@@ -14,6 +14,6 @@ describe('viewport culling contracts', () => {
     const object: RectangleObject = { type: 'rectangle', id: 'rect', name: 'Rect', layerId: doc.activeLayerId, visible: true, locked: false, transform: createTransform({ x: 500, y: 500 }), style: defaultObjectStyle, width: 100, height: 100, cornerRadius: 0 };
     const layer = doc.layers[doc.activeLayerId]!;
     const withObject = { ...doc, objects: { [object.id]: object }, layers: { ...doc.layers, [layer.id]: { ...layer, objectIds: [object.id] } } };
-    expect(hitTest(withObject, { x: 520, y: 520 }, { x: 0, y: 0, width: 100, height: 100 })).toBeNull();
+    expect(hitTest(withObject, { x: 520, y: 520 }, { visibleWorldRect: { x: 0, y: 0, width: 100, height: 100 } })).toBeNull();
   });
 });

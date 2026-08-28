@@ -11,6 +11,7 @@ export interface HitTestOptions {
   readonly zoom?: number;
   readonly visibleWorldRect?: Rect;
   readonly allowedObjectIds?: ReadonlySet<ObjectId>;
+  readonly includeLocked?: boolean;
 }
 
 export interface HitTestResult {
@@ -27,25 +28,26 @@ export interface HitTestResult {
 export function hitTest(
   doc: DocumentModel,
   worldPoint: Vec2,
-  visibleWorldRect?: Rect,
+  options: HitTestOptions = {}
 ): ObjectId | null {
+  const { visibleWorldRect, includeLocked } = options;
   // Iterate layers top-to-bottom
   for (let li = doc.layerIds.length - 1; li >= 0; li--) {
     const layerId = doc.layerIds[li]!;
     const layer = doc.layers[layerId];
-    if (!layer || !layer.visible || layer.locked) continue;
+    if (!layer || !layer.visible || (!includeLocked && layer.locked)) continue;
 
     // Iterate objects top-to-bottom within layer
     for (let oi = layer.objectIds.length - 1; oi >= 0; oi--) {
       const objectId = layer.objectIds[oi]!;
       const obj = doc.objects[objectId];
-      if (!obj || !obj.visible || obj.locked) continue;
+      if (!obj || !obj.visible || (!includeLocked && obj.locked)) continue;
       if (visibleWorldRect) {
         const bounds = getObjectBounds(obj, doc);
         if (bounds.x > visibleWorldRect.x + visibleWorldRect.width || bounds.x + bounds.width < visibleWorldRect.x || bounds.y > visibleWorldRect.y + visibleWorldRect.height || bounds.y + bounds.height < visibleWorldRect.y) continue;
       }
 
-       if (hitTestDocumentObject(doc, obj, worldPoint, 4)) {
+       if (hitTestDocumentObject(doc, obj, worldPoint, 4, options)) {
         return objectId;
       }
     }
@@ -60,15 +62,15 @@ export function hitTestCandidates(doc: DocumentModel, worldPoint: Vec2, options:
   const results: HitTestResult[] = [];
   for (let li = doc.layerIds.length - 1; li >= 0; li -= 1) {
     const layer = doc.layers[doc.layerIds[li]!];
-    if (!layer || !layer.visible || layer.locked) continue;
+    if (!layer || !layer.visible || (!options.includeLocked && layer.locked)) continue;
     const order = options.allowedObjectIds
       ? flattenObjects(doc, layer.objectIds).filter((object) => options.allowedObjectIds!.has(object.id)).map((object) => object.id)
       : layer.objectIds;
     for (let oi = order.length - 1; oi >= 0; oi -= 1) {
       const object = doc.objects[order[oi]!];
-      if (!object || !object.visible || object.locked) continue;
+      if (!object || !object.visible || (!options.includeLocked && object.locked)) continue;
        if (options.visibleWorldRect && !rectsOverlap(getObjectBounds(object, doc), options.visibleWorldRect)) continue;
-       if (!hitTestDocumentObject(doc, object, worldPoint, toleranceWorld)) continue;
+       if (!hitTestDocumentObject(doc, object, worldPoint, toleranceWorld, options)) continue;
       results.push({
         objectId: object.id,
         part: object.style.fill.type === 'none' ? 'stroke' : 'fill',
@@ -278,11 +280,17 @@ function angleWithinSweep(angle: number, start: number, end: number): boolean {
   return normalized >= twoPi + sweep;
 }
 
-function hitTestDocumentObject(doc: DocumentModel, object: SceneObject, worldPoint: Vec2, toleranceWorld: number): boolean {
+export function hitTestDocumentObject(
+  doc: DocumentModel,
+  object: SceneObject,
+  worldPoint: Vec2,
+  toleranceWorld: number,
+  options?: HitTestOptions
+): boolean {
   if (object.type !== 'group') return hitTestObject(object, worldPoint, toleranceWorld);
   return object.childIds.some((childId) => {
     const child = doc.objects[childId];
-    return child?.visible && !child.locked && hitTestDocumentObject(doc, child, worldPoint, toleranceWorld);
+    return child?.visible && (options?.includeLocked || !child.locked) && hitTestDocumentObject(doc, child, worldPoint, toleranceWorld, options);
   });
 }
 

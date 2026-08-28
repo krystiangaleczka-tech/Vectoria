@@ -1,5 +1,6 @@
 import type { DocumentModel } from '../model/types.js';
 import { validateInvariants } from '../model/invariants.js';
+import { validateLockedMutations } from '../model/mutation-guards.js';
 
 /**
  * Command interface for document mutations.
@@ -81,6 +82,12 @@ export class CommandHistory {
       return doc;
     }
 
+    const lockedViolations = validateLockedMutations(doc, newDoc);
+    if (lockedViolations.length > 0) {
+      console.error('[Vectoria] Command rejected by locked mutation guards:', lockedViolations);
+      return doc;
+    }
+
     this.entries = this.entries.slice(0, this.historyCursor + 1);
     const commandNumber = this.nextCommandId++;
     const entryId = `${command.type}-${commandNumber}`;
@@ -107,7 +114,7 @@ export class CommandHistory {
     if (!entry) return null;
 
     const newDoc = entry.command.undo(doc);
-    if (newDoc === doc || validateInvariants(newDoc).length > 0) return null;
+    if (newDoc === doc || validateInvariants(newDoc).length > 0 || validateLockedMutations(doc, newDoc).length > 0) return null;
     this.historyCursor -= 1;
     this._onChange?.();
     return newDoc;
@@ -121,7 +128,7 @@ export class CommandHistory {
     if (!entry) return null;
 
     const newDoc = entry.command.execute(doc);
-    if (newDoc === doc || validateInvariants(newDoc).length > 0) return null;
+    if (newDoc === doc || validateInvariants(newDoc).length > 0 || validateLockedMutations(doc, newDoc).length > 0) return null;
     this.historyCursor += 1;
     this._onChange?.();
     return newDoc;

@@ -1,35 +1,60 @@
-import type { ImageObject, ObjectId, SceneObject } from '@vectoria/core';
+import type { ImageObject, SceneObject } from '@vectoria/core';
 import { generateId, type Vec2 } from '@vectoria/shared';
 import { createTransform, defaultObjectStyle } from '@vectoria/core';
 import { importSvgToDocument } from '../svg/import.js';
+
+// ─── Limity bezpieczeństwa ────────────────────────────────────────────────────
+
+/** Maksymalny rozmiar pliku: 50 MB */
+const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024;
+
+/** Maksymalna liczba elementów wektorowych z jednego SVG */
+const MAX_SVG_OBJECTS = 5_000;
+
+// ─── Typy ─────────────────────────────────────────────────────────────────────
 
 export type DroppedAssetResult =
   | { readonly kind: 'image'; readonly image: ImageObject }
   | { readonly kind: 'vector'; readonly objects: readonly SceneObject[]; readonly message?: string };
 
+// ─── Główna funkcja ───────────────────────────────────────────────────────────
+
 /**
  * Handles dragged and dropped files (PNG, JPG, WebP, SVG, PDF) asynchronously,
  * producing either an ImageObject or imported editable vector scene objects.
+ * Validates file size, element count, and sanitizes SVG before processing.
  */
 export async function processDroppedFile(
   file: File,
   dropPosition: Vec2,
   targetLayerId: string,
 ): Promise<DroppedAssetResult> {
+  if (file.size > MAX_FILE_SIZE_BYTES) {
+    throw new Error(
+      `Plik jest za duży (${(file.size / 1024 / 1024).toFixed(1)} MB). Maksymalny rozmiar to ${MAX_FILE_SIZE_BYTES / 1024 / 1024} MB.`,
+    );
+  }
+
   const mime = file.type.toLowerCase();
   const name = file.name.toLowerCase();
 
   // SVG -> Vector Import (ASSET-004)
   if (mime === 'image/svg+xml' || name.endsWith('.svg')) {
     const text = await readFileAsText(file);
-    const importedDoc = importSvgToDocument(text);
+    const sanitized = sanitizeSvgText(text);
+    const importedDoc = importSvgToDocument(sanitized);
     const objects = Object.values(importedDoc.objects) as SceneObject[];
 
     if (objects.length === 0) {
-      throw new Error('SVG file contains no importable vector elements.');
+      throw new Error('Plik SVG nie zawiera importowalnych elementów wektorowych.');
     }
 
-    // Offset imported objects to dropPosition
+    if (objects.length > MAX_SVG_OBJECTS) {
+      throw new Error(
+        `SVG zawiera zbyt wiele elementów (${objects.length}). Maksimum to ${MAX_SVG_OBJECTS}.`,
+      );
+    }
+
     const firstArtboard = Object.values(importedDoc.artboards)[0];
     const originX = firstArtboard ? firstArtboard.x : 0;
     const originY = firstArtboard ? firstArtboard.y : 0;
@@ -50,7 +75,7 @@ export async function processDroppedFile(
     return {
       kind: 'vector',
       objects: positionedObjects,
-      message: `Imported ${positionedObjects.length} vector objects from SVG.`,
+      message: `Zaimportowano ${positionedObjects.length} obiektów wektorowych z SVG.`,
     };
   }
 
@@ -65,7 +90,6 @@ export async function processDroppedFile(
     const dataUrl = await readFileAsDataUrl(file);
     const { width: naturalWidth, height: naturalHeight } = await getImageDimensions(dataUrl);
 
-    // Default displayed dimensions (capped at sensible canvas size e.g. 600px max initial)
     let displayWidth = naturalWidth;
     let displayHeight = naturalHeight;
     const maxInitialDimension = 600;
@@ -75,7 +99,7 @@ export async function processDroppedFile(
       displayHeight = Math.round(displayHeight * scale);
     }
 
-    const imageId: ObjectId = generateId();
+    const imageId = generateId();
     const imageObject: ImageObject = {
       id: imageId,
       name: file.name.replace(/\.[^/.]+$/, ''),
@@ -108,49 +132,126 @@ export async function processDroppedFile(
 
   // PDF -> Vector / Page Import (ASSET-005)
   if (mime === 'application/pdf' || name.endsWith('.pdf')) {
-    // If SVG fallback/preview is extracted or single-page vector
-    return {
-      kind: 'vector',
-      objects: [],
-      message: 'PDF multipage import: page 1 selected.',
-    };
+    throw new Error(
+      'Import PDF nie jest obsługiwany. Najpierw wyeksportuj strony PDF jako SVG lub PNG.',
+    );
   }
 
-  throw new Error(`Unsupported file format: ${file.name}`);
+  throw new Error(`Nieobsługiwany format pliku: ${file.name}`);
 }
 
-function readFileAsText(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = () => reject(new Error('Failed to read file as text'));
-    reader.readAsText(file);
-  });
+// ─── Sanityzacja SVG ──────────────────────────────────────────────────────────
+
+/**
+ * Strips dangerous elements and attributes from raw SVG text before parsing.
+ * Removes: <script>, <foreignObject>, event handlers (on*), javascript: URIs.
+ * Does NOT mutate the DOM — operates on the raw string for speed and safety.
+ */
+function sanitizeSvgText(svgText: string): string {
+  let result = svgText;
+
+  // Usuń bloki <script>...</script> (case-insensitive, multiline)
+  result = result.replace(/<script[\s\S]*?<\/script>/gi, '');
+
+  // Usuń samozamykające się <script ... />
+  result = result.replace(/<script[^>]*\/>/gi, '');
+
+  // Usuń <foreignObject>...</foreignObject>
+  result = result.replace(/<foreignObject[\s\S]*?<\/foreignObject>/gi, '');
+
+  // Usuń samozamykające się <foreignObject ... />
+  result = result.replace(/<foreignObject[^>]*\/>/gi, '');
+
+  // Usuń event handlery (on* atrybuty): onload, onclick, itp.
+  // Obsługuje cudzysłowy podwójne, pojedyncze i brak cudzysłowów.
+  result = result.replace(/\s+on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]*)/gi, '');
+
+  // Usuń href i xlink:href z wartością javascript:
+  result = result.replace(/\s+(?:xlink:)?href\s*=\s*(?:"javascript:[^"]*"|'javascript:[^']*'|javascript:[^\s>]*)/gi, '');
+
+  // Usuń atrybuty src z wartością javascript:
+  result = result.replace(/\s+src\s*=\s*(?:"javascript:[^"]*"|'javascript:[^']*'|javascript:[^\s>]*)/gi, '');
+
+  return result;
 }
 
-function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = () => reject(new Error('Failed to read file as Data URL'));
-    reader.readAsDataURL(file);
-  });
+// ─── Pomocnicze ───────────────────────────────────────────────────────────────
+
+async function readFileAsText(file: File): Promise<string> {
+  if (typeof file.text === 'function') {
+    return file.text();
+  }
+  if (typeof FileReader !== 'undefined') {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(new Error('Nie udało się odczytać pliku jako tekst'));
+      reader.readAsText(file);
+    });
+  }
+  throw new Error('Środowisko nie obsługuje odczytu plików');
+}
+
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i]!);
+  }
+  return btoa(binary);
+}
+
+async function readFileAsDataUrl(file: File): Promise<string> {
+  if (typeof FileReader !== 'undefined') {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(new Error('Nie udało się odczytać pliku jako Data URL'));
+      reader.readAsDataURL(file);
+    });
+  }
+  if (typeof file.arrayBuffer === 'function') {
+    const buffer = await file.arrayBuffer();
+    const base64 = arrayBufferToBase64(buffer);
+    const mime = file.type || 'image/png';
+    return `data:${mime};base64,${base64}`;
+  }
+  throw new Error('Środowisko nie obsługuje odczytu plików');
 }
 
 function getImageDimensions(src: string): Promise<{ width: number; height: number }> {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     if (typeof Image === 'undefined') {
       resolve({ width: 400, height: 300 });
       return;
     }
     const img = new Image();
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        resolve({ width: img.naturalWidth || 400, height: img.naturalHeight || 300 });
+      }
+    }, 200);
+
     img.onload = () => {
-      resolve({
-        width: img.naturalWidth || 400,
-        height: img.naturalHeight || 300,
-      });
+      if (!settled) {
+        settled = true;
+        clearTimeout(timer);
+        resolve({
+          width: img.naturalWidth || 400,
+          height: img.naturalHeight || 300,
+        });
+      }
     };
-    img.onerror = () => reject(new Error('Failed to decode image dimensions'));
+    img.onerror = () => {
+      if (!settled) {
+        settled = true;
+        clearTimeout(timer);
+        resolve({ width: 400, height: 300 });
+      }
+    };
     img.src = src;
   });
 }

@@ -39,6 +39,7 @@ export interface TopBarProps {
   onOpenFindReplace?: () => void;
   onOpenUsedFonts?: () => void;
   onOpenSpecialCharacters?: () => void;
+  onOpenWebFontImport?: () => void;
   outlineMode?: boolean;
   onToggleOutlineMode?: () => void;
 }
@@ -78,6 +79,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   onOpenFindReplace,
   onOpenUsedFonts,
   onOpenSpecialCharacters,
+  onOpenWebFontImport,
   outlineMode,
   onToggleOutlineMode,
 }) => {
@@ -127,6 +129,7 @@ export const TopBar: React.FC<TopBarProps> = ({
         onOpenFindReplace={onOpenFindReplace}
         onOpenUsedFonts={onOpenUsedFonts}
         onOpenSpecialCharacters={onOpenSpecialCharacters}
+        onOpenWebFontImport={onOpenWebFontImport}
         outlineMode={outlineMode}
         onToggleOutlineMode={onToggleOutlineMode}
       />

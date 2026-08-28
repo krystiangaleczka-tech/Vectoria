@@ -61,6 +61,30 @@ Przed użyciem zewnętrznej paczki lub Web API:
 
 ---
 
+## 1b. Pułapki implementacyjne — reguły z historii błędów
+
+### Browser API vs środowisko testowe (Node.js)
+
+Kod w `packages/io/` i `packages/core/` jest uruchamiany zarówno w przeglądarce (prod) jak i w Node.js (testy Vitest bez jsdom). Obowiązują następujące zasady:
+
+- **`FileReader` nie istnieje w Node.js.** Zawsze najpierw sprawdzaj `typeof FileReader !== 'undefined'`. Lepszym primary path jest `file.text()` / `file.arrayBuffer()` — dostępne natywnie w Node od v20 i w przeglądarkach.
+- **`Buffer` (Node.js global) nie istnieje w przeglądarce.** Nie używaj `Buffer.from(...).toString('base64')` w kodzie przeglądarkowym. Zamiennik: pętla po `Uint8Array` + `btoa()`, dostępna wszędzie.
+- **`Image`, `DOMParser`, `HTMLElement` nie istnieją w Node.js bez jsdom.** Jeśli test wymaga tych API, dodaj na górze pliku testowego `// @vitest-environment jsdom`. Sprawdź, czy środowisko jest dostępne w `packages/*/package.json` (zależność `jsdom`).
+- **Timeouty w testach:** Dekodowanie obrazów (`img.onload`) w jsdom często nie wywołuje `onload` dla fałszywych danych. Zawsze dodaj fallback timeout lub obsłuż `onerror` z `resolve({ width: 400, height: 300 })` zamiast `reject`.
+
+### Regex na atrybuty HTML/SVG — kompletność
+
+Regex przechwytujące atrybuty HTML/SVG **muszą obsługiwać wszystkie trzy formy wartości**:
+
+```
+atrybut="wartość"   → "[^"]*"
+atrybut='wartość'   → '[^']*'
+atrybut=wartość     → [^\s>]*    ← najczęściej pomijany błąd
+```
+
+Wzorzec zbiorczy: `(?:"[^"]*"|'[^']*'|[^\s>]*)`. Nie używaj `["'][^"']*["']` — to nie złapie cudzysłowów mieszanych ani wartości bez cudzysłowów.
+
+---
 ## 2. Triggery operacyjne
 
 Trigger działa **wyłącznie**, kiedy cała wiadomość użytkownika to dokładnie jedno słowo: `dump`, `p`, `f`, `t` lub `builduj` — bez spacji, interpunkcji i dodatkowego tekstu. `p dzięki` oraz `zrób dump` są zwykłymi wiadomościami.

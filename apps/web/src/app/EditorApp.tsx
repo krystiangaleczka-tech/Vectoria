@@ -126,13 +126,14 @@ import { NewDocumentDialog } from '../features/dialogs/NewDocumentDialog.js';
 import { UsedFontsPanel } from '../features/panels/UsedFontsPanel.js';
 import { FindReplaceDialog } from '../features/dialogs/FindReplaceDialog.js';
 import { SpecialCharactersPopover } from '../features/dialogs/SpecialCharactersPopover.js';
+import { WebFontImportDialog } from '../features/dialogs/WebFontImportDialog.js';
 import { TraceImageDialog } from '../features/dialogs/TraceImageDialog.js';
 import type { DockPanel } from '../features/panels/RightDock.js';
 import type { PathAction } from '../features/panels/PropertiesPanel.js';
 import type { GeometryAction } from '../features/properties/GeometryProperties.js';
 import { Button } from '@vectoria/ui';
 import interOutlineFontUrl from '@fontsource/inter/files/inter-latin-400-normal.woff';
-import { createOpenTypeFontOutlineProvider } from '@vectoria/io';
+import { createOpenTypeFontOutlineProvider, listDocumentFonts, checkFontAvailability } from '@vectoria/io';
 
 function isMacPlatform(): boolean {
   const platform = (navigator as { userAgentData?: { platform?: string } }).userAgentData?.platform
@@ -176,12 +177,14 @@ export const EditorApp: React.FC = () => {
   const outlineProviderRef = useRef<import('@vectoria/core').FontOutlineProvider | null>(null);
   const outlineProviderPromiseRef = useRef<Promise<import('@vectoria/core').FontOutlineProvider> | null>(null);
   const [textActionError, setTextActionError] = useState<string | null>(null);
+  const [missingFontsError, setMissingFontsError] = useState<string | null>(null);
   const [geometryPreview, setGeometryPreview] = useState<GeometryPreview | null>(null);
   const [cleanupSelectedFindingIds, setCleanupSelectedFindingIds] = useState<readonly string[]>([]);
   const [destructiveGeometryConfirmOpen, setDestructiveGeometryConfirmOpen] = useState(false);
   const [usedFontsOpen, setUsedFontsOpen] = useState(false);
   const [findReplaceOpen, setFindReplaceOpen] = useState(false);
   const [specialCharsOpen, setSpecialCharsOpen] = useState(false);
+  const [webFontImportOpen, setWebFontImportOpen] = useState(false);
   const [outlineMode, setOutlineMode] = useState(false);
   const [soloLayerId, setSoloLayerId] = useState<string | null>(null);
   const [traceImageTarget, setTraceImageTarget] = useState<ImageObject | null>(null);
@@ -231,6 +234,28 @@ export const EditorApp: React.FC = () => {
 
   useEffect(() => {
     latestDocRef.current = doc;
+  }, [doc]);
+
+  // Check for missing fonts proactively
+  useEffect(() => {
+    if (!doc) return;
+    const timeout = setTimeout(() => {
+      const used = listDocumentFonts(doc);
+      if (used.length === 0) {
+        setMissingFontsError(null);
+        return;
+      }
+      void Promise.all(used.map(item => checkFontAvailability(item.fontFamily)))
+        .then(results => {
+          const missing = used.filter((_, i) => !results[i]);
+          if (missing.length > 0) {
+            setMissingFontsError(`Missing fonts detected: ${missing.map(f => f.fontFamily).join(', ')}. Please install them or replace them to avoid layout shifts.`);
+          } else {
+            setMissingFontsError(null);
+          }
+        });
+    }, 1000);
+    return () => clearTimeout(timeout);
   }, [doc]);
 
   const processSaveQueue = useCallback(async () => {
@@ -641,6 +666,14 @@ export const EditorApp: React.FC = () => {
     }
   }, [handleExecuteCommand]);
 
+  const handleWebFontImport = useCallback((_family: string, _url: string) => {
+    // Force a re-render or layout update if necessary.
+    // The font is now available globally via document.fonts.
+    // We could potentially dispatch a dummy command or update a timestamp in the document,
+    // but React should pick up changes if we use standard tools. For now, we do nothing.
+    setWebFontImportOpen(false);
+  }, []);
+
   const handleUpdateArrowheads = useCallback((id: ObjectId, markerStart: ArrowheadStyle | null, markerEnd: ArrowheadStyle | null) => {
     handleExecuteCommand(new SetStrokeArrowheadsCommand(id, { markerStart, markerEnd }));
   }, [handleExecuteCommand]);
@@ -953,10 +986,6 @@ export const EditorApp: React.FC = () => {
   const handleConvertToOutlines = useCallback((id: ObjectId) => {
     const object = doc?.objects[id];
     if (!object || (object.type !== 'text' && object.type !== 'text-frame')) return;
-    if (!/^inter(?:,|$)/i.test(object.fontFamily.trim())) {
-      setTextActionError(`Outline conversion unavailable for font '${object.fontFamily}'. Import matching font data first.`);
-      return;
-    }
     const loadProvider = outlineProviderRef.current
       ? Promise.resolve(outlineProviderRef.current)
       : outlineProviderPromiseRef.current ?? (outlineProviderPromiseRef.current = fetch(interOutlineFontUrl).then((response) => {
@@ -1453,6 +1482,7 @@ export const EditorApp: React.FC = () => {
           onOpenFindReplace={() => setFindReplaceOpen(true)}
           onOpenUsedFonts={() => setUsedFontsOpen(true)}
           onOpenSpecialCharacters={() => setSpecialCharsOpen(true)}
+          onOpenWebFontImport={() => setWebFontImportOpen(true)}
           outlineMode={outlineMode}
           onToggleOutlineMode={handleToggleOutlineMode}
         />
@@ -1467,6 +1497,8 @@ export const EditorApp: React.FC = () => {
         <RecoveryBanner message="Wykryto dokument po niezamkniętej sesji." details="Wybierz, czy zachować ostatni autosave, czy przywrócić ostatnią poprawną wersję." onRestore={handleRestoreRecovery} onDiscard={handleDiscardRecovery} />
       )}
       {textActionError && <div className="recovery-banner" role="alert"><span>{textActionError}</span><button type="button" onClick={() => setTextActionError(null)}>Dismiss</button></div>}
+      {missingFontsError && <div className="recovery-banner" role="alert" style={{ background: 'var(--color-warning, #f59e0b)' }}><span>⚠️ {missingFontsError}</span><button type="button" onClick={() => setMissingFontsError(null)}>Dismiss</button></div>}
+      {activeTool === 'pen' && <div className="tool-hint">Click to add corners. Drag for curves. Click start to close. Enter to finish.</div>}
 
       <ContextualControlBar
         document={doc}
@@ -1660,6 +1692,11 @@ export const EditorApp: React.FC = () => {
          isOpen={specialCharsOpen}
          onClose={() => setSpecialCharsOpen(false)}
          onSelectCharacter={handleInsertSpecialCharacter}
+       />
+       <WebFontImportDialog
+         isOpen={webFontImportOpen}
+         onClose={() => setWebFontImportOpen(false)}
+         onImport={handleWebFontImport}
        />
        {traceImageTarget && (
          <TraceImageDialog

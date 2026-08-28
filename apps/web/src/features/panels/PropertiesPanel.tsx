@@ -428,6 +428,35 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                     <option value="off">Wyłączony</option>
                   </select>
                 </label>
+                
+                <div className="variable-axes-section">
+                  <div className="dialog-label" style={{ marginTop: 8, marginBottom: 4 }}>Variable Font Axes</div>
+                  <NumberInput
+                    data-testid="prop-axis-wght"
+                    label="Weight (wght)"
+                    disabled={selected.locked}
+                    min={100} max={1000} decimals={0} unit=""
+                    value={selected.variableAxes?.wght ?? (Number(selected.fontWeight) || 400)}
+                    onChange={(value) => onUpdateTypography?.(selected.id, { variableAxes: { ...selected.variableAxes, wght: value } })}
+                  />
+                  <NumberInput
+                    data-testid="prop-axis-wdth"
+                    label="Width (wdth)"
+                    disabled={selected.locked}
+                    min={50} max={200} decimals={0} unit="%"
+                    value={selected.variableAxes?.wdth ?? 100}
+                    onChange={(value) => onUpdateTypography?.(selected.id, { variableAxes: { ...selected.variableAxes, wdth: value } })}
+                  />
+                  <NumberInput
+                    data-testid="prop-axis-slnt"
+                    label="Slant (slnt)"
+                    disabled={selected.locked}
+                    min={-90} max={90} decimals={0} unit="°"
+                    value={selected.variableAxes?.slnt ?? 0}
+                    onChange={(value) => onUpdateTypography?.(selected.id, { variableAxes: { ...selected.variableAxes, slnt: value } })}
+                  />
+                </div>
+
                 {selected.type === 'text-frame' && (
                   <>
                     <NumberInput
