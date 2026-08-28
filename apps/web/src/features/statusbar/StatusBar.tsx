@@ -62,7 +62,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
             X: {convertUnit(cursorWorld.x, 'px', unit).toFixed(1)} {unit} · Y: {convertUnit(cursorWorld.y, 'px', unit).toFixed(1)} {unit}
           </span>
         )}
-        <span>{objectCount} {objectCount === 1 ? 'object' : 'objects'}</span>
+        <span data-testid="status-bar-objects">{objectCount} {objectCount === 1 ? 'object' : 'objects'}</span>
         <span>{zoomPercent}%</span>
         <span>Snap: {snapEnabled ? 'Grid' : 'Off'}</span>
         <span

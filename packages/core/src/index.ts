@@ -16,5 +16,6 @@ export * from './geometry/callout.js';
 export * from './geometry/arrowheads.js';
 export * from './geometry/text-layout.js';
 export * from './geometry/text-outlines.js';
+export * from './geometry/image-trace.js';
 export * from './commands/index.js';
 export { DOCUMENT_PRESETS, type DocumentPreset } from './model/presets.js';

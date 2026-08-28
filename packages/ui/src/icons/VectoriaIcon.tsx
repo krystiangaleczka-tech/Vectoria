@@ -60,7 +60,18 @@ export type VectoriaIconName =
   | 'soloMode'
   | 'filter'
   | 'folder'
-  | 'search';
+  | 'search'
+  | 'image'
+  | 'crop'
+  | 'link'
+  | 'brokenLink'
+  | 'trace'
+  | 'symbol'
+  | 'component'
+  | 'brandKit'
+  | 'stockSvg'
+  | 'brightness'
+  | 'contrast';
 
 export interface VectoriaIconProps {
   name: VectoriaIconName;
@@ -573,6 +584,112 @@ export const VectoriaIcon: React.FC<VectoriaIconProps> = ({
         <svg {...iconProps}>
           <circle cx="11" cy="11" r="8" />
           <line x1="21" y1="21" x2="16.65" y2="16.65" />
+        </svg>
+      );
+
+    case 'image':
+      return (
+        <svg {...iconProps}>
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+          <circle cx="8.5" cy="8.5" r="1.5" />
+          <polyline points="21 15 16 10 5 21" />
+        </svg>
+      );
+
+    case 'crop':
+      return (
+        <svg {...iconProps}>
+          <path d="M6 2v14a2 2 0 0 0 2 2h14" />
+          <path d="M18 22V8a2 2 0 0 0-2-2H2" />
+        </svg>
+      );
+
+    case 'link':
+      return (
+        <svg {...iconProps}>
+          <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+          <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+        </svg>
+      );
+
+    case 'brokenLink':
+      return (
+        <svg {...iconProps}>
+          <path d="m19 5-1.5 1.5" />
+          <path d="m5 19 1.5-1.5" />
+          <path d="m2 2 20 20" />
+          <path d="M10.5 13.5a5 5 0 0 0 6.54.54l1.5-1.5" />
+          <path d="M13.5 10.5a5 5 0 0 0-6.54-.54l-1.5 1.5" />
+        </svg>
+      );
+
+    case 'trace':
+      return (
+        <svg {...iconProps}>
+          <circle cx="12" cy="12" r="3" />
+          <path d="M3 12h3" />
+          <path d="M18 12h3" />
+          <path d="M12 3v3" />
+          <path d="M12 18v3" />
+          <path d="m4.93 4.93 2.12 2.12" />
+          <path d="m16.95 16.95 2.12 2.12" />
+        </svg>
+      );
+
+    case 'symbol':
+      return (
+        <svg {...iconProps}>
+          <path d="M12 2 2 7l10 5 10-5-10-5Z" />
+          <path d="m2 17 10 5 10-5" />
+          <path d="m2 12 10 5 10-5" />
+        </svg>
+      );
+
+    case 'component':
+      return (
+        <svg {...iconProps}>
+          <rect x="3" y="3" width="7" height="7" rx="1" />
+          <rect x="14" y="3" width="7" height="7" rx="1" />
+          <rect x="3" y="14" width="7" height="7" rx="1" />
+          <rect x="14" y="14" width="7" height="7" rx="1" />
+        </svg>
+      );
+
+    case 'brandKit':
+      return (
+        <svg {...iconProps}>
+          <path d="M12 2 2 7v10l10 5 10-5V7L12 2Z" />
+          <path d="m12 12 8.5-5" />
+          <path d="m12 12v9.5" />
+          <path d="m12 12-8.5-5" />
+        </svg>
+      );
+
+    case 'stockSvg':
+      return (
+        <svg {...iconProps}>
+          <path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3Z" />
+        </svg>
+      );
+
+    case 'brightness':
+      return (
+        <svg {...iconProps}>
+          <circle cx="12" cy="12" r="4" />
+          <path d="M12 2v2" />
+          <path d="M12 20v2" />
+          <path d="m4.93 4.93 1.41 1.41" />
+          <path d="m17.66 17.66 1.41 1.41" />
+          <path d="M2 12h2" />
+          <path d="M20 12h2" />
+        </svg>
+      );
+
+    case 'contrast':
+      return (
+        <svg {...iconProps}>
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" />
         </svg>
       );
 

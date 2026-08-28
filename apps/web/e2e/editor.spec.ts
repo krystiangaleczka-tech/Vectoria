@@ -623,4 +623,36 @@ test.describe('Vectoria MVP Skeleton', () => {
     await expect(assetsPanel).toBeVisible();
     await expect(assetsPanel).toContainText('Zasoby i Komponenty');
   });
+
+  test('EPIC-12: External links panel, brand kit, and stock assets insertion', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    // Switch to Links panel
+    await page.getByRole('tab', { name: 'Linki' }).click();
+    const linksPanel = page.getByTestId('links-panel');
+    await expect(linksPanel).toBeVisible();
+    await expect(linksPanel).toContainText('Zewnętrzne zasoby i linki');
+
+    // Switch to Assets panel
+    await page.getByRole('tab', { name: 'Zasoby' }).click();
+    const assetsPanel = page.getByTestId('assets-panel');
+    await expect(assetsPanel).toBeVisible();
+    await expect(assetsPanel).toContainText('Symbole');
+    await expect(assetsPanel).toContainText('Brand Kit');
+    await expect(assetsPanel).toContainText('Biblioteka Ikon SVG');
+
+    // Insert an SVG icon from the built-in library
+    const starIconBtn = page.getByTestId('stock-asset-star');
+    await expect(starIconBtn).toBeVisible();
+    await starIconBtn.click();
+
+    // Verify object count and history updated
+    await expect(page.getByTestId('status-bar-objects')).toContainText('1');
+
+    // Switch to History tab and verify entry
+    await page.getByRole('tab', { name: 'Historia' }).click();
+    await expect(page.getByTestId('history-panel')).toBeVisible();
+    await expect(page.getByTestId('history-panel')).toContainText('Create path');
+  });
 });

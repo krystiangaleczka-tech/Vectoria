@@ -98,6 +98,7 @@ export interface CanvasViewportProps {
   styleSampleTolerance?: number;
   outlineMode?: boolean;
   soloLayerId?: string | null;
+  onDropFiles?: (files: FileList, worldPos: Vec2) => void;
 }
 
 interface DragState {
@@ -206,6 +207,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   styleSampleTolerance = 0,
   outlineMode = false,
   soloLayerId = null,
+  onDropFiles,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const bgCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -1726,6 +1728,20 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
              ? 'crosshair'
              : 'default',
         touchAction: 'none',
+      }}
+      onDragOver={(e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+          const rect = containerRef.current?.getBoundingClientRect();
+          const screenX = e.clientX - (rect?.left ?? 0);
+          const screenY = e.clientY - (rect?.top ?? 0);
+          const worldPos = camera.screenToWorld({ x: screenX, y: screenY });
+          onDropFiles?.(e.dataTransfer.files, worldPos);
+        }
       }}
     >
       {isolationRef.current.context && <div className="isolation-breadcrumb" role="status" aria-live="polite">Isolate: {isolationRef.current.context.label} · Escape to exit</div>}

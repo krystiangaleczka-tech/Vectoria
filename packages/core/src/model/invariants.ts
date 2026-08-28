@@ -343,6 +343,45 @@ export function validateInvariants(doc: DocumentModel): InvariantViolation[] {
           }
         }
 
+        if (obj.type === 'image') {
+          if (!Number.isFinite(obj.width) || obj.width <= 0 || !Number.isFinite(obj.height) || obj.height <= 0) {
+            violations.push({ code: 'INVALID_IMAGE_DIMENSIONS', message: `Object '${objectId}' image width and height must be positive and finite.` });
+          }
+          if (!Number.isFinite(obj.naturalWidth) || obj.naturalWidth <= 0 || !Number.isFinite(obj.naturalHeight) || obj.naturalHeight <= 0) {
+            violations.push({ code: 'INVALID_IMAGE_NATURAL_DIMENSIONS', message: `Object '${objectId}' image naturalWidth and naturalHeight must be positive.` });
+          }
+          if (obj.source.type === 'embed') {
+            if (!obj.source.data || !obj.source.data.trim()) violations.push({ code: 'INVALID_IMAGE_SOURCE', message: `Object '${objectId}' embedded image data cannot be empty.` });
+          } else if (obj.source.type === 'link') {
+            if (!obj.source.url || !obj.source.url.trim()) violations.push({ code: 'INVALID_IMAGE_SOURCE', message: `Object '${objectId}' linked image url cannot be empty.` });
+          }
+          if (obj.crop) {
+            if (!Number.isFinite(obj.crop.width) || obj.crop.width <= 0 || !Number.isFinite(obj.crop.height) || obj.crop.height <= 0 || !Number.isFinite(obj.crop.x) || obj.crop.x < 0 || !Number.isFinite(obj.crop.y) || obj.crop.y < 0) {
+              violations.push({ code: 'INVALID_IMAGE_CROP', message: `Object '${objectId}' image crop contains invalid bounds.` });
+            }
+          }
+          if (obj.filters) {
+            if (obj.filters.brightness !== undefined && (!Number.isFinite(obj.filters.brightness) || obj.filters.brightness < -100 || obj.filters.brightness > 100)) {
+              violations.push({ code: 'INVALID_IMAGE_FILTER', message: `Object '${objectId}' brightness filter must be in [-100, 100].` });
+            }
+            if (obj.filters.contrast !== undefined && (!Number.isFinite(obj.filters.contrast) || obj.filters.contrast < -100 || obj.filters.contrast > 100)) {
+              violations.push({ code: 'INVALID_IMAGE_FILTER', message: `Object '${objectId}' contrast filter must be in [-100, 100].` });
+            }
+            if (obj.filters.saturation !== undefined && (!Number.isFinite(obj.filters.saturation) || obj.filters.saturation < 0 || obj.filters.saturation > 200)) {
+              violations.push({ code: 'INVALID_IMAGE_FILTER', message: `Object '${objectId}' saturation filter must be in [0, 200].` });
+            }
+          }
+        }
+
+        if (obj.type === 'symbol-instance') {
+          if (!Number.isFinite(obj.width) || obj.width <= 0 || !Number.isFinite(obj.height) || obj.height <= 0) {
+            violations.push({ code: 'INVALID_SYMBOL_INSTANCE_DIMENSIONS', message: `Object '${objectId}' symbol instance width and height must be positive.` });
+          }
+          if (!doc.symbols || !doc.symbols[obj.symbolId]) {
+            violations.push({ code: 'MISSING_SYMBOL_DEFINITION', message: `Object '${objectId}' references missing symbol definition '${obj.symbolId}'.` });
+          }
+        }
+
         if (obj.type === 'text-frame') {
           if (!Number.isFinite(obj.width) || obj.width <= 0) {
             violations.push({ code: 'INVALID_TEXT_FRAME_WIDTH', message: `Object '${objectId}' text-frame width must be positive and finite.` });
@@ -434,6 +473,20 @@ export function validateInvariants(doc: DocumentModel): InvariantViolation[] {
   for (const style of doc.objectStyles ?? []) {
     registerId(style.id, 'DUPLICATE_OBJECT_STYLE_ID');
     if (!style.name.trim()) violations.push({ code: 'INVALID_OBJECT_STYLE_NAME', message: `Object style '${style.id}' has an empty name.` });
+  }
+
+  for (const [symId, symbol] of Object.entries(doc.symbols ?? {})) {
+    registerId(symId, 'DUPLICATE_SYMBOL_ID');
+    if (symbol.id !== symId) violations.push({ code: 'SYMBOL_ID_MISMATCH', message: `Symbol key '${symId}' does not match its id '${symbol.id}'.` });
+    if (!symbol.name.trim()) violations.push({ code: 'INVALID_SYMBOL_NAME', message: `Symbol '${symId}' has an empty name.` });
+    if (symbol.objectIds.length === 0) violations.push({ code: 'EMPTY_SYMBOL', message: `Symbol '${symId}' must contain at least one object.` });
+    if (!Number.isFinite(symbol.bounds.width) || symbol.bounds.width <= 0 || !Number.isFinite(symbol.bounds.height) || symbol.bounds.height <= 0) {
+      violations.push({ code: 'INVALID_SYMBOL_BOUNDS', message: `Symbol '${symId}' must have positive bounds.` });
+    }
+  }
+
+  for (const logo of doc.brandKit?.logos ?? []) {
+    if (!logo.id.trim() || !logo.name.trim()) violations.push({ code: 'INVALID_BRAND_LOGO', message: 'Brand logo has invalid id or name.' });
   }
 
   return violations;

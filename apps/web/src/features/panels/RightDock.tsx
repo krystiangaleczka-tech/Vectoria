@@ -11,10 +11,11 @@ import { CleanupPanel } from '../cleanup/CleanupPanel.js';
 import { PalettesPanel } from './PalettesPanel.js';
 import { ObjectStylesPanel } from './ObjectStylesPanel.js';
 import type { GeometryAction } from '../properties/GeometryProperties.js';
+import { LinksPanel } from './LinksPanel.js';
 
 import { AssetsPanel } from './AssetsPanel.js';
 
-export type DockPanel = 'properties' | 'layers' | 'assets' | 'artboards' | 'history' | 'palettes' | 'object-styles' | 'cleanup';
+export type DockPanel = 'properties' | 'layers' | 'assets' | 'links' | 'artboards' | 'history' | 'palettes' | 'object-styles' | 'cleanup';
 
 export interface RightDockProps {
   document: DocumentModel;
@@ -95,12 +96,24 @@ export interface RightDockProps {
   onSaveObjectStyle?: (style: import('@vectoria/core').SavedObjectStyle) => void;
   onApplyObjectStyle?: (style: import('@vectoria/core').ObjectStyle) => void;
   onDeleteObjectStyle?: (id: string) => void;
+  onUpdateImageProperties?: (id: ObjectId, patch: Partial<import('@vectoria/core').ImageObject>) => void;
+  onCropImage?: (id: ObjectId, crop: import('@vectoria/core').ImageCrop | undefined) => void;
+  onOpenTraceImage?: (image: import('@vectoria/core').ImageObject) => void;
+  onDetachSymbolInstance?: (id: ObjectId) => void;
+  onInsertSymbol?: (symbolId: string) => void;
+  onCreateSymbolFromSelection?: () => void;
+  onInsertStockSvg?: (svgData: string, name: string) => void;
+  onApplyBrandFont?: (fontFamily: string) => void;
+  onAddBrandLogo?: (file: File) => void;
+  onEmbedImage?: (objectId: string) => void;
+  onRelinkImage?: (objectId: string, file: File) => void;
 }
 
 const panels: readonly { id: DockPanel; label: string; icon: React.ComponentProps<typeof VectoriaIcon>['name'] }[] = [
   { id: 'properties', label: 'Właściwości', icon: 'sliders' as React.ComponentProps<typeof VectoriaIcon>['name'] },
   { id: 'layers', label: 'Warstwy', icon: 'layers' },
   { id: 'assets', label: 'Zasoby', icon: 'folder' },
+  { id: 'links', label: 'Linki', icon: 'link' },
   { id: 'artboards', label: 'Artboardy', icon: 'grid' },
   { id: 'history', label: 'Historia', icon: 'history' },
   { id: 'palettes', label: 'Palety', icon: 'grid' },
@@ -187,6 +200,17 @@ export const RightDock: React.FC<RightDockProps> = ({
   onSaveObjectStyle,
   onApplyObjectStyle,
   onDeleteObjectStyle,
+  onUpdateImageProperties,
+  onCropImage,
+  onOpenTraceImage,
+  onDetachSymbolInstance,
+  onInsertSymbol,
+  onCreateSymbolFromSelection,
+  onInsertStockSvg,
+  onApplyBrandFont,
+  onAddBrandLogo,
+  onEmbedImage,
+  onRelinkImage,
 }) => {
   const [localActivePanel, setLocalActivePanel] = useState<DockPanel>('properties');
   const activePanel = requestedPanel ?? localActivePanel;
@@ -266,6 +290,10 @@ export const RightDock: React.FC<RightDockProps> = ({
             onApplyGeometryPreview={onApplyGeometryPreview}
             onCancelGeometryPreview={onCancelGeometryPreview}
             onOpenCleanup={onOpenCleanup}
+            onUpdateImageProperties={onUpdateImageProperties}
+            onCropImage={onCropImage}
+            onOpenTraceImage={onOpenTraceImage}
+            onDetachSymbolInstance={onDetachSymbolInstance}
           />
         )}
         {activePanel === 'layers' && (
@@ -294,6 +322,19 @@ export const RightDock: React.FC<RightDockProps> = ({
             document={doc}
             onApplyObjectStyle={onApplyObjectStyle}
             onApplyPaletteColor={(color) => onApplyPaletteFill?.({ type: 'solid', color })}
+            onInsertSymbol={onInsertSymbol}
+            onCreateSymbolFromSelection={onCreateSymbolFromSelection}
+            onInsertStockSvg={onInsertStockSvg}
+            onApplyBrandFont={onApplyBrandFont}
+            onAddBrandLogo={onAddBrandLogo}
+          />
+        )}
+        {activePanel === 'links' && (
+          <LinksPanel
+            doc={doc}
+            onSelectObject={(id) => onSelectObject(id)}
+            onEmbedImage={(id) => onEmbedImage?.(id)}
+            onRelinkImage={(id, file) => onRelinkImage?.(id, file)}
           />
         )}
         {activePanel === 'artboards' && onSelectArtboard && onCreateArtboard && onDuplicateArtboard && onDeleteArtboard && onRenameArtboard && onOrientArtboard && (

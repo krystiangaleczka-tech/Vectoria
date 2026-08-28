@@ -442,32 +442,32 @@ Wymóg stopniowego rozszerzania artboardu o 10% wynika bezpośrednio z potrzeby 
 
 ## EPIC-12: Obrazy i zasoby zewnętrzne
 
-- [ ] **ASSET-001** Dodać drag-and-drop PNG
-- [ ] **ASSET-002** Dodać drag-and-drop JPG
-- [ ] **ASSET-003** Dodać drag-and-drop WebP
-- [ ] **ASSET-004** Dodać drag-and-drop SVG
-- [ ] **ASSET-005** Dodać drag-and-drop PDF
-- [ ] **ASSET-006** Dodać osadzanie obrazu w pliku
-- [ ] **ASSET-007** Dodać linkowanie obrazu do zasobu zewnętrznego
-- [ ] **ASSET-008** Dodać panel linków
-- [ ] **ASSET-009** Wykrywać brakujące zasoby zewnętrzne
-- [ ] **ASSET-010** Zaimplementować kadrowanie obrazu w ramce
-- [ ] **ASSET-011** Dodać opacity obrazu
-- [ ] **ASSET-012** Dodać brightness obrazu
-- [ ] **ASSET-013** Dodać contrast obrazu
-- [ ] **ASSET-014** Dodać saturation obrazu
-- [ ] **ASSET-015** Dodać grayscale obrazu
-- [ ] **ASSET-016** Zaimplementować trace image czarno-biały
-- [ ] **ASSET-017** Zaimplementować trace image dla prostych logo
-- [ ] **ASSET-018** Dodać Symbol/Component
-- [ ] **ASSET-019** Dodać wiele instancji jednego symbolu
-- [ ] **ASSET-020** Aktualizować instancje po zmianie definicji symbolu
-- [ ] **ASSET-021** Dodać bibliotekę prostych ikon SVG
-- [ ] **ASSET-022** Dodać bibliotekę stockowych elementów SVG
-- [ ] **ASSET-023** Dodać Brand Kit: logo
-- [ ] **ASSET-024** Dodać Brand Kit: kolory
-- [ ] **ASSET-025** Dodać Brand Kit: fonty
-- [ ] **ASSET-026** Dodać Brand Kit: komponenty
+- [x] **ASSET-001** Dodać drag-and-drop PNG
+- [x] **ASSET-002** Dodać drag-and-drop JPG
+- [x] **ASSET-003** Dodać drag-and-drop WebP
+- [x] **ASSET-004** Dodać drag-and-drop SVG
+- [x] **ASSET-005** Dodać drag-and-drop PDF
+- [x] **ASSET-006** Dodać osadzanie obrazu w pliku
+- [x] **ASSET-007** Dodać linkowanie obrazu do zasobu zewnętrznego
+- [x] **ASSET-008** Dodać panel linków
+- [x] **ASSET-009** Wykrywać brakujące zasoby zewnętrzne
+- [x] **ASSET-010** Zaimplementować kadrowanie obrazu w ramce
+- [x] **ASSET-011** Dodać opacity obrazu
+- [x] **ASSET-012** Dodać brightness obrazu
+- [x] **ASSET-013** Dodać contrast obrazu
+- [x] **ASSET-014** Dodać saturation obrazu
+- [x] **ASSET-015** Dodać grayscale obrazu
+- [x] **ASSET-016** Zaimplementować trace image czarno-biały
+- [x] **ASSET-017** Zaimplementować trace image dla prostych logo
+- [x] **ASSET-018** Dodać Symbol/Component
+- [x] **ASSET-019** Dodać wiele instancji jednego symbolu
+- [x] **ASSET-020** Aktualizować instancje po zmianie definicji symbolu
+- [x] **ASSET-021** Dodać bibliotekę prostych ikon SVG
+- [x] **ASSET-022** Dodać bibliotekę stockowych elementów SVG
+- [x] **ASSET-023** Dodać Brand Kit: logo
+- [x] **ASSET-024** Dodać Brand Kit: kolory
+- [x] **ASSET-025** Dodać Brand Kit: fonty
+- [x] **ASSET-026** Dodać Brand Kit: komponenty
 
 ## EPIC-13: Efekty i appearance
 

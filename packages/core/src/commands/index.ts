@@ -108,3 +108,19 @@ export {
   MoveObjectsToLayerCommand,
   LockObjectAttributesCommand,
 } from './layer-commands.js';
+export {
+  CreateImageObjectCommand,
+  UpdateImagePropertiesCommand,
+  CropImageCommand,
+  TraceImageCommand,
+} from './image-commands.js';
+export {
+  CreateSymbolCommand,
+  InsertSymbolInstanceCommand,
+  UpdateSymbolDefinitionCommand,
+  DetachSymbolInstanceCommand,
+} from './symbol-commands.js';
+export {
+  UpdateBrandKitCommand,
+} from './brand-commands.js';
+

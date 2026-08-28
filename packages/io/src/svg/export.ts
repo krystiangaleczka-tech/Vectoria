@@ -1,4 +1,4 @@
-import type { DocumentModel, SceneObject, ObjectId, RectangleObject, EllipseObject, LineObject, PathObject, StrokeStyle, FillStyle, LinearGradientFill, RadialGradientFill, PatternFill, PolygonObject, StarObject, ArcObject, PieObject, RingObject, SpiralObject, CalloutObject, PolylineObject, ArrowheadStyle, TextObject, TextFrameObject } from '@vectoria/core';
+import type { DocumentModel, SceneObject, ObjectId, RectangleObject, EllipseObject, LineObject, PathObject, StrokeStyle, FillStyle, LinearGradientFill, RadialGradientFill, PatternFill, PolygonObject, StarObject, ArcObject, PieObject, RingObject, SpiralObject, CalloutObject, PolylineObject, ArrowheadStyle, TextObject, TextFrameObject, ImageObject, SymbolInstanceObject } from '@vectoria/core';
 import { getTransformMatrix, normalizeCornerRadii, getPolygonVertices, getStarVertices, getSpiralVertices, getCalloutVertices, expandObject, getCubicSegment, evaluateCubic, computeTextFrameLayout } from '@vectoria/core';
 
 export function escapeXml(unsafe: string): string {
@@ -29,6 +29,11 @@ export function exportArtboardToSvg(doc: DocumentModel, artboardId?: string): st
   // Arrowhead markers share defs and are referenced via marker-start/marker-end.
   const markerDefs: string[] = [];
   const markerMap = new Map<string, string>();
+
+  // Image filters, crops and symbol definitions
+  const filterDefs: string[] = [];
+  const clipDefs: string[] = [];
+  const symbolDefs = new Map<string, string>();
 
   // Mask groups: content objects are wrapped in <g clip-path|mask>, the mask
   // shape itself is emitted into defs as geometry only.
@@ -65,7 +70,7 @@ export function exportArtboardToSvg(doc: DocumentModel, artboardId?: string): st
       // Mask shapes are consumed by their group's def, not drawn directly.
       if (maskedIds.has(objectId) && masks.some((group) => group.maskId === objectId)) continue;
 
-      const elementSvg = renderSceneObjectToSvg(obj, gradientMap, markerMap, markerDefs);
+      const elementSvg = renderSceneObjectToSvg(obj, gradientMap, markerMap, markerDefs, doc, filterDefs, clipDefs, symbolDefs);
       if (!elementSvg) continue;
       const owningMask = masks.find((group) => group.contentIds.includes(objectId));
       if (owningMask) {
@@ -101,6 +106,9 @@ export function exportArtboardToSvg(doc: DocumentModel, artboardId?: string): st
     ...gradientDefs.map((d) => `    ${d}`),
     ...markerDefs.map((d) => `    ${d}`),
     ...maskDefs.map((d) => `    ${d}`),
+    ...filterDefs.map((d) => `    ${d}`),
+    ...clipDefs.map((d) => `    ${d}`),
+    ...Array.from(symbolDefs.values()).map((d) => `    ${d}`),
   ].join('\n');
 
   const svgContent = `<?xml version="1.0" encoding="UTF-8"?>
@@ -138,29 +146,44 @@ function buildLinearGradientDef(id: string, fill: LinearGradientFill): string {
 }
 
 function buildRadialGradientDef(id: string, fill: RadialGradientFill): string {
-  const stops = fill.stops.map((stop) => `<stop offset="${stop.offset}" stop-color="${escapeXml(stop.color)}" stop-opacity="${stop.opacity}" />`).join('');
-  return `<radialGradient id="${id}" gradientUnits="userSpaceOnUse" cx="${fill.center.x}" cy="${fill.center.y}" r="${fill.radius}">${stops}</radialGradient>`;
+  const stops = fill.stops
+    .map((s) => {
+      const opacityAttr = s.opacity < 1 ? ` stop-opacity="${s.opacity}"` : '';
+      return `      <stop offset="${s.offset}" stop-color="${escapeXml(s.color)}"${opacityAttr} />`;
+    })
+    .join('\n');
+
+  return `<radialGradient id="${id}" gradientUnits="userSpaceOnUse" cx="${fill.center.x}" cy="${fill.center.y}" r="${fill.radius}">\n${stops}\n    </radialGradient>`;
 }
 
 function buildAngularGradientDef(id: string, fill: Extract<FillStyle, { type: 'angular-gradient' }>): string {
-  const stops = fill.stops.map((stop) => `<stop offset="${stop.offset}" stop-color="${escapeXml(stop.color)}" stop-opacity="${stop.opacity}" />`).join('');
-  return `<linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="${fill.center.x}" y1="${fill.center.y}" x2="${fill.center.x + Math.cos(fill.angle)}" y2="${fill.center.y + Math.sin(fill.angle)}">${stops}</linearGradient>`;
+  // SVG has no native conical gradients, so we fallback to radial representation for compatibility
+  const stops = fill.stops
+    .map((s) => {
+      const opacityAttr = s.opacity < 1 ? ` stop-opacity="${s.opacity}"` : '';
+      return `      <stop offset="${s.offset}" stop-color="${escapeXml(s.color)}"${opacityAttr} />`;
+    })
+    .join('\n');
+  return `<radialGradient id="${id}" gradientUnits="userSpaceOnUse" cx="${fill.center.x}" cy="${fill.center.y}" r="24">\n${stops}\n    </radialGradient>`;
 }
 
 function buildPatternDef(id: string, fill: PatternFill): string {
   const size = Math.max(2, fill.size);
-  const mark = fill.kind === 'dots' ? `<circle cx="${size / 2}" cy="${size / 2}" r="${size / 6}" fill="${escapeXml(fill.foreground)}" />` : fill.kind === 'grid' ? `<path d="M 0 0 H ${size} V ${size} H 0 Z" fill="none" stroke="${escapeXml(fill.foreground)}" />` : `<path d="M 0 ${size} L ${size} 0" stroke="${escapeXml(fill.foreground)}" />`;
-  return `<pattern id="${id}" width="${size}" height="${size}" patternUnits="userSpaceOnUse"><rect width="100%" height="100%" fill="${escapeXml(fill.background)}" />${mark}</pattern>`;
+  let content = `<rect width="${size}" height="${size}" fill="${escapeXml(fill.background)}" />`;
+  if (fill.kind === 'dots') {
+    content += `<circle cx="${size / 2}" cy="${size / 2}" r="${size / 6}" fill="${escapeXml(fill.foreground)}" />`;
+  } else if (fill.kind === 'grid') {
+    content += `<rect width="${size}" height="${size}" fill="none" stroke="${escapeXml(fill.foreground)}" stroke-width="${Math.max(1, size / 8)}" />`;
+  } else if (fill.kind === 'hatch') {
+    content += `<path d="M 0 ${size} L ${size} 0" stroke="${escapeXml(fill.foreground)}" stroke-width="${Math.max(1, size / 8)}" />`;
+  }
+  return `<pattern id="${id}" width="${size}" height="${size}" patternUnits="userSpaceOnUse">\n      ${content}\n    </pattern>`;
 }
 
 /** Resolve fill to SVG fill attribute value. */
 function resolveFillAttr(fill: FillStyle, gradientMap: Map<FillStyle, string>): string {
   if (fill.type === 'solid') return `fill="${escapeXml(fill.color)}"`;
-  if (fill.type === 'linear-gradient') {
-    const id = gradientMap.get(fill);
-    return id ? `fill="url(#${id})"` : 'fill="none"';
-  }
-  if (fill.type === 'radial-gradient' || fill.type === 'angular-gradient' || fill.type === 'pattern') {
+  if (fill.type === 'linear-gradient' || fill.type === 'radial-gradient' || fill.type === 'angular-gradient' || fill.type === 'pattern') {
     const id = gradientMap.get(fill);
     return id ? `fill="url(#${id})"` : 'fill="none"';
   }
@@ -172,6 +195,10 @@ function renderSceneObjectToSvg(
   gradientMap: Map<FillStyle, string>,
   markerMap: Map<string, string>,
   markerDefs: string[],
+  doc?: DocumentModel,
+  filterDefs?: string[],
+  clipDefs?: string[],
+  symbolDefs?: Map<string, string>,
 ): string | null {
   switch (obj.type) {
     case 'rectangle':
@@ -198,9 +225,93 @@ function renderSceneObjectToSvg(
       return renderTextToSvg(obj as TextObject, gradientMap);
     case 'text-frame':
       return renderTextFrameToSvg(obj as TextFrameObject, gradientMap);
+    case 'image':
+      return renderImageToSvg(obj as ImageObject, filterDefs ?? [], clipDefs ?? []);
+    case 'symbol-instance':
+      return doc ? renderSymbolInstanceToSvg(obj as SymbolInstanceObject, doc, symbolDefs ?? new Map(), gradientMap, markerMap, markerDefs, filterDefs ?? [], clipDefs ?? []) : null;
     default:
       return null;
   }
+}
+
+function renderImageToSvg(
+  obj: ImageObject,
+  filterDefs: string[],
+  clipDefs: string[],
+): string {
+  const transformAttr = transformAttrOf(obj);
+  const href = obj.source.type === 'embed' ? obj.source.data : obj.source.url;
+  const opacityAttr = obj.style.opacity < 1 ? ` opacity="${obj.style.opacity}"` : '';
+
+  let filterAttr = '';
+  if (obj.filters) {
+    const filterId = `filter-${obj.id}`;
+    let filterBody = '';
+    if (obj.filters.grayscale) {
+      filterBody += '<feColorMatrix type="matrix" values="0.3333 0.3333 0.3333 0 0 0.3333 0.3333 0.3333 0 0 0.3333 0.3333 0.3333 0 0 0 0 0 1 0" />';
+    }
+    if (obj.filters.brightness !== undefined && obj.filters.brightness !== 0) {
+      const slope = Math.max(0, (100 + obj.filters.brightness) / 100);
+      filterBody += `<feComponentTransfer><feFuncR type="linear" slope="${slope}"/><feFuncG type="linear" slope="${slope}"/><feFuncB type="linear" slope="${slope}"/></feComponentTransfer>`;
+    }
+    if (obj.filters.contrast !== undefined && obj.filters.contrast !== 0) {
+      const slope = Math.max(0, (100 + obj.filters.contrast) / 100);
+      const intercept = (1 - slope) / 2;
+      filterBody += `<feComponentTransfer><feFuncR type="linear" slope="${slope}" intercept="${intercept}"/><feFuncG type="linear" slope="${slope}" intercept="${intercept}"/><feFuncB type="linear" slope="${slope}" intercept="${intercept}"/></feComponentTransfer>`;
+    }
+    if (obj.filters.saturation !== undefined && obj.filters.saturation !== 100) {
+      const s = obj.filters.saturation / 100;
+      filterBody += `<feColorMatrix type="saturate" values="${s}" />`;
+    }
+    if (filterBody) {
+      filterDefs.push(`<filter id="${filterId}">${filterBody}</filter>`);
+      filterAttr = ` filter="url(#${filterId})"`;
+    }
+  }
+
+  if (obj.crop) {
+    const cropClipId = `clip-crop-${obj.id}`;
+    clipDefs.push(`<clipPath id="${cropClipId}"><rect x="0" y="0" width="${obj.width}" height="${obj.height}" /></clipPath>`);
+    const scaleX = obj.width / obj.crop.width;
+    const scaleY = obj.height / obj.crop.height;
+    const imgX = -obj.crop.x * scaleX;
+    const imgY = -obj.crop.y * scaleY;
+    const imgW = obj.naturalWidth * scaleX;
+    const imgH = obj.naturalHeight * scaleY;
+    return `    <g transform="${transformAttr}" clip-path="url(#${cropClipId})"${opacityAttr}${filterAttr}${blendAttr(obj.style.blendMode)}><image href="${escapeXml(href)}" x="${imgX}" y="${imgY}" width="${imgW}" height="${imgH}" preserveAspectRatio="none" /></g>`;
+  }
+
+  return `    <image href="${escapeXml(href)}" x="0" y="0" width="${obj.width}" height="${obj.height}" transform="${transformAttr}"${opacityAttr}${filterAttr}${blendAttr(obj.style.blendMode)} preserveAspectRatio="none" />`;
+}
+
+function renderSymbolInstanceToSvg(
+  obj: SymbolInstanceObject,
+  doc: DocumentModel,
+  symbolDefs: Map<string, string>,
+  gradientMap: Map<FillStyle, string>,
+  markerMap: Map<string, string>,
+  markerDefs: string[],
+  filterDefs: string[],
+  clipDefs: string[],
+): string {
+  const transformAttr = transformAttrOf(obj);
+  const symbol = doc.symbols?.[obj.symbolId];
+  if (!symbol) return '';
+
+  if (!symbolDefs.has(symbol.id)) {
+    const childrenSvg: string[] = [];
+    for (const childId of symbol.objectIds) {
+      const child = symbol.objects[childId];
+      if (child?.visible) {
+        const svg = renderSceneObjectToSvg(child, gradientMap, markerMap, markerDefs, doc, filterDefs, clipDefs, symbolDefs);
+        if (svg) childrenSvg.push(svg);
+      }
+    }
+    symbolDefs.set(symbol.id, `<g id="symbol-${escapeXml(symbol.id)}">\n${childrenSvg.join('\n')}\n    </g>`);
+  }
+
+  const opacityAttr = obj.style.opacity < 1 ? ` opacity="${obj.style.opacity}"` : '';
+  return `    <use href="#symbol-${escapeXml(symbol.id)}" transform="${transformAttr}" width="${obj.width}" height="${obj.height}"${opacityAttr}${blendAttr(obj.style.blendMode)} />`;
 }
 
 function renderTextToSvg(obj: TextObject, gradientMap: Map<FillStyle, string>): string {

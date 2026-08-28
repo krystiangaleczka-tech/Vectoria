@@ -1,5 +1,5 @@
 import React from 'react';
-import type { DocumentModel, ObjectId, ObjectStyle, SceneObject, CornerRadii, PathNode, SelectionState, GeometryPreview, BlendMode, ArrowheadStyle } from '@vectoria/core';
+import type { DocumentModel, ObjectId, ObjectStyle, SceneObject, CornerRadii, PathNode, SelectionState, GeometryPreview, BlendMode, ArrowheadStyle, ImageObject, ImageCrop } from '@vectoria/core';
 import { normalizeCornerRadii, getObjectBounds } from '@vectoria/core';
 import type { Vec2 } from '@vectoria/shared';
 import { defaultStroke } from '@vectoria/core';
@@ -69,10 +69,16 @@ export interface PropertiesPanelProps {
   onUpdateTypography?: (id: ObjectId, patch: Partial<import('@vectoria/core').TextFrameObject>) => void;
   onConvertToOutlines?: (id: ObjectId) => void;
   onSetTextOnPath?: (id: ObjectId, pathId?: ObjectId) => void;
+  onUpdateImageProperties?: (id: ObjectId, patch: Partial<ImageObject>) => void;
+  onCropImage?: (id: ObjectId, crop: ImageCrop | undefined) => void;
+  onOpenTraceImage?: (image: ImageObject) => void;
+  onDetachSymbolInstance?: (id: ObjectId) => void;
 }
 
 const dimensions = (object: SceneObject): { width: number; height: number } | null =>
-  object.type === 'rectangle' || object.type === 'ellipse' ? { width: object.width, height: object.height } : null;
+  object.type === 'rectangle' || object.type === 'ellipse' || object.type === 'image' || object.type === 'symbol-instance'
+    ? { width: object.width, height: object.height }
+    : null;
 
 export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   document: doc,
@@ -110,6 +116,10 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   onUpdateTypography,
   onConvertToOutlines,
   onSetTextOnPath,
+  onUpdateImageProperties,
+  onCropImage,
+  onOpenTraceImage,
+  onDetachSymbolInstance,
  }) => {
   const [aspectLocked, setAspectLocked] = React.useState(true);
   const [alignTarget, setAlignTarget] = React.useState<'selection' | 'artboard' | 'key'>('selection');
@@ -503,6 +513,211 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                   onClick={() => onConvertToOutlines?.(selected.id)}
                 >
                   Convert to outlines
+                </Button>
+              </div>
+            </section>
+          )}
+
+          {selected.type === 'image' && (
+            <section className="property-section" aria-label="Image Properties">
+              <div className="panel-section-heading">
+                <span>Obraz rasterowy</span>
+                <span className="panel-count">{selected.naturalWidth}×{selected.naturalHeight}px</span>
+              </div>
+              <div className="property-grid">
+                <label className="dialog-label">
+                  Źródło
+                  <div className="storage-mode-row" style={{ display: 'flex', gap: '4px', alignItems: 'center', marginTop: '4px' }}>
+                    <span className={`link-status-badge ${selected.source.type === 'embed' ? 'status-embedded' : 'status-linked'}`}>
+                      {selected.source.type === 'embed' ? 'Osadzony (Base64)' : 'Link zewnętrzny'}
+                    </span>
+                    {selected.source.type === 'link' && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          // Trigger convert to embed
+                          if (selected.source.type === 'link') {
+                            const img = new Image();
+                            img.crossOrigin = 'anonymous';
+                            img.onload = () => {
+                              const canvas = document.createElement('canvas');
+                              canvas.width = img.naturalWidth;
+                              canvas.height = img.naturalHeight;
+                              const ctx = canvas.getContext('2d');
+                              if (ctx) {
+                                ctx.drawImage(img, 0, 0);
+                                const data = canvas.toDataURL('image/png');
+                                onUpdateImageProperties?.(selected.id, {
+                                  source: { type: 'embed', data, mimeType: 'image/png' },
+                                });
+                              }
+                            };
+                            img.src = selected.source.url;
+                          }
+                        }}
+                      >
+                        Osadź
+                      </Button>
+                    )}
+                  </div>
+                </label>
+              </div>
+
+              {/* Crop Controls (ASSET-010 to ASSET-013) */}
+              <div className="panel-section-heading" style={{ marginTop: '10px' }}>
+                <span>Kadrowanie (Crop)</span>
+                {selected.crop && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => onCropImage?.(selected.id, undefined)}
+                  >
+                    Reset
+                  </Button>
+                )}
+              </div>
+              <div className="property-grid">
+                <NumberInput
+                  data-testid="prop-crop-x"
+                  label="Crop X"
+                  min={0}
+                  max={selected.naturalWidth - 1}
+                  decimals={0}
+                  value={selected.crop?.x ?? 0}
+                  onChange={(val) => {
+                    const current = selected.crop ?? { x: 0, y: 0, width: selected.naturalWidth, height: selected.naturalHeight };
+                    onCropImage?.(selected.id, { ...current, x: Math.max(0, val) });
+                  }}
+                />
+                <NumberInput
+                  data-testid="prop-crop-y"
+                  label="Crop Y"
+                  min={0}
+                  max={selected.naturalHeight - 1}
+                  decimals={0}
+                  value={selected.crop?.y ?? 0}
+                  onChange={(val) => {
+                    const current = selected.crop ?? { x: 0, y: 0, width: selected.naturalWidth, height: selected.naturalHeight };
+                    onCropImage?.(selected.id, { ...current, y: Math.max(0, val) });
+                  }}
+                />
+                <NumberInput
+                  data-testid="prop-crop-w"
+                  label="Crop W"
+                  min={1}
+                  max={selected.naturalWidth}
+                  decimals={0}
+                  value={selected.crop?.width ?? selected.naturalWidth}
+                  onChange={(val) => {
+                    const current = selected.crop ?? { x: 0, y: 0, width: selected.naturalWidth, height: selected.naturalHeight };
+                    onCropImage?.(selected.id, { ...current, width: Math.max(1, val) });
+                  }}
+                />
+                <NumberInput
+                  data-testid="prop-crop-h"
+                  label="Crop H"
+                  min={1}
+                  max={selected.naturalHeight}
+                  decimals={0}
+                  value={selected.crop?.height ?? selected.naturalHeight}
+                  onChange={(val) => {
+                    const current = selected.crop ?? { x: 0, y: 0, width: selected.naturalWidth, height: selected.naturalHeight };
+                    onCropImage?.(selected.id, { ...current, height: Math.max(1, val) });
+                  }}
+                />
+              </div>
+
+              {/* Filters (ASSET-014, ASSET-015) */}
+              <div className="panel-section-heading" style={{ marginTop: '10px' }}>
+                <span>Filtry obrazu</span>
+              </div>
+              <div className="property-grid">
+                <NumberInput
+                  data-testid="prop-filter-brightness"
+                  label="Jasność"
+                  min={-100}
+                  max={100}
+                  decimals={0}
+                  unit="%"
+                  value={selected.filters?.brightness ?? 0}
+                  onChange={(val) => {
+                    onUpdateImageProperties?.(selected.id, {
+                      filters: { ...(selected.filters ?? {}), brightness: val },
+                    });
+                  }}
+                />
+                <NumberInput
+                  data-testid="prop-filter-contrast"
+                  label="Kontrast"
+                  min={-100}
+                  max={100}
+                  decimals={0}
+                  unit="%"
+                  value={selected.filters?.contrast ?? 0}
+                  onChange={(val) => {
+                    onUpdateImageProperties?.(selected.id, {
+                      filters: { ...(selected.filters ?? {}), contrast: val },
+                    });
+                  }}
+                />
+                <NumberInput
+                  data-testid="prop-filter-saturation"
+                  label="Nasycenie"
+                  min={0}
+                  max={200}
+                  decimals={0}
+                  unit="%"
+                  value={selected.filters?.saturation ?? 100}
+                  onChange={(val) => {
+                    onUpdateImageProperties?.(selected.id, {
+                      filters: { ...(selected.filters ?? {}), saturation: val },
+                    });
+                  }}
+                />
+                <label className="dialog-label">
+                  Czarno-biały
+                  <input
+                    type="checkbox"
+                    checked={selected.filters?.grayscale ?? false}
+                    onChange={(e) => {
+                      onUpdateImageProperties?.(selected.id, {
+                        filters: { ...(selected.filters ?? {}), grayscale: e.target.checked },
+                      });
+                    }}
+                    style={{ marginTop: '6px' }}
+                  />
+                </label>
+              </div>
+
+              {/* Trace Image Action (ASSET-016, ASSET-017) */}
+              <div className="property-actions" style={{ marginTop: '10px' }}>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={selected.locked}
+                  onClick={() => onOpenTraceImage?.(selected)}
+                >
+                  Wektoryzuj obraz (Trace)
+                </Button>
+              </div>
+            </section>
+          )}
+
+          {selected.type === 'symbol-instance' && (
+            <section className="property-section" aria-label="Symbol Instance Properties">
+              <div className="panel-section-heading">
+                <span>Instancja Symbolu</span>
+                <span className="panel-count">{doc.symbols?.[selected.symbolId]?.name ?? selected.symbolId}</span>
+              </div>
+              <div className="property-actions" style={{ marginTop: '8px' }}>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={selected.locked}
+                  onClick={() => onDetachSymbolInstance?.(selected.id)}
+                >
+                  Odłącz symbol (Rozbij na obiekty)
                 </Button>
               </div>
             </section>

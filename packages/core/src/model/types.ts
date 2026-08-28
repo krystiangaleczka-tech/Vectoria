@@ -325,6 +325,71 @@ export interface TextFrameObject extends SceneObjectBase {
   readonly variableAxes?: Readonly<Record<string, number>>;
 }
 
+export type ImageSource =
+  | { readonly type: 'embed'; readonly data: string; readonly mimeType: string }
+  | { readonly type: 'link'; readonly url: string; readonly mimeType?: string };
+
+export interface ImageFilters {
+  readonly brightness?: number; // -100 to 100, 0 is default
+  readonly contrast?: number;   // -100 to 100, 0 is default
+  readonly saturation?: number; // 0 to 200, 100 is default
+  readonly grayscale?: boolean;
+}
+
+export interface ImageCrop {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+export interface ImageObject extends SceneObjectBase {
+  readonly type: 'image';
+  readonly source: ImageSource;
+  readonly naturalWidth: number;
+  readonly naturalHeight: number;
+  readonly width: number;
+  readonly height: number;
+  readonly crop?: ImageCrop;
+  readonly filters?: ImageFilters;
+  readonly isMissing?: boolean;
+}
+
+export type SymbolId = string;
+
+export interface SymbolDefinition {
+  readonly id: SymbolId;
+  readonly name: string;
+  readonly objectIds: readonly ObjectId[];
+  readonly objects: Readonly<Record<ObjectId, SceneObject>>;
+  readonly bounds: { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
+  readonly isBrandAsset?: boolean;
+  readonly createdAt?: string;
+  readonly updatedAt?: string;
+}
+
+export interface SymbolInstanceObject extends SceneObjectBase {
+  readonly type: 'symbol-instance';
+  readonly symbolId: SymbolId;
+  readonly width: number;
+  readonly height: number;
+}
+
+export interface BrandKitLogo {
+  readonly id: string;
+  readonly name: string;
+  readonly objectId?: ObjectId;
+  readonly svgData?: string;
+  readonly imageUrl?: string;
+}
+
+export interface BrandKit {
+  readonly logos?: readonly BrandKitLogo[];
+  readonly colorPaletteIds?: readonly string[];
+  readonly fontFamilies?: readonly string[];
+  readonly symbolIds?: readonly SymbolId[];
+}
+
 export type SceneObject =
   | RectangleObject
   | EllipseObject
@@ -340,7 +405,9 @@ export type SceneObject =
   | CalloutObject
   | PolylineObject
   | TextObject
-  | TextFrameObject;
+  | TextFrameObject
+  | ImageObject
+  | SymbolInstanceObject;
 
 // Selection stays multi-object capable even while the MVP UI exposes one
 // active editing context at a time.
@@ -425,6 +492,9 @@ export interface DocumentModel {
   readonly snap: SnapSettings;
   readonly palettes?: readonly ColorPalette[];
   readonly objectStyles?: readonly SavedObjectStyle[];
+  readonly symbols?: Readonly<Record<SymbolId, SymbolDefinition>>;
+  readonly symbolIds?: readonly SymbolId[];
+  readonly brandKit?: BrandKit;
 
   readonly createdAt: string;
   readonly updatedAt: string;

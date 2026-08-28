@@ -257,6 +257,68 @@ export const TextFrameObjectSchema = z.object({
   variableAxes: z.record(z.number().finite()).optional(),
 });
 
+export const ImageSourceSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('embed'),
+    data: z.string().min(1),
+    mimeType: z.string().min(1),
+  }),
+  z.object({
+    type: z.literal('link'),
+    url: z.string().min(1),
+    mimeType: z.string().optional(),
+  }),
+]);
+
+export const ImageFiltersSchema = z.object({
+  brightness: z.number().min(-100).max(100).optional(),
+  contrast: z.number().min(-100).max(100).optional(),
+  saturation: z.number().min(0).max(200).optional(),
+  grayscale: z.boolean().optional(),
+});
+
+export const ImageCropSchema = z.object({
+  x: z.number().nonnegative().finite(),
+  y: z.number().nonnegative().finite(),
+  width: z.number().positive().finite(),
+  height: z.number().positive().finite(),
+});
+
+export const ImageObjectSchema = z.object({
+  type: z.literal('image'),
+  id: z.string().min(1),
+  name: z.string(),
+  layerId: z.string().min(1),
+  visible: z.boolean(),
+  locked: z.boolean(),
+  lockedAttributes: z.array(LockedAttributeSchema).optional(),
+  transform: Transform2DSchema,
+  style: ObjectStyleSchema,
+  source: ImageSourceSchema,
+  naturalWidth: z.number().positive().finite(),
+  naturalHeight: z.number().positive().finite(),
+  width: z.number().positive().finite(),
+  height: z.number().positive().finite(),
+  crop: ImageCropSchema.optional(),
+  filters: ImageFiltersSchema.optional(),
+  isMissing: z.boolean().optional(),
+});
+
+export const SymbolInstanceObjectSchema = z.object({
+  type: z.literal('symbol-instance'),
+  id: z.string().min(1),
+  name: z.string(),
+  layerId: z.string().min(1),
+  visible: z.boolean(),
+  locked: z.boolean(),
+  lockedAttributes: z.array(LockedAttributeSchema).optional(),
+  transform: Transform2DSchema,
+  style: ObjectStyleSchema,
+  symbolId: z.string().min(1),
+  width: z.number().positive().finite(),
+  height: z.number().positive().finite(),
+});
+
 export const SceneObjectSchema = z.discriminatedUnion('type', [
   RectangleObjectSchema,
   EllipseObjectSchema,
@@ -265,6 +327,8 @@ export const SceneObjectSchema = z.discriminatedUnion('type', [
   GroupObjectSchema,
   TextObjectSchema,
   TextFrameObjectSchema,
+  ImageObjectSchema,
+  SymbolInstanceObjectSchema,
 ]);
 
 export const PaletteColorSchema = z.object({ id: z.string().min(1), name: z.string(), color: ColorSchema });
@@ -287,6 +351,37 @@ export const ColorPaletteSchema = z.object({
   }
 });
 const SavedObjectStyleSchema = z.object({ id: z.string().min(1), name: z.string(), style: ObjectStyleSchema });
+
+export const SymbolDefinitionSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  objectIds: z.array(z.string().min(1)),
+  objects: z.record(z.lazy(() => SceneObjectSchema)),
+  bounds: z.object({
+    x: z.number().finite(),
+    y: z.number().finite(),
+    width: z.number().positive().finite(),
+    height: z.number().positive().finite(),
+  }),
+  isBrandAsset: z.boolean().optional(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+});
+
+export const BrandKitLogoSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  objectId: z.string().optional(),
+  svgData: z.string().optional(),
+  imageUrl: z.string().optional(),
+});
+
+export const BrandKitSchema = z.object({
+  logos: z.array(BrandKitLogoSchema).optional(),
+  colorPaletteIds: z.array(z.string()).optional(),
+  fontFamilies: z.array(z.string()).optional(),
+  symbolIds: z.array(z.string()).optional(),
+});
 
 export const LayerSchema = z.object({
   id: z.string().min(1),
@@ -338,6 +433,9 @@ export const DocumentV1Schema = z.object({
   snap: z.object({ enabled: z.boolean(), tolerancePx: z.number().nonnegative().finite(), sources: z.record(z.boolean()) }).default({ enabled: false, tolerancePx: 8, sources: { grid: true, guide: true, node: true, edge: true, center: true, intersection: true, pixel: false } }),
   palettes: z.array(ColorPaletteSchema).max(DOCUMENT_LIMITS.maxPalettes).default([]),
   objectStyles: z.array(SavedObjectStyleSchema).default([]),
+  symbols: z.record(SymbolDefinitionSchema).optional(),
+  symbolIds: z.array(z.string()).optional(),
+  brandKit: BrandKitSchema.optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

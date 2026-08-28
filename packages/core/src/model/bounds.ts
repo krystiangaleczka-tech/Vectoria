@@ -73,6 +73,16 @@ export function getObjectBounds(object: SceneObject, document?: import('./types.
           { x: object.width, y: object.height },
           { x: 0, y: object.height },
         ];
+      case 'image':
+      case 'symbol-instance':
+        return [
+          { x: 0, y: 0 },
+          { x: object.width, y: 0 },
+          { x: object.width, y: object.height },
+          { x: 0, y: object.height },
+        ];
+      default:
+        return [{ x: 0, y: 0 }];
     }
   })();
 

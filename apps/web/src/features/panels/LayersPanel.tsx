@@ -51,6 +51,8 @@ const objectIcon: Record<SceneObject['type'], React.ComponentProps<typeof Vector
   polyline: 'polyline',
   text: 'text',
   'text-frame': 'textFrame',
+  image: 'image',
+  'symbol-instance': 'symbol',
 };
 
 export const LayersPanel: React.FC<LayersPanelProps> = ({

@@ -1,6 +1,6 @@
 import type { Camera } from '@vectoria/editor-engine';
 import type { Vec2 } from '@vectoria/shared';
-import type { DocumentModel, Artboard, RectangleObject, EllipseObject, LineObject, PathObject, ObjectId, Transform2D, LinearGradientFill, RadialGradientFill, AngularGradientFill, PatternFill, GeometryPreview, SceneObject, PolygonObject, StarObject, ArcObject, PieObject, RingObject, SpiralObject, CalloutObject, PolylineObject, StrokeStyle, ArrowheadStyle, FillStyle, TextObject, TextFrameObject } from '@vectoria/core';
+import type { DocumentModel, Artboard, RectangleObject, EllipseObject, LineObject, PathObject, ObjectId, Transform2D, LinearGradientFill, RadialGradientFill, AngularGradientFill, PatternFill, GeometryPreview, SceneObject, PolygonObject, StarObject, ArcObject, PieObject, RingObject, SpiralObject, CalloutObject, PolylineObject, StrokeStyle, ArrowheadStyle, FillStyle, TextObject, TextFrameObject, ImageObject, SymbolInstanceObject } from '@vectoria/core';
 import type { SnapResult } from '@vectoria/editor-engine';
 import { getTransformMatrix, getObjectBounds, rectsIntersect, normalizeCornerRadii, flattenPath, widthAtT, getPolygonVertices, getStarVertices, getSpiralVertices, getCalloutVertices, getArrowheadVertices, expandObject, computeArtisticTextLayout, computeTextFrameLayout, computeTextOnPathLayout } from '@vectoria/core';
 import { mat3TransformPoint } from '@vectoria/shared';
@@ -352,6 +352,12 @@ export function renderScene(
          case 'polyline':
            renderParametric(ctx, obj as PolylineObject);
            break;
+         case 'image':
+           renderImage(ctx, obj as ImageObject);
+           break;
+         case 'symbol-instance':
+           renderSymbolInstance(ctx, obj as SymbolInstanceObject, doc);
+           break;
          case 'group':
            for (const childId of obj.childIds) {
              const child = doc.objects[childId];
@@ -608,8 +614,122 @@ function renderSceneObject(ctx: CanvasRenderingContext2D, obj: SceneObject, doc?
     case 'text-frame':
       renderTextFrame(ctx, obj, doc);
       break;
+    case 'image':
+      renderImage(ctx, obj);
+      break;
+    case 'symbol-instance':
+      renderSymbolInstance(ctx, obj, doc);
+      break;
     case 'group': obj.childIds.forEach((childId) => { const child = doc?.objects[childId]; if (child?.visible) renderSceneObject(ctx, child, doc); }); break;
   }
+}
+
+const imageElementCache = new Map<string, HTMLImageElement>();
+
+export function getOrLoadImage(src: string): HTMLImageElement | null {
+  if (typeof Image === 'undefined' || !src) return null;
+  const cached = imageElementCache.get(src);
+  if (cached) {
+    return cached.complete && cached.naturalWidth > 0 ? cached : null;
+  }
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.src = src;
+  imageElementCache.set(src, img);
+  return null;
+}
+
+function buildCanvasFilter(filters?: import('@vectoria/core').ImageFilters): string {
+  if (!filters) return 'none';
+  const parts: string[] = [];
+  if (filters.brightness !== undefined && filters.brightness !== 0) {
+    const val = Math.max(0, 100 + filters.brightness);
+    parts.push(`brightness(${val}%)`);
+  }
+  if (filters.contrast !== undefined && filters.contrast !== 0) {
+    const val = Math.max(0, 100 + filters.contrast);
+    parts.push(`contrast(${val}%)`);
+  }
+  if (filters.saturation !== undefined && filters.saturation !== 100) {
+    parts.push(`saturate(${filters.saturation}%)`);
+  }
+  if (filters.grayscale) {
+    parts.push('grayscale(100%)');
+  }
+  return parts.length > 0 ? parts.join(' ') : 'none';
+}
+
+function renderImage(ctx: CanvasRenderingContext2D, obj: ImageObject): void {
+  const matrix = getTransformMatrix(obj.transform);
+  ctx.save();
+  ctx.transform(matrix[0], matrix[1], matrix[3], matrix[4], matrix[6], matrix[7]);
+  ctx.globalAlpha = obj.style.opacity;
+
+  const src = obj.source.type === 'embed' ? obj.source.data : obj.source.url;
+  const img = getOrLoadImage(src);
+
+  if (obj.isMissing || !img) {
+    ctx.fillStyle = obj.isMissing ? 'rgba(239, 68, 68, 0.12)' : 'rgba(100, 116, 139, 0.12)';
+    ctx.strokeStyle = obj.isMissing ? '#ef4444' : '#64748b';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 4]);
+    ctx.fillRect(0, 0, obj.width, obj.height);
+    ctx.strokeRect(0.5, 0.5, obj.width - 1, obj.height - 1);
+    ctx.setLineDash([]);
+
+    ctx.fillStyle = obj.isMissing ? '#ef4444' : '#94a3b8';
+    ctx.font = '12px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const label = obj.isMissing ? '⚠️ Missing Asset' : 'Loading Image...';
+    ctx.fillText(label, obj.width / 2, obj.height / 2);
+    ctx.restore();
+    return;
+  }
+
+  const filterStr = buildCanvasFilter(obj.filters);
+  if (filterStr !== 'none') {
+    ctx.filter = filterStr;
+  }
+
+  if (obj.crop) {
+    ctx.drawImage(
+      img,
+      obj.crop.x,
+      obj.crop.y,
+      obj.crop.width,
+      obj.crop.height,
+      0,
+      0,
+      obj.width,
+      obj.height,
+    );
+  } else {
+    ctx.drawImage(img, 0, 0, obj.width, obj.height);
+  }
+
+  ctx.filter = 'none';
+  ctx.restore();
+}
+
+function renderSymbolInstance(ctx: CanvasRenderingContext2D, obj: SymbolInstanceObject, doc?: DocumentModel): void {
+  if (!doc?.symbols) return;
+  const symbol = doc.symbols[obj.symbolId];
+  if (!symbol) return;
+
+  const matrix = getTransformMatrix(obj.transform);
+  ctx.save();
+  ctx.transform(matrix[0], matrix[1], matrix[3], matrix[4], matrix[6], matrix[7]);
+  ctx.globalAlpha = obj.style.opacity;
+
+  for (const childId of symbol.objectIds) {
+    const child = symbol.objects[childId];
+    if (child?.visible) {
+      renderSceneObject(ctx, child, doc);
+    }
+  }
+
+  ctx.restore();
 }
 
 function renderText(ctx: CanvasRenderingContext2D, obj: TextObject, doc?: DocumentModel): void {

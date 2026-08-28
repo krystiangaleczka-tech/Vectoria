@@ -85,6 +85,16 @@ import {
   UpdateLayerPropertiesCommand,
   ReorderLayersCommand,
   MoveObjectsToLayerCommand,
+  CreateImageObjectCommand,
+  UpdateImagePropertiesCommand,
+  CropImageCommand,
+  TraceImageCommand,
+  CreateSymbolCommand,
+  InsertSymbolInstanceCommand,
+  DetachSymbolInstanceCommand,
+  UpdateBrandKitCommand,
+  type ImageObject,
+  type ImageCrop,
 } from '@vectoria/core';
 import { Camera, emptySelection, selectionService, GeometryOperationSession, BooleanOperationSession } from '@vectoria/editor-engine';
 import {
@@ -102,6 +112,7 @@ import {
   markSessionOpen,
   markSessionClosed,
   type BootstrapState,
+  processDroppedFile,
 } from '@vectoria/io';
 
 import { TopBar } from '../features/topbar/TopBar.js';
@@ -115,6 +126,7 @@ import { NewDocumentDialog } from '../features/dialogs/NewDocumentDialog.js';
 import { UsedFontsPanel } from '../features/panels/UsedFontsPanel.js';
 import { FindReplaceDialog } from '../features/dialogs/FindReplaceDialog.js';
 import { SpecialCharactersPopover } from '../features/dialogs/SpecialCharactersPopover.js';
+import { TraceImageDialog } from '../features/dialogs/TraceImageDialog.js';
 import type { DockPanel } from '../features/panels/RightDock.js';
 import type { PathAction } from '../features/panels/PropertiesPanel.js';
 import type { GeometryAction } from '../features/properties/GeometryProperties.js';
@@ -172,6 +184,7 @@ export const EditorApp: React.FC = () => {
   const [specialCharsOpen, setSpecialCharsOpen] = useState(false);
   const [outlineMode, setOutlineMode] = useState(false);
   const [soloLayerId, setSoloLayerId] = useState<string | null>(null);
+  const [traceImageTarget, setTraceImageTarget] = useState<ImageObject | null>(null);
 
   const history = useMemo(() => new CommandHistory(), []);
   const camera = useMemo(() => new Camera(), []);
@@ -1056,6 +1069,143 @@ export const EditorApp: React.FC = () => {
     setOutlineMode((prev) => !prev);
   }, []);
 
+  const handleDropFiles = useCallback(async (files: FileList, worldPos: Vec2) => {
+    if (!doc) return;
+    const targetLayerId = doc.activeLayerId;
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i]!;
+      try {
+        const result = await processDroppedFile(file, { x: worldPos.x + i * 20, y: worldPos.y + i * 20 }, targetLayerId);
+        if (result.kind === 'image') {
+          handleExecuteCommand(new CreateImageObjectCommand(result.image, targetLayerId));
+        } else if (result.kind === 'vector') {
+          handleExecuteCommand(new CreateObjectsCommand(result.objects as SceneObject[], targetLayerId));
+        }
+      } catch (err) {
+        console.error('Failed to process dropped file:', err);
+      }
+    }
+  }, [doc, handleExecuteCommand]);
+
+  const handleInsertSymbol = useCallback((symbolId: string) => {
+    if (!doc) return;
+    const targetLayerId = doc.activeLayerId;
+    const viewportCenter = camera.screenToWorld({
+      x: window.innerWidth / 2,
+      y: window.innerHeight / 2,
+    });
+    handleExecuteCommand(new InsertSymbolInstanceCommand(symbolId, viewportCenter, targetLayerId));
+  }, [doc, camera, handleExecuteCommand]);
+
+  const handleCreateSymbolFromSelection = useCallback(() => {
+    if (selectedObjectIds.length === 0) return;
+    const name = prompt('Nazwa nowego symbolu:', 'Nowy Symbol') || 'Symbol';
+    handleExecuteCommand(new CreateSymbolCommand(name, selectedObjectIds));
+  }, [selectedObjectIds, handleExecuteCommand]);
+
+  const handleDetachSymbolInstance = useCallback((id: ObjectId) => {
+    handleExecuteCommand(new DetachSymbolInstanceCommand(id));
+  }, [handleExecuteCommand]);
+
+  const handleInsertStockSvg = useCallback((svgData: string, name: string) => {
+    if (!doc) return;
+    try {
+      const importedDoc = importSvgToDocument(svgData);
+      const objects = Object.values(importedDoc.objects) as SceneObject[];
+      const viewportCenter = camera.screenToWorld({
+        x: window.innerWidth / 2,
+        y: window.innerHeight / 2,
+      });
+      const targetLayerId = doc.activeLayerId;
+      const positioned = objects.map((obj) => ({
+        ...obj,
+        id: generateId(),
+        name: `${name} (${obj.type})`,
+        layerId: targetLayerId,
+        transform: {
+          ...obj.transform,
+          position: {
+            x: viewportCenter.x + obj.transform.position.x,
+            y: viewportCenter.y + obj.transform.position.y,
+          },
+        },
+      }));
+      handleExecuteCommand(new CreateObjectsCommand(positioned, targetLayerId));
+    } catch (err) {
+      console.error('Failed to insert stock SVG:', err);
+    }
+  }, [doc, camera, handleExecuteCommand]);
+
+  const handleAddBrandLogo = useCallback((file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      const newLogo = {
+        id: generateId(),
+        name: file.name.replace(/\.[^/.]+$/, ''),
+        imageUrl: dataUrl,
+      };
+      const currentBrandKit = doc?.brandKit ?? {};
+      handleExecuteCommand(new UpdateBrandKitCommand({
+        ...currentBrandKit,
+        logos: [...(currentBrandKit.logos ?? []), newLogo],
+      }));
+    };
+    reader.readAsDataURL(file);
+  }, [doc?.brandKit, handleExecuteCommand]);
+
+  const handleApplyBrandFont = useCallback((fontFamily: string) => {
+    if (selectedObjectIds.length === 0 || !doc) return;
+    for (const id of selectedObjectIds) {
+      const obj = doc.objects[id];
+      if (obj && (obj.type === 'text' || obj.type === 'text-frame')) {
+        handleExecuteCommand(new UpdateTextPropertiesCommand(id, { fontFamily }));
+      }
+    }
+  }, [doc, selectedObjectIds, handleExecuteCommand]);
+
+  const handleUpdateImageProperties = useCallback((id: ObjectId, patch: Partial<ImageObject>) => {
+    handleExecuteCommand(new UpdateImagePropertiesCommand(id, patch));
+  }, [handleExecuteCommand]);
+
+  const handleCropImage = useCallback((id: ObjectId, crop: ImageCrop | undefined) => {
+    handleExecuteCommand(new CropImageCommand(id, crop));
+  }, [handleExecuteCommand]);
+
+  const handleEmbedImage = useCallback((objectId: string) => {
+    const obj = doc?.objects[objectId];
+    if (obj && obj.type === 'image' && obj.source.type === 'link') {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0);
+          const data = canvas.toDataURL('image/png');
+          handleExecuteCommand(new UpdateImagePropertiesCommand(objectId, {
+            source: { type: 'embed', data, mimeType: 'image/png' },
+          }));
+        }
+      };
+      img.src = obj.source.url;
+    }
+  }, [doc?.objects, handleExecuteCommand]);
+
+  const handleRelinkImage = useCallback((objectId: string, file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const data = reader.result as string;
+      handleExecuteCommand(new UpdateImagePropertiesCommand(objectId, {
+        name: file.name.replace(/\.[^/.]+$/, ''),
+        source: { type: 'embed', data, mimeType: file.type || 'image/png' },
+      }));
+    };
+    reader.readAsDataURL(file);
+  }, [handleExecuteCommand]);
+
   // Global Keyboard Shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1378,6 +1528,7 @@ export const EditorApp: React.FC = () => {
             styleSampleTolerance={styleSampleTolerance}
             outlineMode={outlineMode}
             soloLayerId={soloLayerId}
+            onDropFiles={handleDropFiles}
            />
         </div>
 
@@ -1456,6 +1607,17 @@ export const EditorApp: React.FC = () => {
           onSaveObjectStyle={handleSaveObjectStyle}
           onApplyObjectStyle={handleApplyObjectStyle}
           onDeleteObjectStyle={handleDeleteObjectStyle}
+          onUpdateImageProperties={handleUpdateImageProperties}
+          onCropImage={handleCropImage}
+          onOpenTraceImage={setTraceImageTarget}
+          onDetachSymbolInstance={handleDetachSymbolInstance}
+          onInsertSymbol={handleInsertSymbol}
+          onCreateSymbolFromSelection={handleCreateSymbolFromSelection}
+          onInsertStockSvg={handleInsertStockSvg}
+          onApplyBrandFont={handleApplyBrandFont}
+          onAddBrandLogo={handleAddBrandLogo}
+          onEmbedImage={handleEmbedImage}
+          onRelinkImage={handleRelinkImage}
           activePanel={activeDockPanel}
           onPanelChange={setActiveDockPanel}
           open={rightDockOpen}
@@ -1499,6 +1661,17 @@ export const EditorApp: React.FC = () => {
          onClose={() => setSpecialCharsOpen(false)}
          onSelectCharacter={handleInsertSpecialCharacter}
        />
+       {traceImageTarget && (
+         <TraceImageDialog
+           image={traceImageTarget}
+           isOpen={!!traceImageTarget}
+           onClose={() => setTraceImageTarget(null)}
+           onApply={(paths) => {
+             handleExecuteCommand(new TraceImageCommand(traceImageTarget.id, paths));
+             setTraceImageTarget(null);
+           }}
+         />
+       )}
     </div>
   );
 };
