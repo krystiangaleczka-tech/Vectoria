@@ -278,10 +278,18 @@ export const ImageFiltersSchema = z.object({
 });
 
 export const ImageCropSchema = z.object({
-  x: z.number().nonnegative().finite(),
-  y: z.number().nonnegative().finite(),
-  width: z.number().positive().finite(),
-  height: z.number().positive().finite(),
+  offset: Vec2Schema.optional(),
+  scale: Vec2Schema.optional(),
+  frame: z.object({
+    x: z.number().finite(),
+    y: z.number().finite(),
+    width: z.number().positive().finite(),
+    height: z.number().positive().finite(),
+  }).optional(),
+  x: z.number().finite().optional(),
+  y: z.number().finite().optional(),
+  width: z.number().positive().finite().optional(),
+  height: z.number().positive().finite().optional(),
 });
 
 export const ImageObjectSchema = z.object({

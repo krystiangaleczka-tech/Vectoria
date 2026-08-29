@@ -85,6 +85,8 @@ import {
   UpdateLayerPropertiesCommand,
   ReorderLayersCommand,
   MoveObjectsToLayerCommand,
+  MoveHierarchyObjectsCommand,
+  type HierarchyDropTarget,
   CreateImageObjectCommand,
   UpdateImagePropertiesCommand,
   CropImageCommand,
@@ -1072,6 +1074,10 @@ export const EditorApp: React.FC = () => {
     handleExecuteCommand(new MoveObjectsToLayerCommand(objectIds, targetLayerId));
   }, [handleExecuteCommand]);
 
+  const handleMoveHierarchyObjects = useCallback((objectIds: readonly string[], target: HierarchyDropTarget) => {
+    handleExecuteCommand(new MoveHierarchyObjectsCommand(objectIds, target));
+  }, [handleExecuteCommand]);
+
   const handleToggleSoloLayer = useCallback((layerId: string) => {
     setSoloLayerId((current) => (current === layerId ? null : layerId));
   }, []);
@@ -1629,6 +1635,7 @@ export const EditorApp: React.FC = () => {
           onUpdateLayer={handleUpdateLayer}
           onReorderLayers={handleReorderLayers}
           onMoveObjectsToLayer={handleMoveObjectsToLayer}
+          onMoveHierarchyObjects={handleMoveHierarchyObjects}
           onToggleSoloLayer={handleToggleSoloLayer}
           onSelectAllInLayer={handleSelectAllInLayer}
           libraryPalettes={libraryPalettes}

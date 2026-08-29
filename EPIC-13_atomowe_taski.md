@@ -32,7 +32,6 @@ Rozszerz FX-008 o pełne, aktualne odzwierciedlenie wszystkich atrybutów wizual
 ### FX-010 — Zmiana kolejności appearance layers
 Dodaj drag-and-drop reorderu efektów/atrybutów w stosie z FX-008/009 (analogicznie do LAYER-007, ale dla warstw appearance, nie warstw dokumentu). Zakres: reorder + wpływ na faktyczną kolejność renderowania efektów. Uważaj: kolejność w appearance stack ma realny wpływ wizualny (np. cień pod blur vs blur pod cieniem wygląda inaczej) — reorder w UI musi natychmiast przekładać się na kolejność aplikowania w rendererze Canvas i w łańcuchu filtrów SVG, nie tylko na kolejność wyświetlania w panelu. Nie duplikuj mechanizmu drag-and-drop od zera — sprawdź czy da się użyć tego samego, co w LAYER-007. Gotowe, gdy: przeciągnięcie efektu w panelu zmienia widoczny wynik renderu w sposób zgodny z nową kolejnością.
 
-## Sekcja Później
 
 ### FX-011 — Inner shadow
 Dodaj efekt `innerShadow` (cień wewnątrz konturu obiektu, nie na zewnątrz jak FX-001). Zakres: model + render. Uważaj: inner shadow wymaga innej techniki niż drop shadow — w Canvas zwykle przez kombinację clip + offset + blur wewnątrz ścieżki, w SVG przez `feComponentTransfer`/`feComposite` z odwróconą maską — nie próbuj tego zrobić przez proste odwrócenie parametrów drop shadow, to inny algorytm. Nie zapomnij o wydajności — jak FX-001/002, musi respektować tryby jakości PERF-031-037. Gotowe, gdy: inner shadow widocznie różni się od drop shadow (cień wewnątrz kształtu), eksportuje się do SVG.

@@ -49,10 +49,15 @@ describe('processDroppedFile (ASSET-001...005)', () => {
     );
   });
 
-  it('throws explicit error on PDF files with user-facing guidance', async () => {
-    const file = makeFile('%PDF-1.4', 'document.pdf', 'application/pdf');
-    await expect(processDroppedFile(file, { x: 0, y: 0 }, 'layer-1')).rejects.toThrow(
-      'Import PDF nie jest obsługiwany',
+  it('rejects PDF import with a controlled error when canvas rendering is unavailable (ASSET-005)', async () => {
+    // Minimal valid PDF binary
+    const minimalPdf = '%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj 2 0 obj<</Type/Pages/Count 1/Kids[3 0 R]>>endobj 3 0 obj<</Type/Page/MediaBox[0 0 100 100]/Parent 2 0 R>>endobj\nxref\n0 4\n0000000000 65535 f \n0000000009 00000 n \n0000000052 00000 n \n0000000101 00000 n \ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n178\n%%EOF';
+    const file = makeFile(minimalPdf, 'sample-doc.pdf', 'application/pdf');
+
+    // jsdom has no canvas 2D context; the importer must fail loudly
+    // instead of silently producing an invisible placeholder image.
+    await expect(processDroppedFile(file, { x: 50, y: 50 }, 'layer-1')).rejects.toThrow(
+      /canvas|PDF|render/i,
     );
   });
 

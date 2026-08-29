@@ -27,12 +27,18 @@ interface Point2D {
  * Supports Black & White binary thresholding (ASSET-016) and
  * Multi-color quantization for logos (ASSET-017).
  */
-export function traceImageToPaths(pixels: PixelBuffer, options: TraceOptions = {}): PathObject[] {
+export function traceImageToPaths(
+  pixels: PixelBuffer,
+  options: TraceOptions = {},
+  shouldCancel?: () => boolean,
+): PathObject[] {
   const width = pixels.width;
   const height = pixels.height;
   if (width <= 0 || height <= 0 || pixels.data.length < width * height * 4) {
     return [];
   }
+
+  if (shouldCancel?.()) return [];
 
   const mode = options.mode ?? 'black-and-white';
   const threshold = options.threshold ?? 128;
@@ -51,8 +57,10 @@ export function traceImageToPaths(pixels: PixelBuffer, options: TraceOptions = {
       binary[i] = a >= 128 && lum < threshold ? 1 : 0;
     }
 
+    if (shouldCancel?.()) return [];
+
     const contours = extractContoursFromBinary(binary, width, height, minArea);
-    if (contours.length === 0) return [];
+    if (contours.length === 0 || shouldCancel?.()) return [];
 
     return contours.map((contour, index) => {
       const simplified = simplifyPolylineRDP(contour, tolerance);
@@ -78,9 +86,11 @@ export function traceImageToPaths(pixels: PixelBuffer, options: TraceOptions = {
 
   // Multi-color trace (quantization)
   const clusters = quantizeColors(pixels, colorCount);
+  if (shouldCancel?.()) return [];
   const resultPaths: PathObject[] = [];
 
   for (let c = 0; c < clusters.length; c++) {
+    if (shouldCancel?.()) return [];
     const cluster = clusters[c]!;
     const binary = new Uint8Array(width * height);
     for (let i = 0; i < width * height; i++) {

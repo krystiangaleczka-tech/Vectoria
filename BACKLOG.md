@@ -483,9 +483,6 @@ Wymóg stopniowego rozszerzania artboardu o 10% wynika bezpośrednio z potrzeby 
 - [ ] **FX-008** Zbudować Appearance Panel
 - [ ] **FX-009** Pokazywać fill, stroke, opacity i efekty obiektu
 - [ ] **FX-010** Umożliwić zmianę kolejności appearance layers
-
-### Później
-
 - [ ] **FX-011** Dodać inner shadow
 - [ ] **FX-012** Dodać glow
 - [ ] **FX-013** Dodać rozszerzone blend modes

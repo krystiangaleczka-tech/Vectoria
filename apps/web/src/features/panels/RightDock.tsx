@@ -82,6 +82,7 @@ export interface RightDockProps {
   onUpdateLayer?: (layerId: string, patch: Partial<import('@vectoria/core').Layer>) => void;
   onReorderLayers?: (layerIds: readonly string[]) => void;
   onMoveObjectsToLayer?: (objectIds: readonly string[], targetLayerId: string) => void;
+  onMoveHierarchyObjects?: (objectIds: readonly string[], target: import('@vectoria/core').HierarchyDropTarget) => void;
   onToggleSoloLayer?: (layerId: string) => void;
   onSelectAllInLayer?: (layerId: string) => void;
   activePanel?: DockPanel;
@@ -186,6 +187,7 @@ export const RightDock: React.FC<RightDockProps> = ({
   onUpdateLayer,
   onReorderLayers,
   onMoveObjectsToLayer,
+  onMoveHierarchyObjects,
   onToggleSoloLayer,
   onSelectAllInLayer,
   activePanel: requestedPanel,
@@ -313,6 +315,7 @@ export const RightDock: React.FC<RightDockProps> = ({
             onUpdateLayer={onUpdateLayer}
             onReorderLayers={onReorderLayers}
             onMoveObjectsToLayer={onMoveObjectsToLayer}
+            onMoveHierarchyObjects={onMoveHierarchyObjects}
             onToggleSoloLayer={onToggleSoloLayer}
             onSelectAllInLayer={onSelectAllInLayer}
           />

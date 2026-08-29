@@ -123,4 +123,12 @@ export {
 export {
   UpdateBrandKitCommand,
 } from './brand-commands.js';
+export {
+  MoveHierarchyObjectsCommand,
+  validateHierarchyMove,
+  findParentContainer,
+  isDescendantOf,
+  type HierarchyDropTarget,
+  type HierarchyValidationResult,
+} from './hierarchy-commands.js';
 

@@ -271,13 +271,25 @@ function renderImageToSvg(
 
   if (obj.crop) {
     const cropClipId = `clip-crop-${obj.id}`;
-    clipDefs.push(`<clipPath id="${cropClipId}"><rect x="0" y="0" width="${obj.width}" height="${obj.height}" /></clipPath>`);
-    const scaleX = obj.width / obj.crop.width;
-    const scaleY = obj.height / obj.crop.height;
-    const imgX = -obj.crop.x * scaleX;
-    const imgY = -obj.crop.y * scaleY;
-    const imgW = obj.naturalWidth * scaleX;
-    const imgH = obj.naturalHeight * scaleY;
+    const frame = obj.crop.frame ?? {
+      x: 0,
+      y: 0,
+      width: obj.crop.width ?? obj.width,
+      height: obj.crop.height ?? obj.height,
+    };
+    const offset = obj.crop.offset ?? {
+      x: -(obj.crop.x ?? 0),
+      y: -(obj.crop.y ?? 0),
+    };
+    const scale = obj.crop.scale ?? { x: 1, y: 1 };
+
+    clipDefs.push(
+      `<clipPath id="${cropClipId}"><rect x="${frame.x}" y="${frame.y}" width="${frame.width}" height="${frame.height}" /></clipPath>`,
+    );
+    const imgX = frame.x + offset.x;
+    const imgY = frame.y + offset.y;
+    const imgW = obj.naturalWidth * (scale.x || 1);
+    const imgH = obj.naturalHeight * (scale.y || 1);
     return `    <g transform="${transformAttr}" clip-path="url(#${cropClipId})"${opacityAttr}${filterAttr}${blendAttr(obj.style.blendMode)}><image href="${escapeXml(href)}" x="${imgX}" y="${imgY}" width="${imgW}" height="${imgH}" preserveAspectRatio="none" /></g>`;
   }
 

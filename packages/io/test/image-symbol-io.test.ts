@@ -31,7 +31,7 @@ describe('IO Image & Symbol serialization and SVG export (EPIC-12)', () => {
       naturalHeight: 300,
       width: 200,
       height: 150,
-      crop: { x: 10, y: 10, width: 380, height: 280 },
+      crop: { offset: { x: -10, y: -10 }, scale: { x: 1, y: 1 }, frame: { x: 0, y: 0, width: 380, height: 280 } },
       filters: { brightness: 15, contrast: 5, saturation: 110, grayscale: false },
     };
 

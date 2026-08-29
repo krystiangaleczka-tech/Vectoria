@@ -109,6 +109,43 @@ export interface StrokeStyle {
   readonly markerEnd?: ArrowheadStyle;
 }
 
+export type EffectId = string;
+
+export interface DropShadowEffect {
+  readonly type: 'dropShadow';
+  readonly id: EffectId;
+  readonly visible: boolean;
+  readonly offsetX: number;
+  readonly offsetY: number;
+  readonly blur: number;
+  readonly color: string;
+  readonly opacity: number;
+}
+
+export interface BlurEffect {
+  readonly type: 'blur';
+  readonly id: EffectId;
+  readonly visible: boolean;
+  readonly radius: number;
+}
+
+export interface RoundedCornersEffect {
+  readonly type: 'roundedCorners';
+  readonly id: EffectId;
+  readonly visible: boolean;
+  readonly radius: number;
+}
+
+export interface SVGFilterEffect {
+  readonly type: 'svgFilter';
+  readonly id: EffectId;
+  readonly visible: boolean;
+  readonly filterType: 'colorMatrix' | 'turbulence';
+  readonly params: Readonly<Record<string, number | string>>;
+}
+
+export type LiveEffect = DropShadowEffect | BlurEffect | RoundedCornersEffect | SVGFilterEffect;
+
 export interface ObjectStyle {
   readonly fill: FillStyle;
   readonly stroke: StrokeStyle | null;
@@ -116,6 +153,9 @@ export interface ObjectStyle {
   /** Single canonical opacity for the object: 0–1. */
   readonly opacity: number;
   readonly blendMode?: BlendMode;
+  
+  /** Stack of non-destructive live effects applied in order. */
+  readonly effects?: readonly LiveEffect[];
 }
 
 export type BlendMode = 'normal' | 'multiply' | 'screen' | 'overlay';
@@ -337,10 +377,22 @@ export interface ImageFilters {
 }
 
 export interface ImageCrop {
-  readonly x: number;
-  readonly y: number;
-  readonly width: number;
-  readonly height: number;
+  readonly offset: Vec2;
+  readonly scale: Vec2;
+  readonly frame: {
+    readonly x: number;
+    readonly y: number;
+    readonly width: number;
+    readonly height: number;
+  };
+  /** Legacy x coordinate for backward compatibility. */
+  readonly x?: number;
+  /** Legacy y coordinate for backward compatibility. */
+  readonly y?: number;
+  /** Legacy width for backward compatibility. */
+  readonly width?: number;
+  /** Legacy height for backward compatibility. */
+  readonly height?: number;
 }
 
 export interface ImageObject extends SceneObjectBase {

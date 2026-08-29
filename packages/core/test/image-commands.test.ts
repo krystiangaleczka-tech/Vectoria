@@ -89,8 +89,8 @@ describe('Image Commands (EPIC-12)', () => {
     expect(reverted.width).toBe(512);
   });
 
-  it('crops image non-destructively and supports undo/redo', () => {
-    let doc = createDefaultDocument({ name: 'Crop Doc' });
+  it('crops image non-destructively with offset, scale, and frame (ASSET-010)', () => {
+    let doc = createDefaultDocument({ name: 'Crop Frame Doc' });
     const layerId = doc.layerIds[0]!;
     const img: ImageObject = {
       id: 'img-3',
@@ -102,22 +102,34 @@ describe('Image Commands (EPIC-12)', () => {
       transform: createTransform({ x: 0, y: 0 }),
       style: { fill: { type: 'none' }, stroke: null, opacity: 1, blendMode: 'normal' },
       source: { type: 'embed', data: 'data:image/png;base64,...', mimeType: 'image/png' },
-      naturalWidth: 1000,
+      naturalWidth: 2000,
       naturalHeight: 1000,
       width: 500,
       height: 500,
     };
     doc = new CreateImageObjectCommand(img, layerId).execute(doc);
 
-    const cropCmd = new CropImageCommand('img-3', { x: 100, y: 100, width: 800, height: 800 });
+    // Crop model: 500x500 frame, image offset -100px, scale 1.5
+    const nextCrop = {
+      offset: { x: -100, y: -50 },
+      scale: { x: 1.5, y: 1.5 },
+      frame: { x: 0, y: 0, width: 500, height: 500 },
+    };
+    const cropCmd = new CropImageCommand('img-3', nextCrop);
     doc = cropCmd.execute(doc);
 
     const cropped = doc.objects['img-3'] as ImageObject;
-    expect(cropped.crop).toEqual({ x: 100, y: 100, width: 800, height: 800 });
+    expect(cropped.crop).toEqual(nextCrop);
+    expect(cropped.naturalWidth).toBe(2000);
+    expect(cropped.naturalHeight).toBe(1000);
+    expect(cropped.width).toBe(500);
+    expect(cropped.height).toBe(500);
     expect(validateInvariants(doc)).toEqual([]);
 
+    // Undo restores previous crop
     doc = cropCmd.undo(doc);
     expect((doc.objects['img-3'] as ImageObject).crop).toBeUndefined();
+    expect((doc.objects['img-3'] as ImageObject).naturalWidth).toBe(2000);
   });
 
   it('traces image to vector paths and replaces image with undo/redo', () => {

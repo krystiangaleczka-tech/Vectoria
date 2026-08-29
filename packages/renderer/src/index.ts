@@ -693,17 +693,30 @@ function renderImage(ctx: CanvasRenderingContext2D, obj: ImageObject): void {
   }
 
   if (obj.crop) {
-    ctx.drawImage(
-      img,
-      obj.crop.x,
-      obj.crop.y,
-      obj.crop.width,
-      obj.crop.height,
-      0,
-      0,
-      obj.width,
-      obj.height,
-    );
+    const frame = obj.crop.frame ?? {
+      x: 0,
+      y: 0,
+      width: obj.crop.width ?? obj.width,
+      height: obj.crop.height ?? obj.height,
+    };
+    const offset = obj.crop.offset ?? {
+      x: -(obj.crop.x ?? 0),
+      y: -(obj.crop.y ?? 0),
+    };
+    const scale = obj.crop.scale ?? { x: 1, y: 1 };
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(frame.x, frame.y, frame.width, frame.height);
+    ctx.clip();
+
+    const drawW = obj.naturalWidth * (scale.x || 1);
+    const drawH = obj.naturalHeight * (scale.y || 1);
+    const drawX = frame.x + offset.x;
+    const drawY = frame.y + offset.y;
+
+    ctx.drawImage(img, drawX, drawY, drawW, drawH);
+    ctx.restore();
   } else {
     ctx.drawImage(img, 0, 0, obj.width, obj.height);
   }

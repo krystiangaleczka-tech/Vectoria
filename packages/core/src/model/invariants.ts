@@ -356,7 +356,34 @@ export function validateInvariants(doc: DocumentModel): InvariantViolation[] {
             if (!obj.source.url || !obj.source.url.trim()) violations.push({ code: 'INVALID_IMAGE_SOURCE', message: `Object '${objectId}' linked image url cannot be empty.` });
           }
           if (obj.crop) {
-            if (!Number.isFinite(obj.crop.width) || obj.crop.width <= 0 || !Number.isFinite(obj.crop.height) || obj.crop.height <= 0 || !Number.isFinite(obj.crop.x) || obj.crop.x < 0 || !Number.isFinite(obj.crop.y) || obj.crop.y < 0) {
+            const hasFrameModel =
+              obj.crop.frame &&
+              Number.isFinite(obj.crop.frame.width) &&
+              obj.crop.frame.width > 0 &&
+              Number.isFinite(obj.crop.frame.height) &&
+              obj.crop.frame.height > 0 &&
+              Number.isFinite(obj.crop.frame.x) &&
+              Number.isFinite(obj.crop.frame.y) &&
+              obj.crop.offset &&
+              Number.isFinite(obj.crop.offset.x) &&
+              Number.isFinite(obj.crop.offset.y) &&
+              obj.crop.scale &&
+              Number.isFinite(obj.crop.scale.x) &&
+              obj.crop.scale.x > 0 &&
+              Number.isFinite(obj.crop.scale.y) &&
+              obj.crop.scale.y > 0;
+
+            const hasLegacyModel =
+              obj.crop.width !== undefined &&
+              Number.isFinite(obj.crop.width) &&
+              obj.crop.width > 0 &&
+              obj.crop.height !== undefined &&
+              Number.isFinite(obj.crop.height) &&
+              obj.crop.height > 0 &&
+              (obj.crop.x === undefined || (Number.isFinite(obj.crop.x) && obj.crop.x >= 0)) &&
+              (obj.crop.y === undefined || (Number.isFinite(obj.crop.y) && obj.crop.y >= 0));
+
+            if (!hasFrameModel && !hasLegacyModel) {
               violations.push({ code: 'INVALID_IMAGE_CROP', message: `Object '${objectId}' image crop contains invalid bounds.` });
             }
           }

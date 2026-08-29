@@ -2,6 +2,7 @@ import type { ImageObject, SceneObject } from '@vectoria/core';
 import { generateId, type Vec2 } from '@vectoria/shared';
 import { createTransform, defaultObjectStyle } from '@vectoria/core';
 import { importSvgToDocument } from '../svg/import.js';
+import { importPdfPageAsImageObject } from './pdf-import-service.js';
 
 // ─── Limity bezpieczeństwa ────────────────────────────────────────────────────
 
@@ -14,7 +15,7 @@ const MAX_SVG_OBJECTS = 5_000;
 // ─── Typy ─────────────────────────────────────────────────────────────────────
 
 export type DroppedAssetResult =
-  | { readonly kind: 'image'; readonly image: ImageObject }
+  | { readonly kind: 'image'; readonly image: ImageObject; readonly message?: string }
   | { readonly kind: 'vector'; readonly objects: readonly SceneObject[]; readonly message?: string };
 
 // ─── Główna funkcja ───────────────────────────────────────────────────────────
@@ -130,11 +131,21 @@ export async function processDroppedFile(
     };
   }
 
-  // PDF -> Vector / Page Import (ASSET-005)
+  // PDF -> Vector / Page Raster Import (ASSET-005)
   if (mime === 'application/pdf' || name.endsWith('.pdf')) {
-    throw new Error(
-      'Import PDF nie jest obsługiwany. Najpierw wyeksportuj strony PDF jako SVG lub PNG.',
-    );
+    const buffer = await readFileAsArrayBuffer(file);
+    const result = await importPdfPageAsImageObject(buffer, {
+      dropPosition,
+      targetLayerId,
+      fileName: file.name,
+      pageNumber: 1,
+    });
+
+    return {
+      kind: 'image',
+      image: result.image,
+      message: result.message,
+    };
   }
 
   throw new Error(`Nieobsługiwany format pliku: ${file.name}`);
@@ -176,6 +187,21 @@ function sanitizeSvgText(svgText: string): string {
 }
 
 // ─── Pomocnicze ───────────────────────────────────────────────────────────────
+
+async function readFileAsArrayBuffer(file: File): Promise<ArrayBuffer> {
+  if (typeof file.arrayBuffer === 'function') {
+    return file.arrayBuffer();
+  }
+  if (typeof FileReader !== 'undefined') {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as ArrayBuffer);
+      reader.onerror = () => reject(new Error('Nie udało się odczytać pliku'));
+      reader.readAsArrayBuffer(file);
+    });
+  }
+  throw new Error('Środowisko nie obsługuje odczytu plików');
+}
 
 async function readFileAsText(file: File): Promise<string> {
   if (typeof file.text === 'function') {

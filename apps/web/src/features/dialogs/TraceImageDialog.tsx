@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { ImageObject, PathObject } from '@vectoria/core';
-import { traceImageToPaths, type TraceOptions, type PixelBuffer } from '@vectoria/core';
+import type { TraceOptions, PixelBuffer } from '@vectoria/core';
 import { VectoriaIcon } from '@vectoria/ui';
+import { generateId } from '@vectoria/shared';
+import { runTraceJob, cancelTraceJob } from './trace-worker-service.js';
 
 export interface TraceImageDialogProps {
   image: ImageObject;
@@ -23,53 +25,58 @@ export const TraceImageDialog: React.FC<TraceImageDialogProps> = ({
   const [tracedPaths, setTracedPaths] = useState<PathObject[]>([]);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
+  const activeJobIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
 
-    let isCancelled = false;
+    const jobId = generateId();
+    activeJobIdRef.current = jobId;
     setIsProcessing(true);
 
-    const runTrace = async () => {
-      const src = image.source.type === 'embed' ? image.source.data : image.source.url;
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
+    const src = image.source.type === 'embed' ? image.source.data : image.source.url;
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
 
-      img.onload = () => {
-        if (isCancelled) return;
-        const offscreen = document.createElement('canvas');
-        const w = Math.min(image.naturalWidth, 400);
-        const h = Math.min(image.naturalHeight, 400);
-        offscreen.width = w;
-        offscreen.height = h;
-        const ctx = offscreen.getContext('2d');
-        if (!ctx) {
+    img.onload = () => {
+      if (activeJobIdRef.current !== jobId) return;
+      const offscreen = document.createElement('canvas');
+      const w = Math.min(image.naturalWidth, 400);
+      const h = Math.min(image.naturalHeight, 400);
+      offscreen.width = w;
+      offscreen.height = h;
+      const ctx = offscreen.getContext('2d');
+      if (!ctx) {
+        setIsProcessing(false);
+        return;
+      }
+
+      ctx.drawImage(img, 0, 0, w, h);
+      const imgData = ctx.getImageData(0, 0, w, h);
+
+      const pixels: PixelBuffer = {
+        data: imgData.data,
+        width: w,
+        height: h,
+      };
+
+      const opts: TraceOptions = {
+        mode,
+        threshold,
+        colorCount,
+        simplifyTolerance,
+      };
+
+      runTraceJob({ jobId, pixels, options: opts }, (res) => {
+        if (activeJobIdRef.current !== jobId || res.cancelled || !res.paths) {
           setIsProcessing(false);
           return;
         }
 
-        ctx.drawImage(img, 0, 0, w, h);
-        const imgData = ctx.getImageData(0, 0, w, h);
-
-        const pixels: PixelBuffer = {
-          data: imgData.data,
-          width: w,
-          height: h,
-        };
-
-        const opts: TraceOptions = {
-          mode,
-          threshold,
-          colorCount,
-          simplifyTolerance,
-        };
-
-        const paths = traceImageToPaths(pixels, opts);
-
         // Scale paths to match image object dimensions
         const scaleX = image.width / w;
         const scaleY = image.height / h;
-        const scaledPaths = paths.map((p) => ({
+        const scaledPaths = res.paths.map((p) => ({
           ...p,
           transform: {
             ...p.transform,
@@ -118,18 +125,19 @@ export const TraceImageDialog: React.FC<TraceImageDialogProps> = ({
             pCtx.restore();
           }
         }
-      };
-
-      img.onerror = () => {
-        if (!isCancelled) setIsProcessing(false);
-      };
-      img.src = src;
+      });
     };
 
-    runTrace();
+    img.onerror = () => {
+      if (activeJobIdRef.current === jobId) setIsProcessing(false);
+    };
+    img.src = src;
 
     return () => {
-      isCancelled = true;
+      cancelTraceJob(jobId);
+      if (activeJobIdRef.current === jobId) {
+        activeJobIdRef.current = null;
+      }
     };
   }, [isOpen, image, mode, threshold, colorCount, simplifyTolerance]);
 

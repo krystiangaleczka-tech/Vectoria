@@ -18,6 +18,7 @@ export interface LayersPanelProps {
   onUpdateLayer?: (layerId: LayerId, patch: Partial<import('@vectoria/core').Layer>) => void;
   onReorderLayers?: (layerIds: readonly LayerId[]) => void;
   onMoveObjectsToLayer?: (objectIds: readonly ObjectId[], targetLayerId: LayerId) => void;
+  onMoveHierarchyObjects?: (objectIds: readonly ObjectId[], target: import('@vectoria/core').HierarchyDropTarget) => void;
   onToggleSoloLayer?: (layerId: LayerId) => void;
   onSelectAllInLayer?: (layerId: LayerId) => void;
 }
@@ -71,6 +72,7 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({
   onUpdateLayer,
   onReorderLayers,
   onMoveObjectsToLayer,
+  onMoveHierarchyObjects,
   onToggleSoloLayer,
   onSelectAllInLayer,
 }) => {
@@ -126,9 +128,14 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({
   };
 
   // Render recursive object tree
-  const renderObjectTree = (objectId: ObjectId, depth: number, parentLayerId: LayerId): React.ReactNode => {
+  const renderObjectTree = (objectId: ObjectId, depth: number, parentLayerId: LayerId, visitedPath: Set<ObjectId> = new Set()): React.ReactNode => {
+    if (visitedPath.has(objectId)) return null;
+
     const object = doc.objects[objectId];
     if (!object) return null;
+
+    const nextVisited = new Set(visitedPath);
+    nextVisited.add(objectId);
 
     const isGroup = object.type === 'group';
     const isCollapsed = collapsedGroups[objectId] ?? false;
@@ -138,10 +145,26 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({
     // If searching/filtering and group has matching children, render group
     let hasMatchingChildren = false;
     if (isGroup) {
-      hasMatchingChildren = object.childIds.some((childId) => {
-        const child = doc.objects[childId];
-        return child && matchesSearchAndFilter(child);
-      });
+      const checkMatchingDescendants = (groupId: ObjectId, visited: Set<ObjectId>): boolean => {
+        if (visited.has(groupId)) return false;
+        const grp = doc.objects[groupId];
+        if (!grp || grp.type !== 'group') return false;
+        
+        const v = new Set(visited);
+        v.add(groupId);
+
+        return grp.childIds.some((childId) => {
+          const child = doc.objects[childId];
+          if (!child) return false;
+          if (matchesSearchAndFilter(child)) return true;
+          if (child.type === 'group') {
+            return checkMatchingDescendants(child.id, v);
+          }
+          return false;
+        });
+      };
+
+      hasMatchingChildren = checkMatchingDescendants(object.id, new Set(visitedPath));
     }
 
     if (!matches && !hasMatchingChildren) {
@@ -168,7 +191,22 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({
             e.preventDefault();
             e.stopPropagation();
             if (draggedObjectId && draggedObjectId !== object.id) {
-              onMoveObjectsToLayer?.([draggedObjectId], parentLayerId);
+              const rect = e.currentTarget.getBoundingClientRect();
+              const relativeY = (e.clientY - rect.top) / Math.max(1, rect.height);
+              let dropTarget: import('@vectoria/core').HierarchyDropTarget;
+              if (isGroup && relativeY > 0.25 && relativeY < 0.75) {
+                dropTarget = { type: 'inside', targetId: object.id };
+              } else if (relativeY <= 0.5) {
+                dropTarget = { type: 'before', targetId: object.id };
+              } else {
+                dropTarget = { type: 'after', targetId: object.id };
+              }
+
+              if (onMoveHierarchyObjects) {
+                onMoveHierarchyObjects([draggedObjectId], dropTarget);
+              } else {
+                onMoveObjectsToLayer?.([draggedObjectId], parentLayerId);
+              }
             }
             setDraggedObjectId(null);
           }}
@@ -223,7 +261,7 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({
 
         {isGroup && !isCollapsed && (
           <div className="layer-group-children">
-            {object.childIds.map((childId) => renderObjectTree(childId, depth + 1, parentLayerId))}
+            {object.childIds.map((childId) => renderObjectTree(childId, depth + 1, parentLayerId, nextVisited))}
           </div>
         )}
       </div>
@@ -321,7 +359,11 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({
                     onReorderLayers?.(currentIds);
                   }
                 } else if (draggedObjectId) {
-                  onMoveObjectsToLayer?.([draggedObjectId], layer.id);
+                  if (onMoveHierarchyObjects) {
+                    onMoveHierarchyObjects([draggedObjectId], { type: 'layer', targetLayerId: layer.id });
+                  } else {
+                    onMoveObjectsToLayer?.([draggedObjectId], layer.id);
+                  }
                 }
                 setDraggedLayerId(null);
                 setDraggedObjectId(null);

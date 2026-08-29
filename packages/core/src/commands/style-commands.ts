@@ -11,7 +11,10 @@ function replaceStyleColors(style: ObjectStyle, from: string, to: string): Objec
       : style.fill.type === 'none'
         ? style.fill
         : { ...style.fill, stops: style.fill.stops.map((stop) => ({ ...stop, color: replace(stop.color) })) };
-  return { ...style, fill, stroke: style.stroke ? { ...style.stroke, color: replace(style.stroke.color) } : null };
+  const effects = style.effects?.map((effect) => 
+    effect.type === 'dropShadow' ? { ...effect, color: replace(effect.color) } : effect
+  );
+  return { ...style, fill, stroke: style.stroke ? { ...style.stroke, color: replace(style.stroke.color) } : null, effects };
 }
 
 abstract class StyleObjectCommand implements Command {

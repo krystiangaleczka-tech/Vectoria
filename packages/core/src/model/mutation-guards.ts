@@ -74,8 +74,10 @@ function areGeometriesEqual(a: SceneObject, b: SceneObject): boolean {
   
   if (keysA.length !== keysB.length) return false;
   
+  const recordA = a as unknown as Record<string, unknown>;
+  const recordB = b as unknown as Record<string, unknown>;
   for (const k of keysA) {
-    if ((a as any)[k] !== (b as any)[k]) return false;
+    if (recordA[k] !== recordB[k]) return false;
   }
   
   return true;

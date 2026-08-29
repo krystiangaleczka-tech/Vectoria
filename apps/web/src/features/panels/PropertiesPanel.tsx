@@ -613,10 +613,20 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                   min={0}
                   max={selected.naturalWidth - 1}
                   decimals={0}
-                  value={selected.crop?.x ?? 0}
+                  value={selected.crop?.offset ? -selected.crop.offset.x : (selected.crop?.x ?? 0)}
                   onChange={(val) => {
-                    const current = selected.crop ?? { x: 0, y: 0, width: selected.naturalWidth, height: selected.naturalHeight };
-                    onCropImage?.(selected.id, { ...current, x: Math.max(0, val) });
+                    const currentFrame = selected.crop?.frame ?? { x: 0, y: 0, width: selected.width, height: selected.height };
+                    const currentOffset = selected.crop?.offset ?? { x: -(selected.crop?.x ?? 0), y: -(selected.crop?.y ?? 0) };
+                    const currentScale = selected.crop?.scale ?? { x: 1, y: 1 };
+                    onCropImage?.(selected.id, {
+                      offset: { ...currentOffset, x: -Math.max(0, val) },
+                      scale: currentScale,
+                      frame: currentFrame,
+                      x: Math.max(0, val),
+                      y: -currentOffset.y,
+                      width: currentFrame.width,
+                      height: currentFrame.height,
+                    });
                   }}
                 />
                 <NumberInput
@@ -625,10 +635,20 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                   min={0}
                   max={selected.naturalHeight - 1}
                   decimals={0}
-                  value={selected.crop?.y ?? 0}
+                  value={selected.crop?.offset ? -selected.crop.offset.y : (selected.crop?.y ?? 0)}
                   onChange={(val) => {
-                    const current = selected.crop ?? { x: 0, y: 0, width: selected.naturalWidth, height: selected.naturalHeight };
-                    onCropImage?.(selected.id, { ...current, y: Math.max(0, val) });
+                    const currentFrame = selected.crop?.frame ?? { x: 0, y: 0, width: selected.width, height: selected.height };
+                    const currentOffset = selected.crop?.offset ?? { x: -(selected.crop?.x ?? 0), y: -(selected.crop?.y ?? 0) };
+                    const currentScale = selected.crop?.scale ?? { x: 1, y: 1 };
+                    onCropImage?.(selected.id, {
+                      offset: { ...currentOffset, y: -Math.max(0, val) },
+                      scale: currentScale,
+                      frame: currentFrame,
+                      x: -currentOffset.x,
+                      y: Math.max(0, val),
+                      width: currentFrame.width,
+                      height: currentFrame.height,
+                    });
                   }}
                 />
                 <NumberInput
@@ -637,10 +657,21 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                   min={1}
                   max={selected.naturalWidth}
                   decimals={0}
-                  value={selected.crop?.width ?? selected.naturalWidth}
+                  value={selected.crop?.frame?.width ?? selected.crop?.width ?? selected.naturalWidth}
                   onChange={(val) => {
-                    const current = selected.crop ?? { x: 0, y: 0, width: selected.naturalWidth, height: selected.naturalHeight };
-                    onCropImage?.(selected.id, { ...current, width: Math.max(1, val) });
+                    const currentFrame = selected.crop?.frame ?? { x: 0, y: 0, width: selected.width, height: selected.height };
+                    const currentOffset = selected.crop?.offset ?? { x: -(selected.crop?.x ?? 0), y: -(selected.crop?.y ?? 0) };
+                    const currentScale = selected.crop?.scale ?? { x: 1, y: 1 };
+                    const w = Math.max(1, val);
+                    onCropImage?.(selected.id, {
+                      offset: currentOffset,
+                      scale: currentScale,
+                      frame: { ...currentFrame, width: w },
+                      x: -currentOffset.x,
+                      y: -currentOffset.y,
+                      width: w,
+                      height: currentFrame.height,
+                    });
                   }}
                 />
                 <NumberInput
@@ -649,10 +680,21 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                   min={1}
                   max={selected.naturalHeight}
                   decimals={0}
-                  value={selected.crop?.height ?? selected.naturalHeight}
+                  value={selected.crop?.frame?.height ?? selected.crop?.height ?? selected.naturalHeight}
                   onChange={(val) => {
-                    const current = selected.crop ?? { x: 0, y: 0, width: selected.naturalWidth, height: selected.naturalHeight };
-                    onCropImage?.(selected.id, { ...current, height: Math.max(1, val) });
+                    const currentFrame = selected.crop?.frame ?? { x: 0, y: 0, width: selected.width, height: selected.height };
+                    const currentOffset = selected.crop?.offset ?? { x: -(selected.crop?.x ?? 0), y: -(selected.crop?.y ?? 0) };
+                    const currentScale = selected.crop?.scale ?? { x: 1, y: 1 };
+                    const h = Math.max(1, val);
+                    onCropImage?.(selected.id, {
+                      offset: currentOffset,
+                      scale: currentScale,
+                      frame: { ...currentFrame, height: h },
+                      x: -currentOffset.x,
+                      y: -currentOffset.y,
+                      width: currentFrame.width,
+                      height: h,
+                    });
                   }}
                 />
               </div>
