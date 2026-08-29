@@ -84,6 +84,20 @@ atrybut=wartość     → [^\s>]*    ← najczęściej pomijany błąd
 
 Wzorzec zbiorczy: `(?:"[^"]*"|'[^']*'|[^\s>]*)`. Nie używaj `["'][^"']*["']` — to nie złapie cudzysłowów mieszanych ani wartości bez cudzysłowów.
 
+### Strategia wyszukiwania — `mgrep` vs `ripgrep`
+
+Niepotrzebne otwieranie całych plików i wielokrotne pudłujące grepa to główny powód przepalania tokenów. Stosuj prostą regułę:
+
+| Sytuacja | Narzędzie | Dlaczego |
+|---|---|---|
+| Znam konkretną **nazwę funkcji, zmiennej, pliku lub symbolu** | **`ripgrep` (`rg` / `grep_search`)** | Zwraca 2–5 linii z dokładnym dopasowaniem. Koszt: ~30–50 tokenów. |
+| **Nie znam nazwy**, ale wiem co szukam koncepcyjnie (np. „gdzie przetwarzamy import SVG?", „co odpowiada za walidację pliku?") | **`mgrep`** (semantyczny AI) | Zwraca fragmenty kodu zbliżone znaczeniowo, bez potrzeby skanowania całego repo. Oszczędza tysiące tokenów kontekstu. |
+
+**Priorytet decyzji:**
+1. Jeśli znasz dokładną nazwę — użyj `ripgrep`. Nie używaj `mgrep` dla nazw które są oczywiste.
+2. Jeśli nie wiesz, czego szukać — uruchom `mgrep "<pytanie w języku naturalnym>"` **zanim** zaczniesz otwierać pliki.
+3. Nigdy nie otwieraj całego pliku na ślepo (bez grep/mgrep), żeby znaleźć właściwe miejsce.
+
 ---
 ## 2. Triggery operacyjne
 
