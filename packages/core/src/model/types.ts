@@ -80,15 +80,44 @@ export interface AngularGradientFill {
   readonly stops: readonly LinearGradientStop[];
 }
 
+/** Pattern placement independent of the host object's transform. */
+export interface PatternTransform {
+  readonly offsetX: number;
+  readonly offsetY: number;
+  readonly scale: number;
+  /** Rotation in radians. */
+  readonly rotation: number;
+}
+
 export interface PatternFill {
   readonly type: 'pattern';
   readonly kind: 'dots' | 'grid' | 'hatch';
   readonly foreground: string;
   readonly background: string;
   readonly size: number;
+  readonly transform?: PatternTransform;
 }
 
-export type FillStyle = SolidFill | NoFill | LinearGradientFill | RadialGradientFill | AngularGradientFill | PatternFill;
+/**
+ * Raster texture fill reusing the document image source contract. Rendered as a
+ * repeating pattern with its own transform, independent of the object's.
+ */
+export interface TextureFill {
+  readonly type: 'texture';
+  readonly source: ImageSource;
+  readonly transform?: PatternTransform;
+}
+
+/**
+ * Bilinear color mesh gradient. `colors` is a 3×3 row-major grid of corner
+ * colors; the renderer interpolates across the object's bounding box.
+ */
+export interface MeshGradientFill {
+  readonly type: 'mesh-gradient';
+  readonly colors: readonly (readonly string[])[]; // 3 rows × 3 columns
+}
+
+export type FillStyle = SolidFill | NoFill | LinearGradientFill | RadialGradientFill | AngularGradientFill | PatternFill | TextureFill | MeshGradientFill;
 
 export interface ArrowheadStyle {
   readonly type: 'arrow' | 'triangle' | 'circle' | 'square';
@@ -136,15 +165,126 @@ export interface RoundedCornersEffect {
   readonly radius: number;
 }
 
-export interface SVGFilterEffect {
+export interface InnerShadowEffect {
+  readonly type: 'innerShadow';
+  readonly id: EffectId;
+  readonly visible: boolean;
+  readonly offsetX: number;
+  readonly offsetY: number;
+  readonly blur: number;
+  readonly color: string;
+  readonly opacity: number;
+}
+
+export interface GlowEffect {
+  readonly type: 'glow';
+  readonly id: EffectId;
+  readonly visible: boolean;
+  readonly blur: number;
+  readonly color: string;
+  readonly opacity: number;
+}
+
+export type DistortVariant = 'zigzag' | 'roughen' | 'pucker-bloat';
+
+export interface DistortEffect {
+  readonly type: 'distort';
+  readonly id: EffectId;
+  readonly visible: boolean;
+  readonly variant: DistortVariant;
+  readonly amplitude: number;
+  readonly frequency: number;
+}
+
+/** Destination quad corners (TL, TR, BR, BL) in object-local space. */
+export type CornerQuad = readonly [Vec2, Vec2, Vec2, Vec2];
+
+export interface EnvelopeEffect {
+  readonly type: 'envelope';
+  readonly id: EffectId;
+  readonly visible: boolean;
+  readonly corners: CornerQuad;
+}
+
+export interface PerspectiveEffect {
+  readonly type: 'perspective';
+  readonly id: EffectId;
+  readonly visible: boolean;
+  readonly corners: CornerQuad;
+}
+
+export interface ExtrudeEffect {
+  readonly type: 'extrude';
+  readonly id: EffectId;
+  readonly visible: boolean;
+  readonly depth: number;
+  /** Extrusion direction in radians. */
+  readonly angle: number;
+  readonly steps: number;
+}
+
+export interface RadialRepeatEffect {
+  readonly type: 'radialRepeat';
+  readonly id: EffectId;
+  readonly visible: boolean;
+  readonly count: number;
+  readonly radius: number;
+  readonly startAngle: number;
+}
+
+export interface MirrorRepeatEffect {
+  readonly type: 'mirrorRepeat';
+  readonly id: EffectId;
+  readonly visible: boolean;
+  readonly axis: 'x' | 'y';
+  readonly offset: number;
+}
+
+export interface GridRepeatEffect {
+  readonly type: 'gridRepeat';
+  readonly id: EffectId;
+  readonly visible: boolean;
+  readonly rows: number;
+  readonly columns: number;
+  readonly spacingX: number;
+  readonly spacingY: number;
+}
+
+export type SVGFilterEffect = {
   readonly type: 'svgFilter';
   readonly id: EffectId;
   readonly visible: boolean;
   readonly filterType: 'colorMatrix' | 'turbulence';
   readonly params: Readonly<Record<string, number | string>>;
-}
+};
 
-export type LiveEffect = DropShadowEffect | BlurEffect | RoundedCornersEffect | SVGFilterEffect;
+export type LiveEffect =
+  | DropShadowEffect
+  | BlurEffect
+  | RoundedCornersEffect
+  | InnerShadowEffect
+  | GlowEffect
+  | DistortEffect
+  | EnvelopeEffect
+  | PerspectiveEffect
+  | ExtrudeEffect
+  | RadialRepeatEffect
+  | MirrorRepeatEffect
+  | GridRepeatEffect
+  | SVGFilterEffect;
+
+export type BlendMode =
+  | 'normal' | 'multiply' | 'screen' | 'overlay'
+  | 'darken' | 'lighten' | 'color-dodge' | 'color-burn'
+  | 'hard-light' | 'soft-light' | 'difference' | 'exclusion'
+  | 'hue' | 'saturation' | 'color' | 'luminosity';
+
+export const BLEND_MODES: readonly BlendMode[] = [
+  'normal', 'multiply', 'screen', 'overlay',
+  'darken', 'lighten', 'color-dodge', 'color-burn',
+  'hard-light', 'soft-light', 'difference', 'exclusion',
+  'hue', 'saturation', 'color', 'luminosity',
+];
 
 export interface ObjectStyle {
   readonly fill: FillStyle;
@@ -157,8 +297,6 @@ export interface ObjectStyle {
   /** Stack of non-destructive live effects applied in order. */
   readonly effects?: readonly LiveEffect[];
 }
-
-export type BlendMode = 'normal' | 'multiply' | 'screen' | 'overlay';
 
 export interface PaletteColor {
   readonly id: string;
@@ -241,7 +379,18 @@ export interface PathObject extends SceneObjectBase {
   readonly widthProfile?: readonly WidthPoint[];
   readonly compoundChildren?: readonly (readonly PathNode[])[];
   readonly fillRule?: 'nonzero' | 'evenodd';
+  /** Optional brush rendering profile (EPIC-13 FX-016/017/018). */
+  readonly brush?: BrushProfile;
 }
+
+/**
+ * Brush rendering profile for paths. Caligraphic strokes generate a real filled
+ * outline (exports cleanly); stamp/pattern brushes render via arc-length stamping.
+ */
+export type BrushProfile =
+  | { readonly kind: 'caligraphic'; /** Nib angle in radians. */ readonly angle: number; readonly thin: number; readonly thick: number }
+  | { readonly kind: 'stamp'; readonly stamp: 'watercolor' | 'chalk' | 'marker'; readonly size: number; readonly spacing: number; readonly jitter: number }
+  | { readonly kind: 'pattern'; readonly motif: 'dots' | 'dashes' | 'ornament'; readonly size: number; readonly spacing: number };
 
 export interface GroupObject extends SceneObjectBase {
   readonly type: 'group';

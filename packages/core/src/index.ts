@@ -7,6 +7,7 @@ export * from './model/shapes.js';
 export * from './model/path.js';
 export * from './model/freehand.js';
 export * from './geometry/operations.js';
+export * from './geometry/effects.js';
 export * from './geometry/boolean.js';
 export * from './geometry/polygon.js';
 export * from './geometry/star.js';

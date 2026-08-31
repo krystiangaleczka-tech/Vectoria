@@ -67,12 +67,34 @@ export const AngularGradientFillSchema = z.object({
   stops: z.array(LinearGradientStopSchema).min(2),
 });
 
+export const PatternTransformSchema = z.object({
+  offsetX: z.number().refine(Number.isFinite),
+  offsetY: z.number().refine(Number.isFinite),
+  scale: z.number().refine((v) => Number.isFinite(v) && v > 0),
+  rotation: z.number().refine(Number.isFinite),
+});
+
 export const PatternFillSchema = z.object({
   type: z.literal('pattern'),
   kind: z.enum(['dots', 'grid', 'hatch']),
   foreground: ColorSchema,
   background: ColorSchema,
   size: z.number().positive().finite(),
+  transform: PatternTransformSchema.optional(),
+});
+
+export const TextureFillSchema = z.object({
+  type: z.literal('texture'),
+  source: z.union([
+    z.object({ type: z.literal('embed'), data: z.string().min(1), mimeType: z.string().min(1) }),
+    z.object({ type: z.literal('link'), url: z.string().min(1), mimeType: z.string().optional() }),
+  ]),
+  transform: PatternTransformSchema.optional(),
+});
+
+export const MeshGradientFillSchema = z.object({
+  type: z.literal('mesh-gradient'),
+  colors: z.array(z.array(ColorSchema).length(3)).length(3),
 });
 
 export const FillStyleSchema = z.discriminatedUnion('type', [
@@ -82,6 +104,8 @@ export const FillStyleSchema = z.discriminatedUnion('type', [
   RadialGradientFillSchema,
   AngularGradientFillSchema,
   PatternFillSchema,
+  TextureFillSchema,
+  MeshGradientFillSchema,
 ]);
 
 export const StrokeStyleSchema = z.object({
@@ -95,11 +119,37 @@ export const StrokeStyleSchema = z.object({
   opacity: z.number().min(0).max(1),
 });
 
+const finiteNumber = z.number().refine(Number.isFinite, { message: 'must be finite' });
+const nonNegativeNumber = z.number().refine((v) => Number.isFinite(v) && v >= 0, { message: 'must be >= 0 and finite' });
+const positiveNumber = z.number().refine((v) => Number.isFinite(v) && v >= 1, { message: 'must be >= 1 and finite' });
+const unitNumber = z.number().refine((v) => Number.isFinite(v) && v >= 0 && v <= 1, { message: 'must be within [0, 1]' });
+
+const positiveNumber2 = z.number().refine((v) => Number.isFinite(v) && v > 0, { message: 'must be > 0 and finite' });
+
+const EffectBaseSchema = { id: z.string().min(1), visible: z.boolean() };
+
+export const LiveEffectSchema = z.discriminatedUnion('type', [
+  z.object({ ...EffectBaseSchema, type: z.literal('dropShadow'), offsetX: finiteNumber, offsetY: finiteNumber, blur: nonNegativeNumber, color: ColorSchema, opacity: unitNumber }),
+  z.object({ ...EffectBaseSchema, type: z.literal('blur'), radius: nonNegativeNumber }),
+  z.object({ ...EffectBaseSchema, type: z.literal('roundedCorners'), radius: nonNegativeNumber }),
+  z.object({ ...EffectBaseSchema, type: z.literal('innerShadow'), offsetX: finiteNumber, offsetY: finiteNumber, blur: nonNegativeNumber, color: ColorSchema, opacity: unitNumber }),
+  z.object({ ...EffectBaseSchema, type: z.literal('glow'), blur: nonNegativeNumber, color: ColorSchema, opacity: unitNumber }),
+  z.object({ ...EffectBaseSchema, type: z.literal('distort'), variant: z.enum(['zigzag', 'roughen', 'pucker-bloat']), amplitude: nonNegativeNumber, frequency: positiveNumber }),
+  z.object({ ...EffectBaseSchema, type: z.literal('envelope'), corners: z.tuple([Vec2Schema, Vec2Schema, Vec2Schema, Vec2Schema]) }),
+  z.object({ ...EffectBaseSchema, type: z.literal('perspective'), corners: z.tuple([Vec2Schema, Vec2Schema, Vec2Schema, Vec2Schema]) }),
+  z.object({ ...EffectBaseSchema, type: z.literal('extrude'), depth: nonNegativeNumber, angle: finiteNumber, steps: z.number().int().min(1).max(64) }),
+  z.object({ ...EffectBaseSchema, type: z.literal('radialRepeat'), count: z.number().int().min(2).max(360), radius: nonNegativeNumber, startAngle: finiteNumber }),
+  z.object({ ...EffectBaseSchema, type: z.literal('mirrorRepeat'), axis: z.enum(['x', 'y']), offset: finiteNumber }),
+  z.object({ ...EffectBaseSchema, type: z.literal('gridRepeat'), rows: z.number().int().min(1).max(50), columns: z.number().int().min(1).max(50), spacingX: nonNegativeNumber, spacingY: nonNegativeNumber }),
+  z.object({ ...EffectBaseSchema, type: z.literal('svgFilter'), filterType: z.enum(['colorMatrix', 'turbulence']), params: z.record(z.string(), z.union([z.number(), z.string()])) }),
+]);
+
 export const ObjectStyleSchema = z.object({
   fill: FillStyleSchema,
   stroke: StrokeStyleSchema.nullable(),
   opacity: z.number().min(0).max(1),
-  blendMode: z.enum(['normal', 'multiply', 'screen', 'overlay']).default('normal'),
+  blendMode: z.enum(['normal', 'multiply', 'screen', 'overlay', 'darken', 'lighten', 'color-dodge', 'color-burn', 'hard-light', 'soft-light', 'difference', 'exclusion', 'hue', 'saturation', 'color', 'luminosity']).default('normal'),
+  effects: z.array(LiveEffectSchema).max(64).optional(),
 });
 
 export const LockedAttributeSchema = z.enum(['position', 'size', 'rotation', 'style', 'content']);
@@ -176,6 +226,11 @@ export const PathObjectSchema = z.object({
   closed: z.boolean(),
   compoundChildren: z.array(z.array(PathNodeSchema)).optional(),
   fillRule: z.enum(['nonzero', 'evenodd']).optional(),
+  brush: z.union([
+    z.object({ kind: z.literal('caligraphic'), angle: finiteNumber, thin: nonNegativeNumber, thick: nonNegativeNumber }),
+    z.object({ kind: z.literal('stamp'), stamp: z.enum(['watercolor', 'chalk', 'marker']), size: positiveNumber2, spacing: nonNegativeNumber, jitter: finiteNumber }),
+    z.object({ kind: z.literal('pattern'), motif: z.enum(['dots', 'dashes', 'ornament']), size: positiveNumber2, spacing: nonNegativeNumber }),
+  ]).optional(),
 });
 
 export const GroupObjectSchema = z.object({

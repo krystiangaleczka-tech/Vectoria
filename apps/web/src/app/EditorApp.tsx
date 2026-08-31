@@ -28,7 +28,14 @@ import {
   SetStrokeArrowheadsCommand,
   type ArrowheadStyle,
   type CornerRadii,
+  type LiveEffect,
   SetObjectStyleCommand,
+  AddEffectCommand,
+  UpdateEffectCommand,
+  RemoveEffectCommand,
+  ReorderEffectsCommand,
+  ToggleEffectCommand,
+  ExpandLiveEffectCommand,
   DeletePaletteCommand,
   DeleteObjectStyleCommand,
   SaveObjectStyleCommand,
@@ -695,6 +702,30 @@ export const EditorApp: React.FC = () => {
   const handleUpdateObjectStyle = useCallback((id: ObjectId, patch: Partial<ObjectStyle>) => {
     handleExecuteCommand(new SetObjectStyleCommand([id], patch));
   }, [handleExecuteCommand]);
+
+  const handleAddEffect = useCallback((effect: LiveEffect) => {
+    handleExecuteCommand(new AddEffectCommand(selectedObjectIds, effect));
+  }, [handleExecuteCommand, selectedObjectIds]);
+
+  const handleUpdateEffect = useCallback((effectId: string, patch: Partial<LiveEffect>) => {
+    handleExecuteCommand(new UpdateEffectCommand(selectedObjectIds, effectId, patch));
+  }, [handleExecuteCommand, selectedObjectIds]);
+
+  const handleRemoveEffect = useCallback((effectId: string) => {
+    handleExecuteCommand(new RemoveEffectCommand(selectedObjectIds, effectId));
+  }, [handleExecuteCommand, selectedObjectIds]);
+
+  const handleReorderEffect = useCallback((fromIndex: number, toIndex: number) => {
+    handleExecuteCommand(new ReorderEffectsCommand(selectedObjectIds, fromIndex, toIndex));
+  }, [handleExecuteCommand, selectedObjectIds]);
+
+  const handleToggleEffect = useCallback((effectId: string, visible: boolean) => {
+    handleExecuteCommand(new ToggleEffectCommand(selectedObjectIds, effectId, visible));
+  }, [handleExecuteCommand, selectedObjectIds]);
+
+  const handleExpandEffects = useCallback(() => {
+    handleExecuteCommand(new ExpandLiveEffectCommand(selectedObjectIds));
+  }, [handleExecuteCommand, selectedObjectIds]);
 
   const handleLibraryPalettesChange = useCallback((palettes: readonly import('@vectoria/core').ColorPalette[]) => {
     const bounded = palettes.slice(0, 256);
@@ -1594,6 +1625,12 @@ export const EditorApp: React.FC = () => {
           onUpdateCornerRadius={handleUpdateCornerRadius}
           onUpdateFill={handleUpdateFill}
           onUpdateObjectStyle={handleUpdateObjectStyle}
+          onAddEffect={handleAddEffect}
+          onUpdateEffect={handleUpdateEffect}
+          onRemoveEffect={handleRemoveEffect}
+          onReorderEffect={handleReorderEffect}
+          onToggleEffect={handleToggleEffect}
+          onExpandEffects={handleExpandEffects}
           onUpdateRotation={handleUpdateRotation}
           onUpdatePivot={handleUpdatePivot}
           onUpdateSkew={handleUpdateSkew}

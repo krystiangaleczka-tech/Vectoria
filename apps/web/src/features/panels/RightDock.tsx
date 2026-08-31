@@ -6,6 +6,7 @@ import { HistoryPanel } from './HistoryPanel.js';
 import { LayersPanel } from './LayersPanel.js';
 import { PropertiesPanel, type PathAction } from './PropertiesPanel.js';
 import { ArtboardsPanel } from './ArtboardsPanel.js';
+import { AppearancePanel } from './AppearancePanel.js';
 import type { GridSettings } from '@vectoria/editor-engine';
 import { CleanupPanel } from '../cleanup/CleanupPanel.js';
 import { PalettesPanel } from './PalettesPanel.js';
@@ -15,7 +16,7 @@ import { LinksPanel } from './LinksPanel.js';
 
 import { AssetsPanel } from './AssetsPanel.js';
 
-export type DockPanel = 'properties' | 'layers' | 'assets' | 'links' | 'artboards' | 'history' | 'palettes' | 'object-styles' | 'cleanup';
+export type DockPanel = 'properties' | 'appearance' | 'layers' | 'assets' | 'links' | 'artboards' | 'history' | 'palettes' | 'object-styles' | 'cleanup';
 
 export interface RightDockProps {
   document: DocumentModel;
@@ -38,6 +39,12 @@ export interface RightDockProps {
   onUpdateCornerRadius?: (id: ObjectId, radii: { topLeft: number; topRight: number; bottomRight: number; bottomLeft: number }) => void;
   onUpdateFill: (id: ObjectId, color: string | null) => void;
   onUpdateObjectStyle?: (id: ObjectId, patch: Partial<ObjectStyle>) => void;
+  onAddEffect?: (effect: import('@vectoria/core').LiveEffect) => void;
+  onUpdateEffect?: (effectId: string, patch: Partial<import('@vectoria/core').LiveEffect>) => void;
+  onRemoveEffect?: (effectId: string) => void;
+  onReorderEffect?: (fromIndex: number, toIndex: number) => void;
+  onToggleEffect?: (effectId: string, visible: boolean) => void;
+  onExpandEffects?: () => void;
   onUpdateRotation?: (id: ObjectId, degrees: number) => void;
   onUpdatePivot?: (id: ObjectId, pivot: { x: number; y: number }) => void;
   onUpdateSkew?: (id: ObjectId, axis: 'x' | 'y', degrees: number) => void;
@@ -146,6 +153,12 @@ export const RightDock: React.FC<RightDockProps> = ({
   onUpdateCornerRadius,
   onUpdateFill,
   onUpdateObjectStyle,
+  onAddEffect,
+  onUpdateEffect,
+  onRemoveEffect,
+  onReorderEffect,
+  onToggleEffect,
+  onExpandEffects,
   onUpdateRotation,
   onUpdatePivot,
   onUpdateSkew,
@@ -296,6 +309,20 @@ export const RightDock: React.FC<RightDockProps> = ({
             onCropImage={onCropImage}
             onOpenTraceImage={onOpenTraceImage}
             onDetachSymbolInstance={onDetachSymbolInstance}
+          />
+        )}
+        {activePanel === 'appearance' && (
+          <AppearancePanel
+            document={doc}
+            selectedObjectId={selectedObjectId}
+            selectedObjectIds={selectedObjectIds}
+            onPatchStyle={(patch) => selectedObjectId !== null && onUpdateObjectStyle?.(selectedObjectId, patch)}
+            onAddEffect={onAddEffect ?? (() => {})}
+            onUpdateEffect={onUpdateEffect ?? (() => {})}
+            onRemoveEffect={onRemoveEffect ?? (() => {})}
+            onReorderEffect={onReorderEffect ?? (() => {})}
+            onToggleEffect={onToggleEffect ?? (() => {})}
+            onExpandEffects={onExpandEffects ?? (() => {})}
           />
         )}
         {activePanel === 'layers' && (

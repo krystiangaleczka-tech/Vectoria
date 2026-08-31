@@ -2,9 +2,10 @@ import type { Camera } from '@vectoria/editor-engine';
 import type { Vec2 } from '@vectoria/shared';
 import type { DocumentModel, Artboard, RectangleObject, EllipseObject, LineObject, PathObject, ObjectId, Transform2D, LinearGradientFill, RadialGradientFill, AngularGradientFill, PatternFill, GeometryPreview, SceneObject, PolygonObject, StarObject, ArcObject, PieObject, RingObject, SpiralObject, CalloutObject, PolylineObject, StrokeStyle, ArrowheadStyle, FillStyle, TextObject, TextFrameObject, ImageObject, SymbolInstanceObject } from '@vectoria/core';
 import type { SnapResult } from '@vectoria/editor-engine';
-import { getTransformMatrix, getObjectBounds, rectsIntersect, normalizeCornerRadii, flattenPath, widthAtT, getPolygonVertices, getStarVertices, getSpiralVertices, getCalloutVertices, getArrowheadVertices, expandObject, computeArtisticTextLayout, computeTextFrameLayout, computeTextOnPathLayout } from '@vectoria/core';
+import { getTransformMatrix, getObjectBounds, rectsIntersect, normalizeCornerRadii, flattenPath, widthAtT, getPolygonVertices, getStarVertices, getSpiralVertices, getCalloutVertices, getArrowheadVertices, expandObject, computeArtisticTextLayout, computeTextFrameLayout, computeTextOnPathLayout, effectiveGeometry, hasGeometryEffects, buildCaligraphicOutline, samplePath, composeTransform2D, BLEND_MODES } from '@vectoria/core';
 import { mat3TransformPoint } from '@vectoria/shared';
 import { RenderMetrics } from './metrics.js';
+import { drawObjectWithEffects, effectWorldMargin, repeatInstances, hasActiveRepeats, activeExtrude, buildMeshTile, meshAverageColor } from './effects.js';
 export { RenderQualityPolicy, type RenderQuality } from './quality.js';
 export { RenderMetrics, type RenderMetricsSnapshot } from './metrics.js';
 export { FRAME_BUDGET_MS, INPUT_TO_RENDER_BUDGET_MS, evaluatePerformanceBudget, type PerformanceBudgetResult } from './performance.js';
@@ -296,6 +297,7 @@ export function renderScene(
           style: {
             ...obj.style,
             fill: { type: 'none' },
+            effects: undefined,
             stroke: {
               color: '#3b82f6',
               width: 1 / camera.zoom,
@@ -310,61 +312,106 @@ export function renderScene(
         };
       }
 
-       if (!rectsIntersect(getObjectBounds(obj, doc), visibleWorldRect)) continue;
+       // Effect-aware culling: shadows, blur, glow, extrusion and repeats
+       // extend the drawn footprint beyond the geometric bounds.
+       const margin = effectWorldMargin(obj);
+       const cullBounds = getObjectBounds(obj, doc);
+       const expanded = margin > 0
+         ? { x: cullBounds.x - margin, y: cullBounds.y - margin, width: cullBounds.width + margin * 2, height: cullBounds.height + margin * 2 }
+         : cullBounds;
+       if (!rectsIntersect(expanded, visibleWorldRect)) continue;
 
-      ctx.globalCompositeOperation = obj.style.blendMode === 'normal' || obj.style.blendMode === undefined ? 'source-over' : obj.style.blendMode;
+      const blendMode = obj.style.blendMode;
+      ctx.globalCompositeOperation = !blendMode || blendMode === 'normal' ? 'source-over' : (BLEND_MODES as readonly string[]).includes(blendMode) ? blendMode : 'source-over';
 
        if (options?.quality === 'interactive' && getObjectBounds(obj, doc).width * camera.zoom < 2 && getObjectBounds(obj, doc).height * camera.zoom < 2) continue;
-       switch (obj.type) {
-        case 'rectangle':
-          renderRectangle(ctx, obj as RectangleObject);
-          break;
-        case 'ellipse':
-          renderEllipse(ctx, obj as EllipseObject);
-          break;
-        case 'line':
-          renderLine(ctx, obj as LineObject);
-          break;
-         case 'path':
-            renderPath(ctx, obj as PathObject);
+
+      // Live geometry effects (FX-004/019/020/022) reshape the drawn geometry
+      // without mutating the document model.
+      if (hasGeometryEffects(obj.style.effects)) {
+        const baked = effectiveGeometry(obj, expandObject);
+        if (baked) obj = { ...baked, id: objectId, brush: obj.type === 'path' ? obj.brush : undefined };
+      }
+
+      const objectBounds = getObjectBounds(obj, doc);
+      const drawCurrent = (target: CanvasRenderingContext2D): void => {
+        switch (obj.type) {
+         case 'rectangle':
+           renderRectangle(target, obj as RectangleObject);
            break;
+         case 'ellipse':
+           renderEllipse(target, obj as EllipseObject);
+           break;
+         case 'line':
+           renderLine(target, obj as LineObject);
+           break;
+          case 'path':
+             renderPath(target, obj as PathObject);
+            break;
          case 'polygon':
-           renderParametric(ctx, obj as PolygonObject);
+           renderParametric(target, obj as PolygonObject);
            break;
          case 'star':
-           renderParametric(ctx, obj as StarObject);
+           renderParametric(target, obj as StarObject);
            break;
          case 'arc':
-           renderParametric(ctx, obj as ArcObject);
+           renderParametric(target, obj as ArcObject);
            break;
          case 'pie':
-           renderParametric(ctx, obj as PieObject);
+           renderParametric(target, obj as PieObject);
            break;
          case 'ring':
-           renderParametric(ctx, obj as RingObject);
+           renderParametric(target, obj as RingObject);
            break;
          case 'spiral':
-           renderParametric(ctx, obj as SpiralObject);
+           renderParametric(target, obj as SpiralObject);
            break;
          case 'callout':
-           renderParametric(ctx, obj as CalloutObject);
+           renderParametric(target, obj as CalloutObject);
            break;
          case 'polyline':
-           renderParametric(ctx, obj as PolylineObject);
+           renderParametric(target, obj as PolylineObject);
            break;
          case 'image':
-           renderImage(ctx, obj as ImageObject);
+           renderImage(target, obj as ImageObject);
            break;
          case 'symbol-instance':
-           renderSymbolInstance(ctx, obj as SymbolInstanceObject, doc);
+           renderSymbolInstance(target, obj as SymbolInstanceObject, doc);
            break;
          case 'group':
            for (const childId of obj.childIds) {
              const child = doc.objects[childId];
-             if (child?.visible && !maskedIds.has(childId)) renderSceneObject(ctx, child, doc);
+             if (child?.visible && !maskedIds.has(childId)) renderSceneObject(target, child, doc);
            }
            break;
+        }
+      };
+
+      // Repeats (FX-024/025/026): draw every non-identity instance copy.
+      if (hasActiveRepeats(obj.style)) {
+        for (const instance of repeatInstances(obj)) {
+          if (instance.position.x === 0 && instance.position.y === 0 && instance.rotation === 0 && instance.scale.x === 1 && instance.scale.y === 1) continue;
+          const copy = { ...obj, transform: composeTransform2D(obj.transform, instance) };
+          const copyBounds = getObjectBounds(copy, doc);
+          drawObjectWithEffects(ctx, copy, copyBounds, { dpr, zoom: camera.zoom, panX: camera.pan.x, panY: camera.pan.y }, options?.quality ?? 'final', (target) => renderSceneObject(target, copy, doc));
+        }
       }
+
+      // Extrude (FX-023): shaded back copies behind the front face.
+      const extrude = activeExtrude(obj.style);
+      if (extrude) {
+        const dir = { x: Math.cos(extrude.angle), y: Math.sin(extrude.angle) };
+        const stepDepth = extrude.depth / extrude.steps;
+        for (let step = extrude.steps; step >= 1; step -= 1) {
+          const back = { ...obj, transform: composeTransform2D(obj.transform, { position: { x: dir.x * stepDepth * step, y: dir.y * stepDepth * step }, rotation: 0, scale: { x: 1, y: 1 }, pivot: { x: 0, y: 0 } }) };
+          const shaded = back.style.fill.type === 'solid'
+            ? { ...back, style: { ...back.style, fill: { type: 'solid' as const, color: shadeColor(back.style.fill.color, 0.5 + 0.5 * (step / extrude.steps)) } } }
+            : back;
+          renderSceneObject(ctx, shaded, doc);
+        }
+      }
+
+      drawObjectWithEffects(ctx, obj, objectBounds, { dpr, zoom: camera.zoom, panX: camera.pan.x, panY: camera.pan.y }, options?.quality ?? 'final', drawCurrent);
     }
   }
 
@@ -583,13 +630,124 @@ function buildPattern(ctx: CanvasRenderingContext2D, fill: PatternFill): CanvasP
 function resolveFill(
   ctx: CanvasRenderingContext2D,
   fill: import('@vectoria/core').FillStyle,
+  bounds?: { width: number; height: number },
 ): string | CanvasGradient | CanvasPattern {
   if (fill.type === 'solid') return fill.color;
   if (fill.type === 'linear-gradient') return buildLinearGradient(ctx, fill);
   if (fill.type === 'radial-gradient') return buildRadialGradient(ctx, fill);
   if (fill.type === 'angular-gradient') return buildAngularGradient(ctx, fill);
-  if (fill.type === 'pattern') return buildPattern(ctx, fill);
+  if (fill.type === 'pattern') {
+    const pattern = buildPattern(ctx, fill);
+    if (typeof pattern === 'object') applyPatternTransform(pattern, fill.transform);
+    return pattern;
+  }
+  if (fill.type === 'texture') {
+    const src = fill.source.type === 'embed' ? fill.source.data : fill.source.url;
+    const img = getOrLoadImage(src);
+    if (!img || typeof DOMMatrix === 'undefined') return 'transparent';
+    const pattern = ctx.createPattern(img, 'repeat');
+    if (!pattern) return 'transparent';
+    applyPatternTransform(pattern, fill.transform);
+    return pattern;
+  }
+  if (fill.type === 'mesh-gradient') {
+    if (!bounds) return meshAverageColor(fill.colors);
+    const tile = buildMeshTile(fill.colors, Math.max(1, bounds.width), Math.max(1, bounds.height));
+    return tile ? (ctx.createPattern(tile, 'no-repeat') ?? meshAverageColor(fill.colors)) : meshAverageColor(fill.colors);
+  }
   return 'transparent'; // 'none'
+}
+
+/** Apply the pattern's own placement transform, independent of the object's. */
+function applyPatternTransform(pattern: CanvasPattern, transform: { offsetX: number; offsetY: number; scale: number; rotation: number } | undefined): void {
+  if (!transform || typeof DOMMatrix === 'undefined') return;
+  const matrix = new DOMMatrix()
+    .translateSelf(transform.offsetX, transform.offsetY)
+    .rotateSelf((transform.rotation * 180) / Math.PI)
+    .scaleSelf(transform.scale, transform.scale);
+  pattern.setTransform(matrix);
+}
+
+/** Local-space footprint of a path's nodes, used for mesh gradient tiling. */
+function pathNodeBounds(obj: PathObject): { width: number; height: number } {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const node of obj.nodes) {
+    minX = Math.min(minX, node.point.x, (node.inHandle?.x ?? node.point.x), (node.outHandle?.x ?? node.point.x));
+    minY = Math.min(minY, node.point.y, (node.inHandle?.y ?? node.point.y), (node.outHandle?.y ?? node.point.y));
+    maxX = Math.max(maxX, node.point.x, (node.inHandle?.x ?? node.point.x), (node.outHandle?.x ?? node.point.x));
+    maxY = Math.max(maxY, node.point.y, (node.inHandle?.y ?? node.point.y), (node.outHandle?.y ?? node.point.y));
+  }
+  if (!Number.isFinite(minX)) return { width: 1, height: 1 };
+  return { width: Math.max(1, maxX - minX), height: Math.max(1, maxY - minY) };
+}
+
+/**
+ * Render a brush path (FX-016/017/018). Caligraphic brushes draw a real filled
+ * outline whose width depends on the stroke direction relative to the nib;
+ * stamp/pattern brushes draw the plain stroke plus stamps along the arc-length.
+ */
+function renderBrushedPath(ctx: CanvasRenderingContext2D, obj: PathObject, drawPath: () => void): void {
+  const brush = obj.brush!;
+  if (brush.kind === 'caligraphic') {
+    const outline = buildCaligraphicOutline(obj.nodes, obj.closed, brush.angle, brush.thin, brush.thick);
+    ctx.beginPath();
+    outline.forEach((node, index) => {
+      if (index === 0) ctx.moveTo(node.point.x, node.point.y);
+      else ctx.lineTo(node.point.x, node.point.y);
+    });
+    ctx.closePath();
+    if (obj.style.fill.type !== 'none') {
+      ctx.fillStyle = resolveFill(ctx, obj.style.fill, pathNodeBounds(obj));
+      ctx.fill();
+    }
+    return;
+  }
+
+  if (obj.style.stroke) {
+    applyLocalStroke(ctx, obj.style.stroke, obj.style.opacity);
+    ctx.beginPath();
+    drawPath();
+    ctx.stroke();
+  } else {
+    ctx.globalAlpha = obj.style.opacity;
+  }
+  const strokeColor = obj.style.stroke?.color ?? '#000000';
+  const samples = samplePath(obj.nodes, obj.closed, 8);
+  const spacing = Math.max(brush.spacing, brush.size * 0.4);
+  let nextAt = 0;
+  ctx.fillStyle = strokeColor;
+  for (const sample of samples) {
+    if (sample.length < nextAt) continue;
+    nextAt = sample.length + spacing;
+    const jitterScale = brush.kind === 'stamp' && brush.jitter > 0 ? 1 + jitterBrush(sample.length) * brush.jitter * 0.5 : 1;
+    const size = brush.kind === 'stamp' ? brush.size * jitterScale : brush.size * 0.35;
+    ctx.beginPath();
+    ctx.arc(sample.point.x, sample.point.y, Math.max(0.5, size / 2), 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function jitterBrush(seed: number): number {
+  const x = Math.sin(seed * 91.7 + 47.3) * 43758.5453;
+  return (x - Math.floor(x)) * 2 - 1;
+}
+
+/** Local-space size of any object, for mesh gradient tile alignment. */
+function parametricFillBounds(obj: import('@vectoria/core').SceneObject): { width: number; height: number } | undefined {
+  if ('width' in obj && 'height' in obj && typeof obj.width === 'number' && typeof obj.height === 'number') return { width: obj.width, height: obj.height };
+  if ('radius' in obj && typeof obj.radius === 'number') return { width: obj.radius * 2, height: obj.radius * 2 };
+  if ('outerRadius' in obj && typeof obj.outerRadius === 'number') return { width: obj.outerRadius * 2, height: obj.outerRadius * 2 };
+  if ('radiusX' in obj && 'radiusY' in obj) return { width: obj.radiusX * 2, height: obj.radiusY * 2 };
+  return undefined;
+}
+
+/** Darken a solid hex color by the given factor (0 = black, 1 = unchanged). */
+function shadeColor(color: string, factor: number): string {
+  const clean = color.replace('#', '');
+  if (clean.length !== 6) return color;
+  const to = (value: string): string => Math.max(0, Math.min(255, Math.round(parseInt(value, 16) * factor))).toString(16).padStart(2, '0');
+  return `#${to(clean.slice(0, 2))}${to(clean.slice(2, 4))}${to(clean.slice(4, 6))}`;
 }
 
 function renderSceneObject(ctx: CanvasRenderingContext2D, obj: SceneObject, doc?: DocumentModel): void {
@@ -863,7 +1021,7 @@ function renderRectangle(
 
    // Fill
    if (obj.style.fill.type !== 'none') {
-     ctx.fillStyle = resolveFill(ctx, obj.style.fill);
+     ctx.fillStyle = resolveFill(ctx, obj.style.fill, parametricFillBounds(obj));
      ctx.beginPath();
      drawPath();
      ctx.fill();
@@ -904,7 +1062,7 @@ function renderEllipse(
    const drawPath = (): void => { ctx.ellipse(rx, ry, rx, ry, 0, 0, Math.PI * 2); };
 
    if (obj.style.fill.type !== 'none') {
-     ctx.fillStyle = resolveFill(ctx, obj.style.fill);
+     ctx.fillStyle = resolveFill(ctx, obj.style.fill, parametricFillBounds(obj));
      ctx.beginPath();
      drawPath();
      ctx.fill();
@@ -1003,10 +1161,16 @@ function renderPath(
     obj.compoundChildren?.forEach((nodes) => drawSubpath(nodes));
   };
 
+  if (obj.brush) {
+    renderBrushedPath(ctx, obj, drawPath);
+    ctx.restore();
+    return;
+  }
+
   if (obj.style.fill.type !== 'none' && obj.closed) {
     ctx.beginPath();
     drawPath();
-    ctx.fillStyle = resolveFill(ctx, obj.style.fill);
+    ctx.fillStyle = resolveFill(ctx, obj.style.fill, pathNodeBounds(obj));
     ctx.fill(obj.fillRule ?? 'nonzero');
   }
   if (obj.style.stroke) {
@@ -1073,7 +1237,7 @@ function renderParametric(ctx: CanvasRenderingContext2D, obj: ParametricObject):
    if (obj.style.fill.type !== 'none' && fillable) {
      ctx.beginPath();
      drawPath();
-     ctx.fillStyle = resolveFill(ctx, obj.style.fill);
+     ctx.fillStyle = resolveFill(ctx, obj.style.fill, parametricFillBounds(obj));
     if (obj.type === 'ring') ctx.fill('evenodd');
     else ctx.fill();
   }

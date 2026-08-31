@@ -1,5 +1,5 @@
-import type { DocumentModel, SceneObject, ObjectId, RectangleObject, EllipseObject, LineObject, PathObject, StrokeStyle, FillStyle, LinearGradientFill, RadialGradientFill, PatternFill, PolygonObject, StarObject, ArcObject, PieObject, RingObject, SpiralObject, CalloutObject, PolylineObject, ArrowheadStyle, TextObject, TextFrameObject, ImageObject, SymbolInstanceObject } from '@vectoria/core';
-import { getTransformMatrix, normalizeCornerRadii, getPolygonVertices, getStarVertices, getSpiralVertices, getCalloutVertices, expandObject, getCubicSegment, evaluateCubic, computeTextFrameLayout } from '@vectoria/core';
+import type { DocumentModel, SceneObject, ObjectId, RectangleObject, EllipseObject, LineObject, PathObject, PathNode, StrokeStyle, FillStyle, LinearGradientFill, RadialGradientFill, PatternFill, TextureFill, PolygonObject, StarObject, ArcObject, PieObject, RingObject, SpiralObject, CalloutObject, PolylineObject, ArrowheadStyle, TextObject, TextFrameObject, ImageObject, SymbolInstanceObject, LiveEffect, Transform2D } from '@vectoria/core';
+import { getTransformMatrix, normalizeCornerRadii, getPolygonVertices, getStarVertices, getSpiralVertices, getCalloutVertices, expandObject, getCubicSegment, evaluateCubic, computeTextFrameLayout, effectiveGeometry, hasGeometryEffects, buildCaligraphicOutline, radialRepeatTransforms, mirrorRepeatTransforms, gridRepeatTransforms, samplePath } from '@vectoria/core';
 
 export function escapeXml(unsafe: string): string {
   return unsafe
@@ -58,12 +58,12 @@ export function exportArtboardToSvg(doc: DocumentModel, artboardId?: string): st
       if (!obj || !obj.visible) continue;
 
       // Register gradient if needed
-      if (obj.style.fill.type === 'linear-gradient' || obj.style.fill.type === 'radial-gradient' || obj.style.fill.type === 'angular-gradient' || obj.style.fill.type === 'pattern') {
+      if (obj.style.fill.type === 'linear-gradient' || obj.style.fill.type === 'radial-gradient' || obj.style.fill.type === 'angular-gradient' || obj.style.fill.type === 'pattern' || obj.style.fill.type === 'texture') {
         const fill = obj.style.fill;
         if (!gradientMap.has(fill)) {
           const gradId = `grad-${gradientCounter++}`;
           gradientMap.set(fill, gradId);
-          gradientDefs.push(fill.type === 'linear-gradient' ? buildLinearGradientDef(gradId, fill) : fill.type === 'radial-gradient' ? buildRadialGradientDef(gradId, fill) : fill.type === 'angular-gradient' ? buildAngularGradientDef(gradId, fill) : buildPatternDef(gradId, fill));
+          gradientDefs.push(fill.type === 'linear-gradient' ? buildLinearGradientDef(gradId, fill) : fill.type === 'radial-gradient' ? buildRadialGradientDef(gradId, fill) : fill.type === 'angular-gradient' ? buildAngularGradientDef(gradId, fill) : fill.type === 'texture' ? buildTexturePatternDef(gradId, fill) : buildPatternDef(gradId, fill));
         }
       }
 
@@ -167,6 +167,15 @@ function buildAngularGradientDef(id: string, fill: Extract<FillStyle, { type: 'a
   return `<radialGradient id="${id}" gradientUnits="userSpaceOnUse" cx="${fill.center.x}" cy="${fill.center.y}" r="24">\n${stops}\n    </radialGradient>`;
 }
 
+function patternTransformAttr(transform: { offsetX: number; offsetY: number; scale: number; rotation: number } | undefined): string {
+  if (!transform) return '';
+  const parts: string[] = [];
+  if (transform.offsetX !== 0 || transform.offsetY !== 0) parts.push(`translate(${round2(transform.offsetX)} ${round2(transform.offsetY)})`);
+  if (transform.rotation !== 0) parts.push(`rotate(${round2((transform.rotation * 180) / Math.PI)})`);
+  if (transform.scale !== 1) parts.push(`scale(${round2(transform.scale)})`);
+  return parts.length > 0 ? ` patternTransform="${parts.join(' ')}"` : '';
+}
+
 function buildPatternDef(id: string, fill: PatternFill): string {
   const size = Math.max(2, fill.size);
   let content = `<rect width="${size}" height="${size}" fill="${escapeXml(fill.background)}" />`;
@@ -177,20 +186,336 @@ function buildPatternDef(id: string, fill: PatternFill): string {
   } else if (fill.kind === 'hatch') {
     content += `<path d="M 0 ${size} L ${size} 0" stroke="${escapeXml(fill.foreground)}" stroke-width="${Math.max(1, size / 8)}" />`;
   }
-  return `<pattern id="${id}" width="${size}" height="${size}" patternUnits="userSpaceOnUse">\n      ${content}\n    </pattern>`;
+  return `<pattern id="${id}" width="${size}" height="${size}" patternUnits="userSpaceOnUse"${patternTransformAttr(fill.transform)}>\n      ${content}\n    </pattern>`;
+}
+
+function buildTexturePatternDef(id: string, fill: TextureFill): string {
+  const href = fill.source.type === 'embed' ? fill.source.data : fill.source.url;
+  const tile = 64;
+  return `<pattern id="${id}" width="${tile}" height="${tile}" patternUnits="userSpaceOnUse"${patternTransformAttr(fill.transform)}><image href="${escapeXml(href)}" x="0" y="0" width="${tile}" height="${tile}" preserveAspectRatio="none" /></pattern>`;
 }
 
 /** Resolve fill to SVG fill attribute value. */
 function resolveFillAttr(fill: FillStyle, gradientMap: Map<FillStyle, string>): string {
   if (fill.type === 'solid') return `fill="${escapeXml(fill.color)}"`;
-  if (fill.type === 'linear-gradient' || fill.type === 'radial-gradient' || fill.type === 'angular-gradient' || fill.type === 'pattern') {
+  if (fill.type === 'linear-gradient' || fill.type === 'radial-gradient' || fill.type === 'angular-gradient' || fill.type === 'pattern' || fill.type === 'texture') {
     const id = gradientMap.get(fill);
     return id ? `fill="url(#${id})"` : 'fill="none"';
   }
+  if (fill.type === 'mesh-gradient') return `fill="${escapeXml(meshAverageColor(fill.colors))}"`;
   return 'fill="none"';
 }
 
+/** Average of the mesh corner colors — documented SVG fallback for mesh gradients (ADR-009). */
+function meshAverageColor(colors: readonly (readonly string[])[]): string {
+  let r = 0, g = 0, b = 0, count = 0;
+  for (const row of colors) {
+    for (const hex of row) {
+      const clean = hex.replace('#', '');
+      if (clean.length !== 6) continue;
+      r += parseInt(clean.slice(0, 2), 16);
+      g += parseInt(clean.slice(2, 4), 16);
+      b += parseInt(clean.slice(4, 6), 16);
+      count += 1;
+    }
+  }
+  if (count === 0) return '#000000';
+  return `#${[r / count, g / count, b / count].map((c) => Math.round(c).toString(16).padStart(2, '0')).join('')}`;
+}
+
 function renderSceneObjectToSvg(
+  obj: SceneObject,
+  gradientMap: Map<FillStyle, string>,
+  markerMap: Map<string, string>,
+  markerDefs: string[],
+  doc?: DocumentModel,
+  filterDefs?: string[],
+  clipDefs?: string[],
+  symbolDefs?: Map<string, string>,
+): string | null {
+  const visible = (obj.style.effects ?? []).filter((effect) => effect.visible);
+
+  // 1. Geometry effects are baked into path data before dispatch (ADR-009 D3).
+  let renderObj: SceneObject = obj;
+  if (hasGeometryEffects(obj.style.effects)) {
+    const baked = effectiveGeometry(obj, expandObject);
+    if (baked) renderObj = { ...baked, id: obj.id, brush: undefined };
+  }
+
+  // 2. Body: brush profile replaces plain stroke rendering when present.
+  let body: string | null;
+  if (renderObj.type === 'path' && renderObj.brush) {
+    body = renderBrushBody(renderObj, gradientMap);
+  } else {
+    body = renderBaseSceneObjectToSvg(renderObj, gradientMap, markerMap, markerDefs, doc, filterDefs, clipDefs, symbolDefs);
+  }
+  if (!body) return null;
+
+  // 3. Stroke alignment wrapper: clip the stroke inside, mask it outside.
+  const align = obj.style.stroke?.align;
+  if ((align === 'inside' || align === 'outside') && clipDefs && isClosedShape(obj)) {
+    const d = buildShapePathData(obj);
+    if (d) {
+      const defId = `align-${escapeXml(obj.id)}`;
+      if (align === 'inside') {
+        clipDefs.push(`<clipPath id="${defId}"><path d="${d}" /></clipPath>`);
+        body = `<g clip-path="url(#${defId})">${body}</g>`;
+      } else {
+        clipDefs.push(`<mask id="${defId}" maskUnits="userSpaceOnUse" x="-100000" y="-100000" width="200000" height="200000"><rect x="-100000" y="-100000" width="200000" height="200000" fill="#fff" /><path d="${d}" fill="#000" /></mask>`);
+        body = `<g mask="url(#${defId})">${body}</g>`;
+      }
+    }
+  }
+
+  // 4. Repeat + extrude instances: wrapper conjugation W = M_obj · I · M_obj⁻¹.
+  const instances = flattenInstanceLists(collectInstanceTransforms(visible, obj));
+  if (instances.length > 1) {
+    const m = getTransformMatrix(obj.transform);
+    const inv = invertMat3(m);
+    const copies = [body];
+    for (let i = 1; i < instances.length; i += 1) {
+      const w = composeMat3(composeMat3(m, getTransformMatrix(instances[i]!)), inv);
+      const opacity = visible.some((effect) => effect.type === 'extrude') ? ` opacity="${(0.55 + 0.45 * (i / instances.length)).toFixed(2)}"` : '';
+      copies.push(`<g transform="matrix(${mat3Attr(w)})"${opacity}>${body}</g>`);
+    }
+    body = copies.join('');
+  }
+
+  // 5. Raster effects chain (FX-010 order preserved).
+  const raster = visible.filter((effect) => ['dropShadow', 'blur', 'innerShadow', 'glow', 'svgFilter'].includes(effect.type));
+  if (raster.length > 0 && filterDefs) {
+    const fid = `fx-${escapeXml(obj.id)}`;
+    filterDefs.push(buildEffectFilterDef(fid, raster));
+    body = `<g filter="url(#${fid})">${body}</g>`;
+  }
+
+  return body;
+}
+
+function collectInstanceTransforms(visible: readonly LiveEffect[], obj: SceneObject): readonly Transform2D[][] {
+  // Returns per-effect instance transform lists in object-local space.
+  const transforms: Transform2D[][] = [];
+  for (const effect of visible) {
+    if (effect.type === 'radialRepeat') {
+      transforms.push(radialRepeatTransforms(shapeBounds(obj), effect.count, effect.radius, effect.startAngle));
+    } else if (effect.type === 'mirrorRepeat') {
+      transforms.push(mirrorRepeatTransforms(shapeBounds(obj), effect.axis, effect.offset));
+    } else if (effect.type === 'gridRepeat') {
+      transforms.push(gridRepeatTransforms(effect.rows, effect.columns, effect.spacingX, effect.spacingY));
+    } else if (effect.type === 'extrude') {
+      const out: Transform2D[] = [];
+      const dir = { x: Math.cos(effect.angle), y: Math.sin(effect.angle) };
+      const stepDepth = effect.depth / effect.steps;
+      for (let step = effect.steps; step >= 1; step -= 1) {
+        out.push({ position: { x: dir.x * stepDepth * step, y: dir.y * stepDepth * step }, rotation: 0, scale: { x: 1, y: 1 }, pivot: { x: 0, y: 0 } });
+      }
+      out.push({ position: { x: 0, y: 0 }, rotation: 0, scale: { x: 1, y: 1 }, pivot: { x: 0, y: 0 } });
+      transforms.push(out);
+    }
+  }
+  if (transforms.length === 0) transforms.push([{ position: { x: 0, y: 0 }, rotation: 0, scale: { x: 1, y: 1 }, pivot: { x: 0, y: 0 } }]);
+  return transforms;
+}
+
+function shapeBounds(obj: SceneObject): { minX: number; minY: number; maxX: number; maxY: number } {
+  if (obj.type === 'path') {
+    const xs = obj.nodes.map((node) => node.point.x);
+    const ys = obj.nodes.map((node) => node.point.y);
+    return { minX: Math.min(...xs), minY: Math.min(...ys), maxX: Math.max(...xs), maxY: Math.max(...ys) };
+  }
+  if ('width' in obj && 'height' in obj) return { minX: 0, minY: 0, maxX: obj.width, maxY: obj.height };
+  return { minX: 0, minY: 0, maxX: 1, maxY: 1 };
+}
+
+/** Flatten per-effect instance lists into composed local transforms. */
+function flattenInstanceLists(effectLists: readonly Transform2D[][]): Transform2D[] {
+  let current: Transform2D[] = [{ position: { x: 0, y: 0 }, rotation: 0, scale: { x: 1, y: 1 }, pivot: { x: 0, y: 0 } }];
+  for (const list of effectLists) {
+    const next: Transform2D[] = [];
+    for (const outer of current) {
+      for (const inner of list) next.push(composeTransform2D(outer, inner));
+    }
+    if (next.length > 4096) return next.slice(0, 4096);
+    current = next;
+  }
+  return current;
+}
+
+function composeTransform2D(outer: Transform2D, inner: Transform2D): Transform2D {
+  const m = composeMat3(getTransformMatrix(outer), getTransformMatrix(inner));
+  return {
+    position: { x: m[6]!, y: m[7]! },
+    rotation: Math.atan2(m[1]!, m[0]!),
+    scale: { x: Math.hypot(m[0]!, m[1]!), y: Math.hypot(m[3]!, m[4]!) * (m[0]! * m[4]! - m[1]! * m[3]! < 0 ? -1 : 1) },
+    pivot: { x: 0, y: 0 },
+  };
+}
+
+type Mat3 = [number, number, number, number, number, number, number, number, number];
+
+function composeMat3(a: readonly number[], b: readonly number[]): Mat3 {
+  return [
+    a[0]! * b[0]! + a[3]! * b[1]!, a[1]! * b[0]! + a[4]! * b[1]!, 0,
+    a[0]! * b[3]! + a[3]! * b[4]!, a[1]! * b[3]! + a[4]! * b[4]!, 0,
+    a[0]! * b[6]! + a[3]! * b[7]! + a[6]!, a[1]! * b[6]! + a[4]! * b[7]! + a[7]!, 1,
+  ];
+}
+
+function invertMat3(m: readonly number[]): Mat3 {
+  const [a, b, , c, d, , e, f] = m;
+  const det = (a! * d! - b! * c!) || 1e-12;
+  const ia = d! / det;
+  const ib = -b! / det;
+  const ic = -c! / det;
+  const id = a! / det;
+  const ie = -(ia * e! + ic * f!);
+  const ifg = -(ib * e! + id * f!);
+  return [ia, ib, 0, ic, id, 0, ie, ifg, 1];
+}
+
+function mat3Attr(m: readonly number[]): string {
+  return `${round6(m[0]!)} ${round6(m[1]!)} ${round6(m[3]!)} ${round6(m[4]!)} ${round6(m[6]!)} ${round6(m[7]!)}`;
+}
+
+function round6(value: number): number {
+  return Math.round(value * 1e6) / 1e6;
+}
+
+/**
+ * Build one SVG filter chaining the given raster effects in stack order.
+ * Uses feDropShadow/feGaussianBlur for shadow and blur, the standard
+ * inverted-alpha recipe for inner shadow, and passes svgFilter primitives
+ * through. Mirrors the Canvas composite pipeline.
+ */
+function buildEffectFilterDef(id: string, effects: readonly LiveEffect[]): string {
+  const body: string[] = [];
+  let prev = 'SourceGraphic';
+  let index = 0;
+  for (const effect of effects) {
+    const out = `fx${index}`;
+    if (effect.type === 'dropShadow') {
+      body.push(`<feDropShadow in="${prev}" dx="${round2(effect.offsetX)}" dy="${round2(effect.offsetY)}" stdDeviation="${round2(effect.blur / 2)}" flood-color="${escapeXml(effect.color)}" flood-opacity="${effect.opacity}" result="${out}" />`);
+    } else if (effect.type === 'blur') {
+      body.push(`<feGaussianBlur in="${prev}" stdDeviation="${round2(effect.radius / 2)}" result="${out}" />`);
+    } else if (effect.type === 'glow') {
+      const b = `glowB${index}`;
+      const f = `glowF${index}`;
+      const c = `glowC${index}`;
+      body.push(`<feGaussianBlur in="${prev}" stdDeviation="${round2(effect.blur / 2)}" result="${b}" />`);
+      body.push(`<feFlood flood-color="${escapeXml(effect.color)}" flood-opacity="${effect.opacity}" result="${f}" />`);
+      body.push(`<feComposite in="${f}" in2="${b}" operator="in" result="${c}" />`);
+      body.push(`<feMerge result="${out}"><feMergeNode in="${c}" /><feMergeNode in="${prev}" /></feMerge>`);
+    } else if (effect.type === 'innerShadow') {
+      const inv = `inv${index}`;
+      const off = `off${index}`;
+      const bl = `bl${index}`;
+      const cl = `cl${index}`;
+      const fl = `fl${index}`;
+      const sh = `sh${index}`;
+      body.push(`<feComponentTransfer in="SourceAlpha" result="${inv}"><feFuncA type="table" tableValues="1 0" /></feComponentTransfer>`);
+      body.push(`<feOffset in="${inv}" dx="${round2(effect.offsetX)}" dy="${round2(effect.offsetY)}" result="${off}" />`);
+      body.push(`<feGaussianBlur in="${off}" stdDeviation="${round2(effect.blur / 2)}" result="${bl}" />`);
+      body.push(`<feComposite in="${bl}" in2="SourceAlpha" operator="in" result="${cl}" />`);
+      body.push(`<feFlood flood-color="${escapeXml(effect.color)}" flood-opacity="${effect.opacity}" result="${fl}" />`);
+      body.push(`<feComposite in="${fl}" in2="${cl}" operator="in" result="${sh}" />`);
+      body.push(`<feMerge result="${out}"><feMergeNode in="${prev}" /><feMergeNode in="${sh}" /></feMerge>`);
+    } else if (effect.type === 'svgFilter') {
+      if (effect.filterType === 'colorMatrix') {
+        const values = typeof effect.params.matrix === 'string' ? effect.params.matrix : '1 0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 1 0';
+        body.push(`<feColorMatrix in="${prev}" type="matrix" values="${escapeXml(values)}" result="${out}" />`);
+      } else if (effect.filterType === 'turbulence') {
+        const baseFrequency = typeof effect.params.baseFrequency === 'number' ? effect.params.baseFrequency : 0.05;
+        const numOctaves = typeof effect.params.numOctaves === 'number' ? effect.params.numOctaves : 2;
+        body.push(`<feTurbulence in="${prev}" baseFrequency="${baseFrequency}" numOctaves="${numOctaves}" result="${out}" />`);
+      }
+    }
+    if (body.length === 0 || !body.some((line) => line.includes(`result="${out}"`))) {
+      // Effect produced nothing (unsupported passthrough); keep chain alive.
+      body.push(`<feOffset in="${prev}" dx="0" dy="0" result="${out}" />`);
+    }
+    prev = out;
+    index += 1;
+  }
+  return `<filter id="${id}" x="-50%" y="-50%" width="200%" height="200%">${body.join('')}</filter>`;
+}
+
+const CLOSED_SHAPE_TYPES: readonly string[] = ['rectangle', 'ellipse', 'polygon', 'star', 'pie', 'ring', 'callout'];
+
+function isClosedShape(obj: SceneObject): boolean {
+  if (CLOSED_SHAPE_TYPES.includes(obj.type)) return true;
+  return obj.type === 'path' && obj.closed;
+}
+
+/** Path data of the filled silhouette, used for stroke-align clip/mask defs. */
+function buildShapePathData(obj: SceneObject): string | null {
+  let target: SceneObject = obj;
+  if (obj.type !== 'path') {
+    const expanded = expandObject(obj);
+    if (!expanded || expanded.type !== 'path') return null;
+    target = expanded;
+  }
+  const path = target as PathObject;
+  return pathDataFromNodes(path.nodes, path.closed, path.compoundChildren);
+}
+
+function pathDataFromNodes(nodes: readonly PathNode[], closed: boolean, compoundChildren?: readonly (readonly PathNode[])[]): string {
+  const buildSubpath = (list: readonly PathNode[]): string[] => list.map((node, i) => {
+    if (i === 0) return `M ${round2(node.point.x)} ${round2(node.point.y)}`;
+    const prev = list[i - 1]!;
+    const cp1 = prev.outHandle ?? prev.point;
+    const cp2 = node.inHandle ?? node.point;
+    return `C ${round2(cp1.x)} ${round2(cp1.y)}, ${round2(cp2.x)} ${round2(cp2.y)}, ${round2(node.point.x)} ${round2(node.point.y)}`;
+  });
+  const segments = buildSubpath(nodes);
+  if (closed && nodes.length > 1) {
+    const last = nodes[nodes.length - 1]!;
+    const first = nodes[0]!;
+    segments.push(`C ${round2(last.outHandle?.x ?? last.point.x)} ${round2(last.outHandle?.y ?? last.point.y)}, ${round2(first.inHandle?.x ?? first.point.x)} ${round2(first.inHandle?.y ?? first.point.y)}, ${round2(first.point.x)} ${round2(first.point.y)}`);
+  }
+  for (const child of compoundChildren ?? []) segments.push(...buildSubpath(child));
+  return segments.join(' ') + (closed ? ' Z' : '');
+}
+
+/**
+ * Render a brush path. Caligraphic brushes generate a real filled outline;
+ * stamp/pattern brushes fall back to the plain stroke plus stamped motif
+ * circles along the arc-length (documented simplification, ADR-009).
+ */
+function renderBrushBody(obj: PathObject, gradientMap: Map<FillStyle, string>): string | null {
+  const brush = obj.brush!;
+  const fillAttr = resolveFillAttr(obj.style.fill, gradientMap);
+  const strokeColor = obj.style.stroke?.color ?? '#000000';
+  const matrix = getTransformMatrix(obj.transform);
+  const transformAttr = `matrix(${matrix[0]} ${matrix[1]} ${matrix[3]} ${matrix[4]} ${matrix[6]} ${matrix[7]})`;
+  const opacityAttr = obj.style.opacity < 1 ? ` opacity="${obj.style.opacity}"` : '';
+
+  if (brush.kind === 'caligraphic') {
+    const outline = buildCaligraphicOutline(obj.nodes, obj.closed, brush.angle, brush.thin, brush.thick);
+    const d = pathDataFromNodes(outline, true);
+    return `<path d="${d}" ${fillAttr} fill-rule="nonzero" transform="${transformAttr}"${opacityAttr} />`;
+  }
+
+  const baseStroke = obj.style.stroke;
+  const strokeAttr = baseStroke ? buildStrokeAttr(baseStroke) : ` stroke="${escapeXml(strokeColor)}" stroke-width="1"`;
+  const stamps: string[] = [];
+  const samples = samplePath(obj.nodes, obj.closed, 8);
+  const spacing = Math.max(brush.spacing, brush.size * 0.4);
+  let nextAt = 0;
+  for (const sample of samples) {
+    if (sample.length < nextAt) continue;
+    nextAt = sample.length + spacing;
+    const size = brush.kind === 'stamp' ? brush.size * (brush.jitter > 0 ? 1 + jitterBrush(sample.length) * brush.jitter * 0.5 : 1) : brush.size * 0.35;
+    stamps.push(`<circle cx="${round2(sample.point.x)}" cy="${round2(sample.point.y)}" r="${round2(size / 2)}" fill="${escapeXml(strokeColor)}" />`);
+  }
+  return `<g transform="${transformAttr}"${opacityAttr}><path d="${pathDataFromNodes(obj.nodes, obj.closed, obj.compoundChildren)}" fill="none"${strokeAttr} fill-opacity="0" stroke-opacity="${baseStroke?.opacity ?? 1}" />${stamps.join('')}</g>`;
+}
+
+function jitterBrush(seed: number): number {
+  const x = Math.sin(seed * 91.7 + 47.3) * 43758.5453;
+  return (x - Math.floor(x)) * 2 - 1;
+}
+
+function renderBaseSceneObjectToSvg(
   obj: SceneObject,
   gradientMap: Map<FillStyle, string>,
   markerMap: Map<string, string>,

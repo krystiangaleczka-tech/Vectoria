@@ -661,6 +661,7 @@ function normalizeFill(fill: ObjectStyle['fill']): ObjectStyle['fill'] | null {
     const background = normalizeColor(fill.background);
     return foreground && background && Number.isFinite(fill.size) && fill.size > 0 ? { ...fill, foreground, background } : null;
   }
+  if (fill.type === 'texture' || fill.type === 'mesh-gradient') return fill;
   const stops = fill.stops.map((stop) => {
     const color = normalizeColor(stop.color);
     return color && Number.isFinite(stop.offset) && stop.offset >= 0 && stop.offset <= 1 && Number.isFinite(stop.opacity) && stop.opacity >= 0 && stop.opacity <= 1 ? { ...stop, color } : null;

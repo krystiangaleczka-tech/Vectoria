@@ -1,9 +1,58 @@
 import { normalizeColor } from '@vectoria/shared';
-import type { DocumentModel, PaletteSwatch } from './types.js';
+import type { DocumentModel, LiveEffect, PaletteSwatch } from './types.js';
+import { BLEND_MODES } from './types.js';
 
 export interface InvariantViolation {
   readonly code: string;
   readonly message: string;
+}
+
+const finite = (value: number): boolean => Number.isFinite(value);
+
+/**
+ * Validate the live effect stack of one object: finite numeric ranges, clamped
+ * opacities, repeat limits and quad integrity. Unknown effect types are ignored
+ * so newer documents degrade gracefully instead of failing validation.
+ */
+export function validateLiveEffects(objectId: string, effects: readonly LiveEffect[] | undefined): InvariantViolation[] {
+  const violations: InvariantViolation[] = [];
+  const push = (code: string, message: string): void => { violations.push({ code, message: `Object '${objectId}': ${message}` }); };
+  const seenIds = new Set<string>();
+  for (const effect of effects ?? []) {
+    if (!effect.id || seenIds.has(effect.id)) push('DUPLICATE_EFFECT_ID', `duplicate effect id '${effect.id}'.`);
+    seenIds.add(effect.id);
+    const t = effect.type;
+    if (t === 'dropShadow' || t === 'innerShadow') {
+      if (!finite(effect.blur) || effect.blur < 0) push('INVALID_EFFECT_PARAM', `${t} blur must be >= 0.`);
+      if (!finite(effect.offsetX) || !finite(effect.offsetY)) push('INVALID_EFFECT_PARAM', `${t} offsets must be finite.`);
+      if (!finite(effect.opacity) || effect.opacity < 0 || effect.opacity > 1) push('INVALID_EFFECT_PARAM', `${t} opacity must be in [0, 1].`);
+    } else if (t === 'glow') {
+      if (!finite(effect.blur) || effect.blur < 0) push('INVALID_EFFECT_PARAM', 'glow blur must be >= 0.');
+      if (!finite(effect.opacity) || effect.opacity < 0 || effect.opacity > 1) push('INVALID_EFFECT_PARAM', 'glow opacity must be in [0, 1].');
+    } else if (t === 'blur' || t === 'roundedCorners') {
+      const value = t === 'blur' ? effect.radius : effect.radius;
+      if (!finite(value) || value < 0) push('INVALID_EFFECT_PARAM', `${t} radius must be >= 0.`);
+    } else if (t === 'distort') {
+      if (!finite(effect.amplitude) || effect.amplitude < 0) push('INVALID_EFFECT_PARAM', 'distort amplitude must be >= 0.');
+      if (!finite(effect.frequency) || effect.frequency < 1) push('INVALID_EFFECT_PARAM', 'distort frequency must be >= 1.');
+    } else if (t === 'envelope' || t === 'perspective') {
+      if (effect.corners.length !== 4 || effect.corners.some((c) => !finite(c.x) || !finite(c.y))) push('INVALID_EFFECT_PARAM', `${t} corners must be 4 finite points.`);
+    } else if (t === 'extrude') {
+      if (!finite(effect.depth) || effect.depth < 0) push('INVALID_EFFECT_PARAM', 'extrude depth must be >= 0.');
+      if (!Number.isInteger(effect.steps) || effect.steps < 1 || effect.steps > 64) push('INVALID_EFFECT_PARAM', 'extrude steps must be in [1, 64].');
+    } else if (t === 'radialRepeat') {
+      if (!Number.isInteger(effect.count) || effect.count < 2 || effect.count > 360) push('INVALID_EFFECT_PARAM', 'radialRepeat count must be in [2, 360].');
+      if (!finite(effect.radius) || effect.radius < 0) push('INVALID_EFFECT_PARAM', 'radialRepeat radius must be >= 0.');
+    } else if (t === 'mirrorRepeat') {
+      if (effect.axis !== 'x' && effect.axis !== 'y') push('INVALID_EFFECT_PARAM', 'mirrorRepeat axis must be x or y.');
+      if (!finite(effect.offset)) push('INVALID_EFFECT_PARAM', 'mirrorRepeat offset must be finite.');
+    } else if (t === 'gridRepeat') {
+      if (!Number.isInteger(effect.rows) || effect.rows < 1 || effect.rows > 50) push('INVALID_EFFECT_PARAM', 'gridRepeat rows must be in [1, 50].');
+      if (!Number.isInteger(effect.columns) || effect.columns < 1 || effect.columns > 50) push('INVALID_EFFECT_PARAM', 'gridRepeat columns must be in [1, 50].');
+      if (!finite(effect.spacingX) || !finite(effect.spacingY) || effect.spacingX < 0 || effect.spacingY < 0) push('INVALID_EFFECT_PARAM', 'gridRepeat spacing must be >= 0.');
+    }
+  }
+  return violations;
 }
 
 /**
@@ -192,9 +241,11 @@ export function validateInvariants(doc: DocumentModel): InvariantViolation[] {
         if (!Number.isFinite(obj.style.opacity) || obj.style.opacity < 0 || obj.style.opacity > 1) {
           violations.push({ code: 'INVALID_OPACITY', message: `Object '${objectId}' has opacity out of bounds [0, 1] or non-finite.` });
         }
-        if (obj.style.blendMode !== undefined && !['normal', 'multiply', 'screen', 'overlay'].includes(obj.style.blendMode)) {
+        if (obj.style.blendMode !== undefined && !BLEND_MODES.includes(obj.style.blendMode)) {
           violations.push({ code: 'INVALID_BLEND_MODE', message: `Object '${objectId}' has an unsupported blend mode.` });
         }
+
+        violations.push(...validateLiveEffects(objectId, obj.style.effects));
 
         // ── Stroke validation ──────────────────────────────────────────────
         if (obj.style.stroke) {

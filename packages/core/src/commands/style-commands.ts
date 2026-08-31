@@ -10,7 +10,9 @@ function replaceStyleColors(style: ObjectStyle, from: string, to: string): Objec
       ? { ...style.fill, foreground: replace(style.fill.foreground), background: replace(style.fill.background) }
       : style.fill.type === 'none'
         ? style.fill
-        : { ...style.fill, stops: style.fill.stops.map((stop) => ({ ...stop, color: replace(stop.color) })) };
+        : 'stops' in style.fill
+          ? { ...style.fill, stops: style.fill.stops.map((stop) => ({ ...stop, color: replace(stop.color) })) }
+          : style.fill;
   const effects = style.effects?.map((effect) => 
     effect.type === 'dropShadow' ? { ...effect, color: replace(effect.color) } : effect
   );

@@ -282,3 +282,23 @@ input { user-select: text; -webkit-user-select: text; }
 .trace-dialog-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--color-border-subtle, #27272a); background: var(--color-panel-subtle, #09090b); }
 
 
+
+/* ─── Appearance Panel (EPIC-13 FX-008) ─────────────────────────────────────── */
+.appearance-panel { display: flex; flex-direction: column; gap: 12px; padding: 10px; }
+.appearance-empty { color: var(--color-text-muted); font-size: 11px; margin: 4px 0; }
+.appearance-stack { display: flex; flex-direction: column; gap: 8px; padding: 9px; border: 1px solid var(--color-border-subtle); border-radius: var(--radius-sm); background: var(--color-panel-raised); }
+.appearance-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; }
+.appearance-fill-kind { color: var(--color-text-disabled); font-family: var(--font-mono); font-size: 10px; padding-bottom: 6px; }
+.appearance-effects { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.appearance-effect { border: 1px solid var(--color-border-subtle); border-radius: var(--radius-sm); background: var(--color-panel-raised); padding: 6px 8px; }
+.appearance-effect.is-dragging { opacity: 0.5; }
+.appearance-effect.is-disabled > .appearance-effect-head > .appearance-effect-toggle > span { color: var(--color-text-disabled); text-decoration: line-through; }
+.appearance-effect-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.appearance-effect-toggle { display: flex; align-items: center; gap: 6px; color: var(--color-text-secondary); font-size: 11px; cursor: pointer; }
+.appearance-effect-actions { display: flex; gap: 2px; }
+.appearance-effect-params { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.appearance-effect-params .dialog-label { margin-bottom: 0; }
+.appearance-corner { display: flex; align-items: center; gap: 4px; }
+.appearance-corner-label { color: var(--color-text-muted); font-family: var(--font-mono); font-size: 9px; }
+.appearance-add-effect { display: flex; align-items: flex-end; gap: 8px; margin-top: 8px; }
+.appearance-add-effect .dialog-label { margin-bottom: 0; }
