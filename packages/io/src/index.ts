@@ -12,3 +12,8 @@ export * from './fonts/font-service.js';
 export * from './fonts/open-type-font.js';
 export * from './assets/file-drop-importer.js';
 export * from './assets/pdf-import-service.js';
+export * from './svg/sanitizer.js';
+export * from './vct/vct-file.js';
+export * from './providers/format-provider.js';
+export * from './providers/svg-file-provider.js';
+export * from './providers/honest-unsupported-providers.js';

@@ -16,6 +16,7 @@ interface AppMenuBarProps {
   onZoom100: () => void;
   onExportSvg: () => void;
   onExportPng: () => void;
+  onExportVct: () => void;
   onImportSvg: () => void;
   rightDockOpen: boolean;
   onToggleRightDock: () => void;
@@ -64,6 +65,7 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
   onZoom100,
   onExportSvg,
   onExportPng,
+  onExportVct,
   onImportSvg,
   rightDockOpen,
   onToggleRightDock,
@@ -124,7 +126,8 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
     if (menu === 'Plik') {
       return <>
         <MenuItem label="Nowy dokument" shortcut="Ctrl+N" onClick={() => run(onNewDocument)} />
-        <MenuItem label="Importuj SVG" onClick={() => run(onImportSvg)} />
+        <MenuItem label="Otwórz / Importuj..." onClick={() => run(onImportSvg)} />
+        <MenuItem label="Zapisz jako .vct" onClick={() => run(onExportVct)} />
         <MenuItem label="Eksportuj SVG" shortcut="Ctrl+Shift+E" onClick={() => run(onExportSvg)} />
         <MenuItem label="Eksportuj PNG" onClick={() => run(onExportPng)} />
       </>;

@@ -1,4 +1,8 @@
 import { createDefaultDocument, createTransform, defaultObjectStyle, defaultStroke, type DocumentModel, type SceneObject, type PathNode, type ArrowheadStyle, type StrokeStyle } from '@vectoria/core';
+import { validateInvariants } from '@vectoria/core';
+import type { ImportReport, ImportReportEntry, Transform2D } from '@vectoria/core';
+import { countReport } from '@vectoria/core';
+import { sanitizeSvg } from './sanitizer.js';
 import { generateId } from '@vectoria/shared';
 
 const number = (element: Element, name: string, fallback = 0) => {
@@ -115,7 +119,65 @@ export function parsePathData(data: string): PathNode[] {
 }
 
 /** Import basic SVG geometry without coupling core to DOM or browser APIs. */
+
+function accumulateAncestorTransforms(element: Element): string {
+  let transform = '';
+  let current: Element | null = element;
+  while (current && current.nodeName.toLowerCase() !== 'svg') {
+    const t = current.getAttribute('transform');
+    if (t) transform = t + ' ' + transform;
+    current = current.parentElement;
+  }
+  return transform.trim();
+}
+
+function decomposeTransform(attr: string): Transform2D | null {
+  if (!attr) return null;
+  let x = 0, y = 0, scaleX = 1, scaleY = 1, rotation = 0;
+  
+  const translates = [...attr.matchAll(/translate\(([-\d.]+)[,\s]*([-\d.]+)?\)/gi)];
+  for (const m of translates) {
+    x += Number(m[1]) || 0;
+    y += Number(m[2] ?? m[1] ?? 0) || 0;
+  }
+  
+  const scales = [...attr.matchAll(/scale\(([-\d.]+)[,\s]*([-\d.]+)?\)/gi)];
+  for (const m of scales) {
+    scaleX *= Number(m[1]) || 1;
+    scaleY *= Number(m[2] ?? m[1] ?? 1) || 1;
+  }
+  
+  const rotates = [...attr.matchAll(/rotate\(([-\d.]+)\)/gi)];
+  for (const m of rotates) {
+    rotation += (Number(m[1]) || 0) * (Math.PI / 180);
+  }
+  
+  if (attr.toLowerCase().includes('matrix') || attr.toLowerCase().includes('skew')) {
+    return null; // Unsupported affine or complex transforms => materialized/flattened
+  }
+  
+  return {
+    position: { x, y },
+    rotation,
+    scale: { x: scaleX, y: scaleY },
+    pivot: { x: 0, y: 0 }
+  };
+}
+
+export function importSvgWithReport(svgText: string, name = 'Imported SVG'): { document: DocumentModel; report: ImportReport } {
+  const { text, warnings } = sanitizeSvg(svgText);
+  const entries: ImportReportEntry[] = [...warnings];
+  const document = parseSvgDocument(text, name, entries);
+  const violations = validateInvariants(document);
+  if (violations.length > 0) throw new Error(`Import produced invalid document: ${violations.map((v) => v.code).join(', ')}`);
+  return { document, report: countReport(entries) };
+}
+
 export function importSvgToDocument(svgText: string, name = 'Imported SVG'): DocumentModel {
+  return importSvgWithReport(svgText, name).document;
+}
+
+function parseSvgDocument(svgText: string, name: string, entries: ImportReportEntry[]): DocumentModel {
   if (typeof DOMParser === 'undefined') throw new Error('SVG import requires DOMParser');
   const root = new DOMParser().parseFromString(svgText, 'image/svg+xml').documentElement;
   if (!root || root.nodeName.toLowerCase() === 'parsererror') throw new Error('Invalid SVG document');
@@ -157,26 +219,43 @@ export function importSvgToDocument(svgText: string, name = 'Imported SVG'): Doc
     const id = generateId();
     const base = { id, name: element.getAttribute('id') || `${element.nodeName} ${objectIds.length + 1}`, layerId, visible: true, locked: false, style: styleFor(element, definitions) };
     const tag = element.nodeName.toLowerCase();
+
+    let flattened = false;
+    const applyTransform = (baseTx: Transform2D): Transform2D => {
+      const attr = accumulateAncestorTransforms(element);
+      if (!attr) return baseTx;
+      const decomposed = decomposeTransform(attr);
+      if (decomposed) {
+        return {
+          ...baseTx,
+          position: { x: baseTx.position.x * decomposed.scale.x + decomposed.position.x, y: baseTx.position.y * decomposed.scale.y + decomposed.position.y },
+          rotation: baseTx.rotation + decomposed.rotation,
+          scale: { x: baseTx.scale.x * decomposed.scale.x, y: baseTx.scale.y * decomposed.scale.y }
+        };
+      }
+      flattened = true;
+      return baseTx;
+    };
     let object: SceneObject | null = null;
-    if (tag === 'rect') object = { ...base, type: 'rectangle', transform: createTransform({ x: number(element, 'x'), y: number(element, 'y') }), width: Math.max(0.01, number(element, 'width', 1)), height: Math.max(0.01, number(element, 'height', 1)), cornerRadius: Math.max(0, number(element, 'rx')) };
-    if (tag === 'ellipse') object = { ...base, type: 'ellipse', transform: createTransform({ x: number(element, 'cx') - number(element, 'rx', 1), y: number(element, 'cy') - number(element, 'ry', 1) }), width: Math.max(0.01, number(element, 'rx', 1) * 2), height: Math.max(0.01, number(element, 'ry', 1) * 2) };
-    if (tag === 'circle') { const r = Math.max(0.01, number(element, 'r', 1)); object = { ...base, type: 'ellipse', transform: createTransform({ x: number(element, 'cx') - r, y: number(element, 'cy') - r }), width: r * 2, height: r * 2 }; }
-    if (tag === 'line') object = { ...base, type: 'line', transform: createTransform({ x: number(element, 'x1'), y: number(element, 'y1') }), endPoint: { x: number(element, 'x2') - number(element, 'x1'), y: number(element, 'y2') - number(element, 'y1') }, style: { ...styleFor(element, definitions), fill: { type: 'none' }, stroke: stroke(element, markers) ?? defaultStroke } };
+    if (tag === 'rect') object = { ...base, type: 'rectangle', transform: applyTransform(createTransform({ x: number(element, 'x'), y: number(element, 'y') })), width: Math.max(0.01, number(element, 'width', 1)), height: Math.max(0.01, number(element, 'height', 1)), cornerRadius: Math.max(0, number(element, 'rx')) };
+    if (tag === 'ellipse') object = { ...base, type: 'ellipse', transform: applyTransform(createTransform({ x: number(element, 'cx') - number(element, 'rx', 1), y: number(element, 'cy') - number(element, 'ry', 1) })), width: Math.max(0.01, number(element, 'rx', 1) * 2), height: Math.max(0.01, number(element, 'ry', 1) * 2) };
+    if (tag === 'circle') { const r = Math.max(0.01, number(element, 'r', 1)); object = { ...base, type: 'ellipse', transform: applyTransform(createTransform({ x: number(element, 'cx') - r, y: number(element, 'cy') - r })), width: r * 2, height: r * 2 }; }
+    if (tag === 'line') object = { ...base, type: 'line', transform: applyTransform(createTransform({ x: number(element, 'x1'), y: number(element, 'y1') })), endPoint: { x: number(element, 'x2') - number(element, 'x1'), y: number(element, 'y2') - number(element, 'y1') }, style: { ...styleFor(element, definitions), fill: { type: 'none' }, stroke: stroke(element, markers) ?? defaultStroke } };
     if (tag === 'polyline') {
       const points = parsePointsData(element.getAttribute('points') || '');
       if (points.length >= 2) {
         const origin = points[0]!;
-        object = { ...base, type: 'polyline', transform: createTransform(origin), points: points.map((p) => ({ x: p.x - origin.x, y: p.y - origin.y })), style: { ...styleFor(element, definitions), fill: { type: 'none' }, stroke: stroke(element, markers) ?? defaultStroke } };
+        object = { ...base, type: 'polyline', transform: applyTransform(createTransform(origin)), points: points.map((p) => ({ x: p.x - origin.x, y: p.y - origin.y })), style: { ...styleFor(element, definitions), fill: { type: 'none' }, stroke: stroke(element, markers) ?? defaultStroke } };
       }
     }
     if (tag === 'polygon') {
       const points = parsePointsData(element.getAttribute('points') || '');
       if (points.length >= 3) {
         const nodes = points.map((point, index) => ({ id: `${id}-node-${index + 1}`, point, inHandle: null, outHandle: null, kind: 'corner' as const }));
-        object = { ...base, type: 'path', transform: createTransform({ x: 0, y: 0 }), nodes, closed: true };
+        object = { ...base, type: 'path', transform: applyTransform(createTransform({ x: 0, y: 0 })), nodes, closed: true };
       }
     }
-    if (tag === 'path') { const data = element.getAttribute('d') || ''; const nodes = parsePathData(data).map((node, index) => ({ ...node, id: `${id}-node-${index + 1}` })); if (nodes.length >= 2) object = { ...base, type: 'path', transform: createTransform({ x: 0, y: 0 }), nodes, closed: /z\s*$/i.test(data) }; }
+    if (tag === 'path') { const data = element.getAttribute('d') || ''; const nodes = parsePathData(data).map((node, index) => ({ ...node, id: `${id}-node-${index + 1}` })); if (nodes.length >= 2) object = { ...base, type: 'path', transform: applyTransform(createTransform({ x: 0, y: 0 })), nodes, closed: /z\s*$/i.test(data) }; }
     if (tag === 'text') {
       const textContent = element.textContent || '';
       const textPath = element.querySelector('textPath');
@@ -198,7 +277,7 @@ export function importSvgToDocument(svgText: string, name = 'Imported SVG'): Doc
       object = {
         ...base,
         type: 'text',
-        transform: createTransform({ x, y }),
+        transform: applyTransform(createTransform({ x, y })),
         text: actualText.trim(),
         fontFamily,
         fontSize,
@@ -211,14 +290,23 @@ export function importSvgToDocument(svgText: string, name = 'Imported SVG'): Doc
         pathId,
       };
     }
+
     if (object) {
+      if (flattened) {
+        entries.push({ category: 'flattened', code: 'svg.transform.non-affine', message: `Uproszczono transformacje nieafiniczne obiektu ${tag}` });
+      }
       objects[id] = object;
+
       objectIds.push(id);
     }
   }
 
   // Clip paths and masks become MaskGroups: the first shape inside the def is
   // the mask geometry, elements referencing it via clip-path/mask are content.
+
+  for (const _ of Array.from(root.querySelectorAll('filter'))) {
+    entries.push({ category: 'unsupported', code: 'svg.filter.unsupported', message: 'Filtry SVG nie są obsługiwane' });
+  }
   const defShapes = Array.from(root.querySelectorAll('clipPath, mask')).filter((def) => !def.closest('clipPath, mask'));
   const referenced = new Map<string, string[]>();
   for (const element of elements) {

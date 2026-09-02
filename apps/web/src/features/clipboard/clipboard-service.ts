@@ -35,7 +35,7 @@ export async function copyToSystemClipboard(fragment: ClipboardFragment): Promis
 /**
  * Tries to read a vectoria fragment from the system clipboard.
  */
-export async function readFromSystemClipboard(): Promise<ClipboardFragment | null> {
+export async function readFromSystemClipboard(): Promise<{ fragment?: ClipboardFragment; svgText?: string } | null> {
   if (!navigator.clipboard?.read) return null;
 
   try {
@@ -47,7 +47,18 @@ export async function readFromSystemClipboard(): Promise<ClipboardFragment | nul
         const text = await blob.text();
         const result = deserializeFragment(text);
         if (result.ok) {
-          return result.value;
+          return { fragment: result.value };
+        }
+        
+        // If it looks like SVG, return as svgText
+        if (text.includes('<svg')) {
+           return { svgText: text };
+        }
+      } else if (item.types.includes('text/html')) {
+        const blob = await item.getType('text/html');
+        const text = await blob.text();
+        if (text.includes('<svg')) {
+          return { svgText: text };
         }
       }
       

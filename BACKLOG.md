@@ -535,25 +535,25 @@ Wymóg stopniowego rozszerzania artboardu o 10% wynika bezpośrednio z potrzeby 
 
 ## EPIC-15: Import, format i zapis
 
-- [ ] **IO-001** Zdefiniować natywny format `.vct`
-- [ ] **IO-002** Zapisywać SVG i metadane w `.vct`
-- [ ] **IO-003** Zapisywać artboardy w `.vct`
-- [ ] **IO-004** Zapisywać warstwy i style w `.vct`
-- [ ] **IO-005** Zapisywać osadzone/linkowane assety w `.vct`
-- [ ] **IO-006** Dodać zapis dokumentu jako SVG
-- [ ] **IO-007** Dodać SVG import jako priorytetowy format
-- [ ] **IO-008** Zachowywać edytowalność SVG tam, gdzie to możliwe
-- [ ] **IO-009** Dodać PNG import
-- [ ] **IO-010** Dodać JPG import
-- [ ] **IO-011** Dodać WebP import
-- [ ] **IO-012** Dodać PDF import z zachowaniem wektorów tam, gdzie możliwe
-- [ ] **IO-013** Dodać EPS import jako P2
-- [ ] **IO-014** Dodać AI import jako best-effort
-- [ ] **IO-015** Dodać CDR import jako best-effort
-- [ ] **IO-016** Jasno oznaczać ograniczenia AI/CDR importu
-- [ ] **IO-017** Dodać wklejanie SVG ze schowka
-- [ ] **IO-018** Dodać bezpieczne parsowanie nieufnego SVG
-- [ ] **IO-019** Dodać walidację i sanityzację importowanego SVG
+- [x] **IO-001** Zdefiniować natywny format `.vct`
+- [x] **IO-002** Zapisywać SVG i metadane w `.vct`
+- [x] **IO-003** Zapisywać artboardy w `.vct`
+- [x] **IO-004** Zapisywać warstwy i style w `.vct`
+- [x] **IO-005** Zapisywać osadzone/linkowane assety w `.vct`
+- [x] **IO-006** Dodać zapis dokumentu jako SVG
+- [x] **IO-007** Dodać SVG import jako priorytetowy format
+- [x] **IO-008** Zachowywać edytowalność SVG tam, gdzie to możliwe
+- [x] **IO-009** Dodać PNG import
+- [x] **IO-010** Dodać JPG import
+- [x] **IO-011** Dodać WebP import
+- [~] **IO-012** Dodać PDF import z zachowaniem wektorów tam, gdzie możliwe *(PARTIAL - raster support + fallback error dla wektorów, pełne wektory w Etap 0.2)*
+- [~] **IO-013** Dodać EPS import jako P2 *(PARTIAL - honest-unsupported provider w 0.1)*
+- [~] **IO-014** Dodać AI import jako best-effort *(PARTIAL - honest-unsupported provider w 0.1)*
+- [~] **IO-015** Dodać CDR import jako best-effort *(PARTIAL - honest-unsupported provider w 0.1)*
+- [x] **IO-016** Jasno oznaczać ograniczenia AI/CDR importu
+- [x] **IO-017** Dodać wklejanie SVG ze schowka
+- [x] **IO-018** Dodać bezpieczne parsowanie nieufnego SVG
+- [x] **IO-019** Dodać walidację i sanityzację importowanego SVG
 
 ## EPIC-16: Eksport
 

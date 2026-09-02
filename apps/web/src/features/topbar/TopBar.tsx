@@ -18,6 +18,7 @@ export interface TopBarProps {
   onZoom100: () => void;
   onExportSvg: () => void;
   onExportPng: () => void;
+  onExportVct: () => void;
   onImportSvg: () => void;
   rightDockOpen: boolean;
   onToggleRightDock: () => void;
@@ -65,6 +66,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   onZoom100,
   onExportSvg,
   onExportPng,
+  onExportVct,
   onImportSvg,
   rightDockOpen,
   onToggleRightDock,
@@ -122,6 +124,7 @@ export const TopBar: React.FC<TopBarProps> = ({
         onZoom100={onZoom100}
         onExportSvg={onExportSvg}
         onExportPng={onExportPng}
+        onExportVct={onExportVct}
         onImportSvg={onImportSvg}
         rightDockOpen={rightDockOpen}
         onToggleRightDock={onToggleRightDock}

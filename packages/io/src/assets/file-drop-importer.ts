@@ -1,7 +1,8 @@
 import type { ImageObject, SceneObject } from '@vectoria/core';
 import { generateId, type Vec2 } from '@vectoria/shared';
 import { createTransform, defaultObjectStyle } from '@vectoria/core';
-import { importSvgToDocument } from '../svg/import.js';
+import { importSvgWithReport } from '../svg/import.js';
+import { sanitizeSvg } from '../svg/sanitizer.js';
 import { importPdfPageAsImageObject } from './pdf-import-service.js';
 
 // ─── Limity bezpieczeństwa ────────────────────────────────────────────────────
@@ -42,8 +43,8 @@ export async function processDroppedFile(
   // SVG -> Vector Import (ASSET-004)
   if (mime === 'image/svg+xml' || name.endsWith('.svg')) {
     const text = await readFileAsText(file);
-    const sanitized = sanitizeSvgText(text);
-    const importedDoc = importSvgToDocument(sanitized);
+    const { text: sanitized } = sanitizeSvg(text);
+    const { document: importedDoc, report } = importSvgWithReport(sanitized);
     const objects = Object.values(importedDoc.objects) as SceneObject[];
 
     if (objects.length === 0) {
@@ -76,7 +77,7 @@ export async function processDroppedFile(
     return {
       kind: 'vector',
       objects: positionedObjects,
-      message: `Zaimportowano ${positionedObjects.length} obiektów wektorowych z SVG.`,
+      message: `Zaimportowano ${positionedObjects.length} obiektów wektorowych z SVG.` + (report.unsupported > 0 ? ` Pominięto ${report.unsupported} elementów nieobsługiwanych.` : ''),
     };
   }
 
@@ -151,40 +152,7 @@ export async function processDroppedFile(
   throw new Error(`Nieobsługiwany format pliku: ${file.name}`);
 }
 
-// ─── Sanityzacja SVG ──────────────────────────────────────────────────────────
 
-/**
- * Strips dangerous elements and attributes from raw SVG text before parsing.
- * Removes: <script>, <foreignObject>, event handlers (on*), javascript: URIs.
- * Does NOT mutate the DOM — operates on the raw string for speed and safety.
- */
-function sanitizeSvgText(svgText: string): string {
-  let result = svgText;
-
-  // Usuń bloki <script>...</script> (case-insensitive, multiline)
-  result = result.replace(/<script[\s\S]*?<\/script>/gi, '');
-
-  // Usuń samozamykające się <script ... />
-  result = result.replace(/<script[^>]*\/>/gi, '');
-
-  // Usuń <foreignObject>...</foreignObject>
-  result = result.replace(/<foreignObject[\s\S]*?<\/foreignObject>/gi, '');
-
-  // Usuń samozamykające się <foreignObject ... />
-  result = result.replace(/<foreignObject[^>]*\/>/gi, '');
-
-  // Usuń event handlery (on* atrybuty): onload, onclick, itp.
-  // Obsługuje cudzysłowy podwójne, pojedyncze i brak cudzysłowów.
-  result = result.replace(/\s+on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]*)/gi, '');
-
-  // Usuń href i xlink:href z wartością javascript:
-  result = result.replace(/\s+(?:xlink:)?href\s*=\s*(?:"javascript:[^"]*"|'javascript:[^']*'|javascript:[^\s>]*)/gi, '');
-
-  // Usuń atrybuty src z wartością javascript:
-  result = result.replace(/\s+src\s*=\s*(?:"javascript:[^"]*"|'javascript:[^']*'|javascript:[^\s>]*)/gi, '');
-
-  return result;
-}
 
 // ─── Pomocnicze ───────────────────────────────────────────────────────────────
 

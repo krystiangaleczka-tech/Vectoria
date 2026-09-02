@@ -126,6 +126,7 @@ import {
   markSessionClosed,
   type BootstrapState,
   processDroppedFile,
+  exportVctFile,
 } from '@vectoria/io';
 import { selectSame, type SelectSameTarget } from '@vectoria/core';
 
@@ -146,6 +147,9 @@ import { TraceImageDialog } from '../features/dialogs/TraceImageDialog.js';
 import { CommandPalette } from '../features/palette/CommandPalette.js';
 import { ShortcutConfigDialog } from '../features/dialogs/ShortcutConfigDialog.js';
 import { useShortcutSettings } from '../hooks/useShortcutSettings.js';
+import { useImportController } from '../features/import/useImportController.js';
+import { importRegistry } from '../features/import/import-registry.js';
+import { ImportDialog } from '../features/import/ImportDialog.js';
 
 import type { DockPanel } from '../features/panels/RightDock.js';
 import type { PathAction } from '../features/panels/PropertiesPanel.js';
@@ -209,6 +213,8 @@ export const EditorApp: React.FC = () => {
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [shortcutConfigOpen, setShortcutConfigOpen] = useState(false);
   const [soloLayerId, setSoloLayerId] = useState<string | null>(null);
+
+  const importController = useImportController(importRegistry);
 
   const history = useMemo(() => new CommandHistory(), []);
   const camera = useMemo(() => new Camera(), []);
@@ -577,6 +583,14 @@ export const EditorApp: React.FC = () => {
     } catch (err) { console.error('[Vectoria] PNG export error:', err); }
   }, [doc]);
 
+  const handleExportVct = useCallback(async () => {
+    if (!doc) return;
+    try {
+      const blob = await exportVctFile(doc);
+      downloadBlob(blob, `${doc.name.toLowerCase().replace(/\s+/g, '-')}.vct`);
+    } catch (err) { console.error('[Vectoria] VCT export error:', err); }
+  }, [doc]);
+
   const handleCreateDocument = useCallback((options: Parameters<typeof createDefaultDocument>[0]) => {
     const next = createDefaultDocument(options);
     latestRevisionRef.current += 1;
@@ -596,19 +610,40 @@ export const EditorApp: React.FC = () => {
     }, 0);
   }, [camera, history, scheduleAutosave]);
 
-  const handleImportSvg = useCallback(() => {
+  const handleImportFile = useCallback(() => {
     const input = document.createElement('input');
-    input.type = 'file'; input.accept = '.svg,image/svg+xml';
+    input.type = 'file'; 
+    input.accept = '.svg,image/svg+xml,.vct,.eps,.cdr';
     input.onchange = () => {
       const file = input.files?.[0];
       if (!file) return;
-      void file.text().then((svg) => {
-        const imported = importSvgToDocument(svg, file.name.replace(/\.svg$/i, '') || 'Imported SVG');
-         latestRevisionRef.current += 1; history.clear(latestRevisionRef.current); latestDocRef.current = imported; setRevision(latestRevisionRef.current); setDoc(imported); setSelection(emptySelection()); scheduleAutosave(imported, latestRevisionRef.current);
-      }).catch((error) => console.error('[Vectoria] SVG import error:', error));
+      void importController.start(file);
     };
     input.click();
-  }, [history, scheduleAutosave]);
+  }, [importController]);
+
+  const handleImportCommit = useCallback(() => {
+    importController.commit({
+      replaceDocument: (newDoc) => {
+        latestRevisionRef.current += 1; 
+        history.clear(latestRevisionRef.current); 
+        latestDocRef.current = newDoc; 
+        setRevision(latestRevisionRef.current); 
+        setDoc(newDoc); 
+        setSelection(emptySelection()); 
+        scheduleAutosave(newDoc, latestRevisionRef.current);
+      },
+      appendObjects: (objects) => {
+        if (!doc) return;
+        handleExecuteCommand(new PasteObjectsCommand({
+          schemaVersion: 1,
+          type: 'ClipboardFragment',
+          objects,
+          origin: { x: 0, y: 0 }
+        }, doc.activeLayerId, 'offset', []));
+      }
+    });
+  }, [importController, history, scheduleAutosave, doc, handleExecuteCommand]);
 
   // Global Keyboard Shortcuts
   const handleCopy = useCallback(() => {
@@ -630,14 +665,19 @@ export const EditorApp: React.FC = () => {
     if (!doc) return;
     void readFromSystemClipboard().then(systemFragment => {
       if (systemFragment) {
-        handleExecuteCommand(new PasteObjectsCommand(systemFragment, doc.activeLayerId, 'offset', []));
+        if (systemFragment.fragment) {
+          handleExecuteCommand(new PasteObjectsCommand(systemFragment.fragment, doc.activeLayerId, 'offset', []));
+        } else if (systemFragment.svgText) {
+          const file = new File([systemFragment.svgText], "Pasted SVG.svg", { type: "image/svg+xml" });
+          void importController.start(file);
+        }
         return;
       }
       if (clipboardRef.current.length > 0) {
         handleExecuteCommand(new PasteObjectsCommand(createClipboardFragment(clipboardRef.current), doc.activeLayerId, 'offset', []));
       }
     });
-  }, [doc, handleExecuteCommand]);
+  }, [doc, handleExecuteCommand, importController]);
 
   const handleDuplicate = useCallback(() => {
     if (!doc || selectedObjectIds.length === 0) return;
@@ -1191,6 +1231,10 @@ export const EditorApp: React.FC = () => {
     const targetLayerId = doc.activeLayerId;
     for (let i = 0; i < files.length; i++) {
       const file = files[i]!;
+      if (file.name.toLowerCase().endsWith('.vct')) {
+        void importController.start(file);
+        continue;
+      }
       try {
         const result = await processDroppedFile(file, { x: worldPos.x + i * 20, y: worldPos.y + i * 20 }, targetLayerId);
         if (result.kind === 'image') {
@@ -1202,7 +1246,7 @@ export const EditorApp: React.FC = () => {
         console.error('Failed to process dropped file:', err);
       }
     }
-  }, [doc, handleExecuteCommand]);
+  }, [doc, handleExecuteCommand, importController]);
 
   const handleInsertSymbol = useCallback((symbolId: string) => {
     if (!doc) return;
@@ -1583,9 +1627,10 @@ export const EditorApp: React.FC = () => {
          onToggleRightDock={() => setRightDockOpen((open) => !open)}
          onNewDocument={() => setNewDocumentOpen(true)}
          onExportPng={handleExportPng}
+         onExportVct={handleExportVct}
           onFitDrawing={handleFitDrawing}
           onFitSelection={handleFitSelection}
-         onImportSvg={handleImportSvg}
+         onImportSvg={handleImportFile}
           showGrid={doc.grid.visible}
           snapToGrid={doc.snap.enabled}
           onToggleGrid={() => handleUpdateGridSettings({ ...doc.grid, visible: !doc.grid.visible })}
@@ -1864,6 +1909,15 @@ export const EditorApp: React.FC = () => {
          shortcuts={shortcuts}
          onSave={saveShortcuts}
          onReset={resetShortcuts}
+       />
+       <ImportDialog
+         isOpen={importController.stage !== 'idle'}
+         stage={importController.stage}
+         fileName={null} // We'd need to store file name in controller to pass it here
+         report={importController.report}
+         error={importController.error}
+         onCommit={handleImportCommit}
+         onCancel={importController.cancel}
        />
     </div>
   );
