@@ -60,6 +60,7 @@ export interface RightDockProps {
   onUpdatePathNodeKind?: (id: ObjectId, index: number, kind: PathNode['kind']) => void;
   onUpdatePathClosed?: (id: ObjectId, closed: boolean) => void;
   onPathAction?: (action: PathAction) => void;
+  onExecuteCommand?: (command: import('@vectoria/core').Command) => void;
   onUpdateTypography?: (id: ObjectId, patch: Partial<import('@vectoria/core').TextFrameObject>) => void;
   onConvertToOutlines?: (id: ObjectId) => void;
   onSetTextOnPath?: (id: ObjectId, pathId?: ObjectId) => void;
@@ -174,6 +175,7 @@ export const RightDock: React.FC<RightDockProps> = ({
   onUpdatePathNodeKind,
   onUpdatePathClosed,
   onPathAction,
+  onExecuteCommand,
   geometryPreview,
   onGeometryAction,
   onApplyGeometryPreview,
@@ -284,6 +286,7 @@ export const RightDock: React.FC<RightDockProps> = ({
             onSetTextOnPath={onSetTextOnPath}
             onUpdateLineEndpoint={onUpdateLineEndpoint}
             onUpdateCornerRadius={onUpdateCornerRadius}
+            onExecuteCommand={onExecuteCommand}
             onUpdateFill={onUpdateFill}
             onUpdateObjectStyle={onUpdateObjectStyle}
             onUpdateRotation={onUpdateRotation}

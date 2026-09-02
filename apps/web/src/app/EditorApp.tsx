@@ -14,6 +14,10 @@ import type {
 import {
   CommandHistory,
   CreateObjectsCommand,
+  DeleteObjectsCommand,
+  PasteObjectsCommand,
+  DuplicateTransformCommand,
+  createClipboardFragment,
   TransformObjectsCommand,
   SetRectangleGeometryCommand,
   SetEllipseGeometryCommand,
@@ -105,7 +109,7 @@ import {
   type ImageObject,
   type ImageCrop,
 } from '@vectoria/core';
-import { Camera, emptySelection, selectionService, GeometryOperationSession, BooleanOperationSession } from '@vectoria/editor-engine';
+import { Camera, emptySelection, selectionService, GeometryOperationSession, BooleanOperationSession, CommandRegistry } from '@vectoria/editor-engine';
 import {
   bootstrapDocument,
   saveDocumentSnapshot,
@@ -123,7 +127,9 @@ import {
   type BootstrapState,
   processDroppedFile,
 } from '@vectoria/io';
+import { selectSame, type SelectSameTarget } from '@vectoria/core';
 
+import { copyToSystemClipboard, readFromSystemClipboard } from '../features/clipboard/clipboard-service.js';
 import { TopBar } from '../features/topbar/TopBar.js';
 import { ToolRail, type ActiveTool } from '../features/toolbar/ToolRail.js';
 import { CanvasViewport } from '../features/canvas/CanvasViewport.js';
@@ -137,6 +143,10 @@ import { FindReplaceDialog } from '../features/dialogs/FindReplaceDialog.js';
 import { SpecialCharactersPopover } from '../features/dialogs/SpecialCharactersPopover.js';
 import { WebFontImportDialog } from '../features/dialogs/WebFontImportDialog.js';
 import { TraceImageDialog } from '../features/dialogs/TraceImageDialog.js';
+import { CommandPalette } from '../features/palette/CommandPalette.js';
+import { ShortcutConfigDialog } from '../features/dialogs/ShortcutConfigDialog.js';
+import { useShortcutSettings } from '../hooks/useShortcutSettings.js';
+
 import type { DockPanel } from '../features/panels/RightDock.js';
 import type { PathAction } from '../features/panels/PropertiesPanel.js';
 import type { GeometryAction } from '../features/properties/GeometryProperties.js';
@@ -195,11 +205,18 @@ export const EditorApp: React.FC = () => {
   const [specialCharsOpen, setSpecialCharsOpen] = useState(false);
   const [webFontImportOpen, setWebFontImportOpen] = useState(false);
   const [outlineMode, setOutlineMode] = useState(false);
-  const [soloLayerId, setSoloLayerId] = useState<string | null>(null);
   const [traceImageTarget, setTraceImageTarget] = useState<ImageObject | null>(null);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [shortcutConfigOpen, setShortcutConfigOpen] = useState(false);
+  const [soloLayerId, setSoloLayerId] = useState<string | null>(null);
 
   const history = useMemo(() => new CommandHistory(), []);
   const camera = useMemo(() => new Camera(), []);
+  
+  const { shortcuts, saveShortcuts, resetShortcuts } = useShortcutSettings([]);
+
+
+
   const autosaveTimeoutRef = useRef<number | null>(null);
   const isBootstrappedRef = useRef(false);
   const latestDocRef = useRef<DocumentModel | null>(null);
@@ -592,6 +609,40 @@ export const EditorApp: React.FC = () => {
     };
     input.click();
   }, [history, scheduleAutosave]);
+
+  // Global Keyboard Shortcuts
+  const handleCopy = useCallback(() => {
+    if (!doc || selectedObjectIds.length === 0) return;
+    const objects = selectedObjectIds.map((id) => doc.objects[id]).filter((object): object is SceneObject => Boolean(object));
+    clipboardRef.current = objects;
+    void copyToSystemClipboard(createClipboardFragment(objects));
+  }, [doc, selectedObjectIds]);
+
+  const handleCut = useCallback(() => {
+    if (!doc || selectedObjectIds.length === 0) return;
+    const objects = selectedObjectIds.map((id) => doc.objects[id]).filter((object): object is SceneObject => Boolean(object));
+    clipboardRef.current = objects;
+    void copyToSystemClipboard(createClipboardFragment(objects));
+    handleExecuteCommand(new DeleteObjectsCommand(selectedObjectIds));
+  }, [doc, selectedObjectIds, handleExecuteCommand]);
+
+  const handlePaste = useCallback(() => {
+    if (!doc) return;
+    void readFromSystemClipboard().then(systemFragment => {
+      if (systemFragment) {
+        handleExecuteCommand(new PasteObjectsCommand(systemFragment, doc.activeLayerId, 'offset', []));
+        return;
+      }
+      if (clipboardRef.current.length > 0) {
+        handleExecuteCommand(new PasteObjectsCommand(createClipboardFragment(clipboardRef.current), doc.activeLayerId, 'offset', []));
+      }
+    });
+  }, [doc, handleExecuteCommand]);
+
+  const handleDuplicate = useCallback(() => {
+    if (!doc || selectedObjectIds.length === 0) return;
+    handleExecuteCommand(new DuplicateTransformCommand(selectedObjectIds));
+  }, [doc, selectedObjectIds, handleExecuteCommand]);
 
   // Property panel mutation handlers (commands)
   const handleUpdatePosition = useCallback(
@@ -1272,7 +1323,49 @@ export const EditorApp: React.FC = () => {
     reader.readAsDataURL(file);
   }, [handleExecuteCommand]);
 
-  // Global Keyboard Shortcuts
+  const handleSelectSame = useCallback((target: SelectSameTarget) => {
+    if (!doc || selectedObjectIds.length !== 1) return;
+    const referenceId = selectedObjectIds[0];
+    if (!referenceId) return;
+    const similarIds = selectSame(doc, referenceId, target, 'document');
+    handleSelectObjects(similarIds);
+  }, [doc, selectedObjectIds, handleSelectObjects]);
+
+  const commandRegistry = useMemo(() => {
+    const r = new CommandRegistry();
+    r.register({
+      id: 'edit.paste', title: 'Wklej', shortcut: '⌘V',
+      enabled: () => true,
+      execute: () => handlePaste()
+    });
+    r.register({
+      id: 'select.same-fill', title: 'Zaznacz takie same: wypełnienie',
+      enabled: () => selectedObjectIds.length === 1,
+      execute: () => handleSelectSame('fill')
+    });
+    r.register({
+      id: 'view.command-palette', title: 'Paleta poleceń', shortcut: '⌘K',
+      enabled: () => true,
+      execute: () => setCommandPaletteOpen(true)
+    });
+    r.register({
+      id: 'view.shortcut-config', title: 'Konfiguracja skrótów',
+      enabled: () => true,
+      execute: () => setShortcutConfigOpen(true)
+    });
+    r.register({
+      id: 'view.fit-artboard', title: 'Dopasuj obszar roboczy', shortcut: '⌘1',
+      enabled: () => true,
+      execute: () => handleFitArtboard()
+    });
+    r.register({
+      id: 'view.zoom-100', title: 'Powiększenie 100%', shortcut: '⌘0',
+      enabled: () => true,
+      execute: () => handleZoom100()
+    });
+    return r;
+  }, [handlePaste, handleSelectSame, handleFitArtboard, handleZoom100, selectedObjectIds.length]);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (
@@ -1286,25 +1379,13 @@ export const EditorApp: React.FC = () => {
       const cmdKey = isMac ? e.metaKey : e.ctrlKey;
 
       if (cmdKey && e.key.toLowerCase() === 'c') {
-        if (doc) clipboardRef.current = selectedObjectIds.map((id) => doc.objects[id]).filter((object): object is SceneObject => Boolean(object));
+        handleCopy();
+      } else if (cmdKey && e.key.toLowerCase() === 'x') {
+        handleCut();
       } else if (cmdKey && e.key.toLowerCase() === 'v') {
-        if (doc && clipboardRef.current.length > 0) {
-          const pasted = clipboardRef.current.map((object) => ({
-            ...structuredClone(object),
-            id: generateId(),
-            name: `${object.name} copy`,
-            layerId: doc.activeLayerId,
-            transform: { ...object.transform, position: { x: object.transform.position.x + 20, y: object.transform.position.y + 20 } },
-          } as SceneObject));
-          handleExecuteCommand(new CreateObjectsCommand(pasted, doc.activeLayerId));
-          handleSelectObjects(pasted.map((object) => object.id));
-        }
+        handlePaste();
       } else if (cmdKey && e.key.toLowerCase() === 'd') {
-        if (doc && selectedObjectIds.length > 0) {
-          const duplicates = selectedObjectIds.map((id) => doc.objects[id]).filter((object): object is SceneObject => Boolean(object)).map((object) => ({ ...structuredClone(object), id: generateId(), name: `${object.name} copy`, layerId: doc.activeLayerId, transform: { ...object.transform, position: { x: object.transform.position.x + 20, y: object.transform.position.y + 20 } } } as SceneObject));
-          handleExecuteCommand(new CreateObjectsCommand(duplicates, doc.activeLayerId));
-          handleSelectObjects(duplicates.map((object) => object.id));
-        }
+        handleDuplicate();
       } else if (cmdKey && e.key.toLowerCase() === 'g') {
         e.preventDefault();
         if (e.shiftKey) handleUngroup();
@@ -1332,6 +1413,9 @@ export const EditorApp: React.FC = () => {
       } else if (cmdKey && e.key.toLowerCase() === 'f') {
         e.preventDefault();
         setFindReplaceOpen(true);
+      } else if (cmdKey && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setCommandPaletteOpen(true);
       } else if (cmdKey && e.key === '0') {
         e.preventDefault();
         handleZoom100();
@@ -1385,7 +1469,7 @@ export const EditorApp: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [doc, selectedObjectId, selectedObjectIds, handleExecuteCommand, handleUndo, handleRedo, handleZoom100, handleFitArtboard, handleSelectObjects, handleGroup, handleUngroup, handleRepeatTransform]);
+  }, [doc, selectedObjectId, selectedObjectIds, handleExecuteCommand, handleUndo, handleRedo, handleZoom100, handleFitArtboard, handleSelectObjects, handleGroup, handleUngroup, handleRepeatTransform, handleCopy, handleCut, handlePaste, handleDuplicate]);
 
   // Center / Fit artboard on initial load once ready
   useEffect(() => {
@@ -1520,9 +1604,16 @@ export const EditorApp: React.FC = () => {
           onOpenUsedFonts={() => setUsedFontsOpen(true)}
           onOpenSpecialCharacters={() => setSpecialCharsOpen(true)}
           onOpenWebFontImport={() => setWebFontImportOpen(true)}
-          outlineMode={outlineMode}
-          onToggleOutlineMode={handleToggleOutlineMode}
-        />
+        outlineMode={outlineMode}
+        onToggleOutlineMode={() => setOutlineMode(!outlineMode)}
+        onCopy={handleCopy}
+        onCut={handleCut}
+        onPaste={handlePaste}
+        onDuplicate={handleDuplicate}
+        onSelectSame={handleSelectSame}
+        onOpenCommandPalette={() => setCommandPaletteOpen(true)}
+        onOpenShortcutConfig={() => setShortcutConfigOpen(true)}
+      />
 
       {bootstrapState.status === 'recovery-error' && (
         <RecoveryBanner 
@@ -1608,6 +1699,7 @@ export const EditorApp: React.FC = () => {
           history={history.history}
           historyCursor={history.cursor}
           onHistoryJump={handleHistoryJump}
+          onExecuteCommand={handleExecuteCommand}
           versions={documentVersions}
           onSaveVersion={handleSaveVersion}
           onRestoreVersion={handleRestoreVersion}
@@ -1753,6 +1845,26 @@ export const EditorApp: React.FC = () => {
            }}
          />
        )}
+       
+       <CommandPalette
+        isOpen={commandPaletteOpen}
+        onClose={() => setCommandPaletteOpen(false)}
+        commands={commandRegistry.list()}
+        onExecute={(id) => {
+          const cmd = commandRegistry.list().find(c => c.id === id);
+          if (cmd && doc) {
+            cmd.execute({ doc, selection, execute: handleExecuteCommand, report: console.log });
+          }
+        }}
+      />
+
+       <ShortcutConfigDialog
+         isOpen={shortcutConfigOpen}
+         onClose={() => setShortcutConfigOpen(false)}
+         shortcuts={shortcuts}
+         onSave={saveShortcuts}
+         onReset={resetShortcuts}
+       />
     </div>
   );
 };

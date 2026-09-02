@@ -21,17 +21,20 @@ export function convertUnit(value: number, from: Unit, to: Unit): number {
   return pxToUnit(unitToPx(value, from), to);
 }
 
-/** Parse safe arithmetic used by professional numeric controls. No eval. */
+/** Parse safe arithmetic used by professional numeric controls. No eval.
+ *  `%` is relative to `percentBase` (the field's current value):
+ *  inline `100+10%` (base 100) → 110; trailing `10%` (base 200) → 20.
+ *  Without `percentBase`, any `%` yields null (backward compatible). */
 export function parseNumericExpression(input: string, percentBase?: number): number | null {
   const source = input.trim().replace(/,/g, '.');
   if (!source) return null;
+  if (source.includes('%') && (percentBase === undefined || !Number.isFinite(percentBase))) return null;
 
-  const percent = source.endsWith('%');
-  const expression = percent ? source.slice(0, -1).trim() : source;
-  if (!/^[+\-*/().\d\s]+$/.test(expression)) return null;
+  // Whitelist: digits, operators, parens, percent. Keeps existing charset + '%'.
+  if (!/^[+\-*/().\d\s%]+$/.test(source)) return null;
 
-  const tokens = expression.match(/(?:\d+(?:\.\d*)?|\.\d+)|[()+\-*/]/g);
-  if (!tokens || tokens.join('') !== expression.replace(/\s/g, '')) return null;
+  const tokens = source.match(/(?:\d+(?:\.\d*)?|\.\d+)%?|[()+\-*/%]/g);
+  if (!tokens || tokens.join('') !== source.replace(/\s/g, '')) return null;
   let index = 0;
 
   const parsePrimary = (): number | null => {
@@ -46,8 +49,10 @@ export function parseNumericExpression(input: string, percentBase?: number): num
     }
     if (!/^\d|^\./.test(token)) return null;
     index += 1;
-    const value = Number(token);
-    return Number.isFinite(value) ? value : null;
+    const isPercent = token.endsWith('%');
+    const value = Number(isPercent ? token.slice(0, -1) : token);
+    if (!Number.isFinite(value)) return null;
+    return isPercent ? percentBase! * value / 100 : value;
   };
 
   const parseUnary = (): number | null => {
@@ -85,7 +90,5 @@ export function parseNumericExpression(input: string, percentBase?: number): num
 
   const result = parseAdditive();
   if (result === null || index !== tokens.length || !Number.isFinite(result)) return null;
-  if (!percent) return result;
-  if (percentBase === undefined || !Number.isFinite(percentBase)) return null;
-  return percentBase * result / 100;
+  return result;
 }

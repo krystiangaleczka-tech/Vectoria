@@ -12,6 +12,8 @@ export interface NumberInputProps {
   disabled?: boolean;
   'data-testid'?: string;
   onChange: (val: number) => void;
+  percentBase?: number;
+  onUnitCycle?: () => void;
 }
 
 export const NumberInput: React.FC<NumberInputProps> = ({
@@ -25,9 +27,12 @@ export const NumberInput: React.FC<NumberInputProps> = ({
   disabled = false,
   'data-testid': testId,
   onChange,
+  percentBase,
+  onUnitCycle,
 }) => {
   const [text, setText] = useState(() => value.toFixed(decimals));
   const [isFocused, setIsFocused] = useState(false);
+  const [hasError, setHasError] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Sync displayed text with external value changes (e.g., after drag, undo/redo)
@@ -39,16 +44,17 @@ export const NumberInput: React.FC<NumberInputProps> = ({
   }, [value, decimals, isFocused]);
 
   const commit = (newText: string) => {
-    const parsed = parseNumericExpression(newText);
+    const parsed = parseNumericExpression(newText, percentBase ?? value);
     if (parsed !== null && Number.isFinite(parsed)) {
+      setHasError(false);
       let clamped = parsed;
       if (min !== undefined) clamped = Math.max(min, clamped);
       if (max !== undefined) clamped = Math.min(max, clamped);
       const rounded = parseFloat(clamped.toFixed(decimals));
       onChange(rounded);
       setText(rounded.toFixed(decimals));
-    } else {
-      // Revert to current value
+    } else if (newText.trim() !== value.toFixed(decimals)) {
+      setHasError(true);
       setText(value.toFixed(decimals));
     }
   };
@@ -61,6 +67,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
       inputRef.current?.blur();
     } else if (e.key === 'Escape') {
       setText(value.toFixed(decimals));
+      setHasError(false);
       inputRef.current?.blur();
     } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
       e.preventDefault();
@@ -84,7 +91,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
         alignItems: 'center',
         height: '28px',
         backgroundColor: isFocused ? 'var(--color-input-hover)' : 'var(--color-input)',
-        border: `1px solid ${isFocused ? 'var(--color-border-focus)' : 'var(--color-border-subtle)'}`,
+        border: `1px solid ${hasError ? 'var(--color-danger)' : isFocused ? 'var(--color-border-focus)' : 'var(--color-border-subtle)'}`,
         borderRadius: 'var(--radius-sm)',
         padding: '0 6px',
         opacity: disabled ? 0.4 : 1,
@@ -108,8 +115,13 @@ export const NumberInput: React.FC<NumberInputProps> = ({
         value={text}
         disabled={disabled}
         aria-label={`${label}${unit ? ` (${unit})` : ''}`}
+        aria-invalid={hasError || undefined}
+        aria-describedby={hasError ? `${testId ?? 'input'}-error` : undefined}
         onChange={(e) => setText(e.target.value)}
-        onFocus={() => setIsFocused(true)}
+        onFocus={() => {
+          setIsFocused(true);
+          setHasError(false);
+        }}
         onBlur={() => {
           setIsFocused(false);
           commit(text);
@@ -128,16 +140,25 @@ export const NumberInput: React.FC<NumberInputProps> = ({
           fontFamily: 'var(--font-mono)',
         }}
       />
+      {hasError && <span id={`${testId ?? 'input'}-error`} role="alert" aria-live="polite" style={{ display: 'none' }}>Nieprawidłowe wyrażenie</span>}
       {unit && (
-        <span
+        <button
+          type="button"
+          onClick={onUnitCycle}
+          disabled={!onUnitCycle}
+          aria-label={`Przełącz jednostkę (obecnie ${unit})`}
           style={{
             fontSize: '10px',
             color: 'var(--color-text-muted)',
             marginLeft: '4px',
+            background: 'none',
+            border: 'none',
+            padding: 0,
+            cursor: onUnitCycle ? 'pointer' : 'default',
           }}
         >
           {unit}
-        </span>
+        </button>
       )}
     </div>
   );

@@ -40,6 +40,13 @@ interface AppMenuBarProps {
   onOpenWebFontImport?: () => void;
   outlineMode?: boolean;
   onToggleOutlineMode?: () => void;
+  onCopy: () => void;
+  onCut: () => void;
+  onPaste: () => void;
+  onDuplicate: () => void;
+  onSelectSame: (target: import('@vectoria/core').SelectSameTarget) => void;
+  onOpenCommandPalette?: () => void;
+  onOpenShortcutConfig?: () => void;
 }
 
 type MenuName = 'Plik' | 'Edycja' | 'Obiekt' | 'Tekst' | 'Widok' | 'Okno' | 'Pomoc';
@@ -81,6 +88,13 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
   onOpenWebFontImport,
   outlineMode,
   onToggleOutlineMode,
+  onCopy,
+  onCut,
+  onPaste,
+  onDuplicate,
+  onSelectSame,
+  onOpenCommandPalette,
+  onOpenShortcutConfig,
 }) => {
   const [openMenu, setOpenMenu] = useState<MenuName | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -117,8 +131,11 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
     }
     if (menu === 'Edycja') {
       return <>
-        <MenuItem label="Cofnij" shortcut="Ctrl+Z" disabled={!canUndo} onClick={() => run(onUndo)} />
-        <MenuItem label="Ponów" shortcut="Ctrl+Shift+Z" disabled={!canRedo} onClick={() => run(onRedo)} />
+        <MenuItem label="Cofnij" shortcut="Cmd+Z" disabled={!canUndo} onClick={() => run(onUndo)} />
+        <MenuItem label="Ponów" shortcut="Cmd+Shift+Z" disabled={!canRedo} onClick={() => run(onRedo)} />
+        <MenuItem label="Wytnij" shortcut="Cmd+X" disabled={selectedObjectIds.length === 0} onClick={() => run(onCut)} />
+        <MenuItem label="Kopiuj" shortcut="Cmd+C" disabled={selectedObjectIds.length === 0} onClick={() => run(onCopy)} />
+        <MenuItem label="Wklej" shortcut="Cmd+V" onClick={() => run(onPaste)} />
         <MenuItem label="Zaznacz wszystko" disabled />
       </>;
     }
@@ -132,12 +149,17 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
         <MenuItem label={`${showGrid ? 'Ukryj' : 'Pokaż'} siatkę`} onClick={() => run(onToggleGrid)} />
         <MenuItem label={`${snapToGrid ? 'Wyłącz' : 'Włącz'} snap do siatki`} onClick={() => run(onToggleSnap)} />
         <MenuItem label={`Motyw: ${theme === 'dark' ? 'jasny' : 'ciemny'}`} onClick={() => run(onToggleTheme)} />
+        <MenuItem label="Paleta poleceń..." shortcut="Cmd+K" onClick={() => run(() => onOpenCommandPalette?.())} />
       </>;
     }
     if (menu === 'Obiekt') {
       return <>
+        <MenuItem label="Zaznacz podobne: Wypełnienie" disabled={selectedObjectIds.length !== 1} onClick={() => run(() => onSelectSame('fill'))} />
+        <MenuItem label="Zaznacz podobne: Obrys" disabled={selectedObjectIds.length !== 1} onClick={() => run(() => onSelectSame('stroke'))} />
+        <MenuItem label="Zaznacz podobne: Wypełnienie i Obrys" disabled={selectedObjectIds.length !== 1} onClick={() => run(() => onSelectSame('fill-stroke'))} />
         <MenuItem label="Group" shortcut="Cmd+G" disabled={selectedObjectIds.length < 2} onClick={() => run(onGroup)} />
         <MenuItem label="Ungroup" shortcut="Cmd+Shift+G" disabled={selectedObjectIds.length === 0} onClick={() => run(onUngroup)} />
+        <MenuItem label="Powiel i przekształć" shortcut="Cmd+D" disabled={selectedObjectIds.length === 0} onClick={() => run(onDuplicate)} />
         <MenuItem label="Repeat transform" shortcut="Cmd+Shift+R" disabled={selectedObjectIds.length === 0} onClick={() => run(onRepeatTransform)} />
         <MenuItem label="Convert to curves" disabled={selectedObjectIds.length === 0} onClick={() => run(() => onConvertToCurves(selectedObjectIds))} />
         <MenuItem label="Clean Up document" onClick={() => run(onOpenCleanup)} />
@@ -159,6 +181,7 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
         <MenuItem label="Zasoby" onClick={() => run(() => onShowPanel('assets'))} />
         <MenuItem label="Historia" onClick={() => run(() => onShowPanel('history'))} />
         <MenuItem label={rightDockOpen ? 'Ukryj dock' : 'Pokaż dock'} onClick={() => run(onToggleRightDock)} />
+        <MenuItem label="Konfiguracja skrótów..." onClick={() => run(() => onOpenShortcutConfig?.())} />
       </>;
     }
     return <MenuItem label="Wkrótce" disabled />;

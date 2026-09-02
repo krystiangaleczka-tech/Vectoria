@@ -446,7 +446,7 @@ Wymóg stopniowego rozszerzania artboardu o 10% wynika bezpośrednio z potrzeby 
 - [x] **ASSET-002** Dodać drag-and-drop JPG
 - [x] **ASSET-003** Dodać drag-and-drop WebP
 - [x] **ASSET-004** Dodać drag-and-drop SVG
-- [x] **ASSET-005** Dodać drag-and-drop PDF
+- [~] **ASSET-005** Dodać drag-and-drop PDF *(PARTIAL — routing z placeholderem i komunikatem; pełny import wektorów zależy od IO-012, który jest w EPIC-15)*
 - [x] **ASSET-006** Dodać osadzanie obrazu w pliku
 - [x] **ASSET-007** Dodać linkowanie obrazu do zasobu zewnętrznego
 - [x] **ASSET-008** Dodać panel linków
@@ -473,35 +473,35 @@ Wymóg stopniowego rozszerzania artboardu o 10% wynika bezpośrednio z potrzeby 
 
 ### MVP
 
-- [ ] **FX-001** Dodać drop shadow
-- [ ] **FX-002** Dodać blur
-- [ ] **FX-003** Dodać opacity w Appearance panel
-- [ ] **FX-004** Dodać rounded corners jako efekt
-- [ ] **FX-005** Dodać stroke alignment
-- [ ] **FX-006** Dodać dashed stroke do Appearance panel
-- [ ] **FX-007** Dodać podstawowe filtry SVG
-- [ ] **FX-008** Zbudować Appearance Panel
-- [ ] **FX-009** Pokazywać fill, stroke, opacity i efekty obiektu
-- [ ] **FX-010** Umożliwić zmianę kolejności appearance layers
-- [ ] **FX-011** Dodać inner shadow
-- [ ] **FX-012** Dodać glow
-- [ ] **FX-013** Dodać rozszerzone blend modes
-- [ ] **FX-014** Dodać pattern fill
-- [ ] **FX-015** Dodać texture fill
-- [ ] **FX-016** Dodać brushes kaligraficzne
-- [ ] **FX-017** Dodać brushes artystyczne
-- [ ] **FX-018** Dodać pattern brushes
-- [ ] **FX-019** Dodać distort
-- [ ] **FX-020** Dodać envelope distortion
-- [ ] **FX-021** Dodać mesh
-- [ ] **FX-022** Dodać perspective
-- [ ] **FX-023** Dodać podstawowe 3D
-- [ ] **FX-024** Dodać radial repeat
-- [ ] **FX-025** Dodać mirror repeat
-- [ ] **FX-026** Dodać grid repeat
-- [ ] **FX-027** Dodać live effects
-- [ ] **FX-028** Umożliwić wyłączenie live effect
-- [ ] **FX-029** Umożliwić expand live effect
+- [x] **FX-001** Dodać drop shadow
+- [x] **FX-002** Dodać blur
+- [x] **FX-003** Dodać opacity w Appearance panel
+- [x] **FX-004** Dodać rounded corners jako efekt
+- [x] **FX-005** Dodać stroke alignment
+- [x] **FX-006** Dodać dashed stroke do Appearance panel
+- [x] **FX-007** Dodać podstawowe filtry SVG
+- [x] **FX-008** Zbudować Appearance Panel
+- [x] **FX-009** Pokazywać fill, stroke, opacity i efekty obiektu
+- [x] **FX-010** Umożliwić zmianę kolejności appearance layers
+- [x] **FX-011** Dodać inner shadow
+- [x] **FX-012** Dodać glow
+- [x] **FX-013** Dodać rozszerzone blend modes
+- [x] **FX-014** Dodać pattern fill
+- [x] **FX-015** Dodać texture fill
+- [x] **FX-016** Dodać brushes kaligraficzne
+- [~] **FX-017** Dodać brushes artystyczne *(PARTIAL — Canvas OK, SVG export uproszczony do kropek; benchmark PERF-073 pending — ADR_009)*
+- [~] **FX-018** Dodać pattern brushes *(PARTIAL — arc-length OK, SVG export uproszczony — ADR_009)*
+- [x] **FX-019** Dodać distort
+- [x] **FX-020** Dodać envelope distortion
+- [~] **FX-021** Dodać mesh *(PARTIAL — MeshGradientFill 3×3 kolorów; mesh warp geometrii i pełny SVG export nie zaimplementowane — ADR_009)*
+- [x] **FX-022** Dodać perspective
+- [~] **FX-023** Dodać podstawowe 3D *(PARTIAL — extrude przez kopie z cieniowaniem, nie geometria bevelu; ADR_009)*
+- [x] **FX-024** Dodać radial repeat
+- [x] **FX-025** Dodać mirror repeat
+- [x] **FX-026** Dodać grid repeat
+- [x] **FX-027** Dodać live effects
+- [x] **FX-028** Umożliwić wyłączenie live effect
+- [x] **FX-029** Umożliwić expand live effect
 
 ## EPIC-14: Precyzja i produktywność
 

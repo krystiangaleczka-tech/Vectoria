@@ -3,6 +3,7 @@ import type { DocumentModel, ObjectId, ObjectStyle, SceneObject, CornerRadii, Pa
 import { normalizeCornerRadii, getObjectBounds } from '@vectoria/core';
 import type { Vec2 } from '@vectoria/shared';
 import { defaultStroke } from '@vectoria/core';
+import { DocumentProperties } from '../properties/DocumentProperties.js';
 import { NumberInput, ColorControl, Button } from '@vectoria/ui';
 import { convertUnit } from '@vectoria/shared';
 import type { DocumentUnit } from '@vectoria/core';
@@ -58,6 +59,7 @@ export interface PropertiesPanelProps {
   onUpdatePathNodeKind?: (id: ObjectId, index: number, kind: PathNode['kind']) => void;
   onUpdatePathClosed?: (id: ObjectId, closed: boolean) => void;
   onPathAction?: (action: PathAction) => void;
+  onExecuteCommand?: (command: import('@vectoria/core').Command) => void;
   geometryPreview?: GeometryPreview | null;
   onGeometryAction?: (action: GeometryAction) => void;
   onApplyGeometryPreview?: () => void;
@@ -96,10 +98,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   onAlign,
   onDistribute,
   onReorder,
-  onUpdateArtboard,
-  onUpdateUnit,
-  gridSettings,
-  onUpdateGridSettings,
+
   selection = { objectIds: [], nodeIds: [], mode: 'object' },
   onUpdatePathNode,
   onUpdatePathNodeKind,
@@ -124,7 +123,6 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   const [aspectLocked, setAspectLocked] = React.useState(true);
   const [alignTarget, setAlignTarget] = React.useState<'selection' | 'artboard' | 'key'>('selection');
   const selected = selectedObjectId ? doc.objects[selectedObjectId] : null;
-  const artboard = doc.artboards[doc.activeArtboardId];
   const size = selected ? dimensions(selected) : null;
   const radii = selected?.type === 'rectangle' ? normalizeCornerRadii(selected.cornerRadius, selected.width, selected.height) : null;
   const patchStyle = (patch: Partial<ObjectStyle>) => selected && onUpdateObjectStyle?.(selected.id, patch);
@@ -817,20 +815,9 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 {selected.style.stroke && <Button size="sm" variant="ghost" disabled={selected.locked} onClick={() => onPathAction?.({ type: 'stroke-to-path', objectId: selected.id })}>Stroke to path</Button>}
              </div>
           </section>
-        </> : artboard ? <>
-          <section className="property-section">
-            <div className="panel-section-heading"><span>Artboard</span></div>
-            <div className="property-grid">
-              <NumberInput data-testid="artboard-width" label="W" min={0.000001} value={convertUnit(artboard.width, 'px', doc.unit)} unit={doc.unit} decimals={2} onChange={(value) => onUpdateArtboard?.(convertUnit(value, doc.unit, 'px'), artboard.height)} />
-              <NumberInput data-testid="artboard-height" label="H" min={0.000001} value={convertUnit(artboard.height, 'px', doc.unit)} unit={doc.unit} decimals={2} onChange={(value) => onUpdateArtboard?.(artboard.width, convertUnit(value, doc.unit, 'px'))} />
-            </div>
-            <label className="dialog-label">Jednostka<select value={doc.unit} onChange={(event) => onUpdateUnit?.(event.target.value as DocumentUnit)}><option value="px">px</option><option value="mm">mm</option><option value="cm">cm</option><option value="in">in</option></select></label>
-            <label className="dialog-label">Tło<select value={artboard.background.type} onChange={(event) => { const type = event.target.value as 'transparent' | 'color'; onUpdateArtboard?.(artboard.width, artboard.height, type === 'transparent' ? { type } : { type, color: artboard.background.type === 'color' ? artboard.background.color : '#ffffff' }); }}><option value="color">Kolor</option><option value="transparent">Przezroczyste</option></select></label>
-            {artboard.background.type === 'color' && <label className="dialog-label">Kolor<input type="color" value={artboard.background.color} onChange={(event) => onUpdateArtboard?.(artboard.width, artboard.height, { type: 'color', color: event.target.value })} /></label>}
-            {gridSettings && <div className="property-grid"><NumberInput data-testid="grid-size" label="Grid" min={0.000001} value={convertUnit(gridSettings.size, 'px', doc.unit)} unit={doc.unit} decimals={2} onChange={(value) => onUpdateGridSettings?.({ ...gridSettings, size: convertUnit(value, doc.unit, 'px') })} /><NumberInput data-testid="grid-subdivisions" label="Sub" min={1} value={gridSettings.subdivisions} unit="×" decimals={0} onChange={(value) => onUpdateGridSettings?.({ ...gridSettings, subdivisions: Math.max(1, Math.round(value)) })} /></div>}
-            <p className="panel-note">Rozmiar artboardu zmienia model świata. Canvas zawsze pozostaje wielkości viewportu.</p>
-          </section>
-        </> : null}
+        </> : (
+          <DocumentProperties document={doc} onExecuteCommand={() => {}} />
+        )}
       </div>
     </aside>
   );

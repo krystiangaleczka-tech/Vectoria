@@ -20,3 +20,7 @@ export * from './geometry/text-outlines.js';
 export * from './geometry/image-trace.js';
 export * from './commands/index.js';
 export { DOCUMENT_PRESETS, type DocumentPreset } from './model/presets.js';
+export * from './clipboard/clipboard-fragment.js';
+export * from './query/find-text.js';
+export * from './query/find-style.js';
+export * from './query/select-same.js';

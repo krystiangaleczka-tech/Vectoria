@@ -42,6 +42,13 @@ export interface TopBarProps {
   onOpenWebFontImport?: () => void;
   outlineMode?: boolean;
   onToggleOutlineMode?: () => void;
+  onCopy: () => void;
+  onCut: () => void;
+  onPaste: () => void;
+  onDuplicate: () => void;
+  onSelectSame: (target: import('@vectoria/core').SelectSameTarget) => void;
+  onOpenCommandPalette?: () => void;
+  onOpenShortcutConfig?: () => void;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -82,6 +89,13 @@ export const TopBar: React.FC<TopBarProps> = ({
   onOpenWebFontImport,
   outlineMode,
   onToggleOutlineMode,
+  onCopy,
+  onCut,
+  onPaste,
+  onDuplicate,
+  onSelectSame,
+  onOpenCommandPalette,
+  onOpenShortcutConfig,
 }) => {
   return (
     <header
@@ -132,6 +146,13 @@ export const TopBar: React.FC<TopBarProps> = ({
         onOpenWebFontImport={onOpenWebFontImport}
         outlineMode={outlineMode}
         onToggleOutlineMode={onToggleOutlineMode}
+        onCopy={onCopy}
+        onCut={onCut}
+        onPaste={onPaste}
+        onDuplicate={onDuplicate}
+        onSelectSame={onSelectSame}
+        onOpenCommandPalette={onOpenCommandPalette}
+        onOpenShortcutConfig={onOpenShortcutConfig}
       />
       <DocumentTabs documentName={documentName} dirty={saveStatus !== 'saved-locally'} />
     </header>

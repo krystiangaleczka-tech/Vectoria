@@ -32,6 +32,8 @@ export { ShapeTool, type ShapeToolState, type ShapeToolPointerEvent, type ShapeT
 export { PolygonTool } from './tools/polygon-tool.js';
 export { StarTool } from './tools/star-tool.js';
 export { ArcTool } from './tools/arc-tool.js';
+export * from './commands/command-registry.js';
+export * from './commands/shortcut-manager.js';
 export { PieTool } from './tools/pie-tool.js';
 export { RingTool } from './tools/ring-tool.js';
 export { SpiralTool } from './tools/spiral-tool.js';

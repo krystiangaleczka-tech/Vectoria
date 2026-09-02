@@ -139,4 +139,5 @@ export {
   type HierarchyDropTarget,
   type HierarchyValidationResult,
 } from './hierarchy-commands.js';
-
+export { PasteObjectsCommand, type PasteMode } from './paste-commands.js';
+export { DuplicateTransformCommand } from './duplicate-transform-command.js';
