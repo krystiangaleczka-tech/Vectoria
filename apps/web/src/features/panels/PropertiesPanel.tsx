@@ -98,6 +98,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   onAlign,
   onDistribute,
   onReorder,
+  onExecuteCommand,
 
   selection = { objectIds: [], nodeIds: [], mode: 'object' },
   onUpdatePathNode,
@@ -815,9 +816,9 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                 {selected.style.stroke && <Button size="sm" variant="ghost" disabled={selected.locked} onClick={() => onPathAction?.({ type: 'stroke-to-path', objectId: selected.id })}>Stroke to path</Button>}
              </div>
           </section>
-        </> : (
-          <DocumentProperties document={doc} onExecuteCommand={() => {}} />
-        )}
+        </> : onExecuteCommand ? (
+          <DocumentProperties document={doc} onExecuteCommand={onExecuteCommand} />
+        ) : null}
       </div>
     </aside>
   );

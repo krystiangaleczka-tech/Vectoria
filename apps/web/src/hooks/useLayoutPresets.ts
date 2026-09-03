@@ -61,5 +61,13 @@ export function useLayoutPresets() {
     });
   }, []);
 
-  return { presets, savePreset, removePreset };
+  const applyPreset = useCallback((preset: LayoutPreset) => {
+    try {
+      localStorage.setItem('vectoria.workspace-layout.v1', JSON.stringify(preset));
+    } catch (e) {
+      console.warn('Failed to apply layout preset.', e);
+    }
+  }, []);
+
+  return { presets, savePreset, removePreset, applyPreset };
 }

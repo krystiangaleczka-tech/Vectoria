@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { ShortcutCombo } from '@vectoria/editor-engine';
+import { DEFAULT_SHORTCUTS, type ShortcutBinding, type ShortcutCombo } from '@vectoria/editor-engine';
 
 export interface ShortcutSetting {
   actionId: string;
@@ -7,8 +7,9 @@ export interface ShortcutSetting {
 }
 
 const SHORTCUTS_STORAGE_KEY = 'vectoria.shortcuts.v1';
+const DEFAULTS: ShortcutBinding[] = DEFAULT_SHORTCUTS as ShortcutBinding[];
 
-export function useShortcutSettings(defaultShortcuts: ShortcutSetting[]) {
+export function useShortcutSettings(defaultShortcuts: ShortcutSetting[] = DEFAULTS) {
   const [shortcuts, setShortcuts] = useState<ShortcutSetting[]>(defaultShortcuts);
   const [isLoaded, setIsLoaded] = useState(false);
 

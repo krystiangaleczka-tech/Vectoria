@@ -215,6 +215,7 @@ function parseSvgDocument(svgText: string, name: string, entries: ImportReportEn
     const type: ArrowheadStyle['type'] = childTag === 'circle' ? 'circle' : childTag === 'rect' ? 'square' : / Z\s*$/i.test(child.getAttribute('d') ?? '') && (child.getAttribute('d') ?? '').match(/L/g)?.length === 2 ? 'triangle' : 'arrow';
     markers.set(id, { type, size });
   }
+  const elementIds = new Set(elements.map((e) => e.getAttribute('id')).filter((eid): eid is string => Boolean(eid)));
   for (const element of elements) {
     const id = generateId();
     const base = { id, name: element.getAttribute('id') || `${element.nodeName} ${objectIds.length + 1}`, layerId, visible: true, locked: false, style: styleFor(element, definitions) };
@@ -292,8 +293,12 @@ function parseSvgDocument(svgText: string, name: string, entries: ImportReportEn
     }
 
     if (object) {
+      entries.push({ category: 'editable', code: 'svg.object.mapped', message: `Zmapowano ${tag} jako obiekt edytowalny` });
       if (flattened) {
         entries.push({ category: 'flattened', code: 'svg.transform.non-affine', message: `Uproszczono transformacje nieafiniczne obiektu ${tag}` });
+      }
+      if (tag === 'text' && object.type === 'text' && object.pathId && !elementIds.has(object.pathId) && !definitions.has(object.pathId)) {
+        entries.push({ category: 'simplified', code: 'svg.textpath.missing', message: 'Tekst na ścieżce spłaszczonej — ścieżka nie istnieje w dokumencie' });
       }
       objects[id] = object;
 
@@ -301,10 +306,20 @@ function parseSvgDocument(svgText: string, name: string, entries: ImportReportEn
     }
   }
 
+  // Check for unresolved pattern / url fills simplified to empty fill
+  for (const element of elements) {
+    const fillAttr = element.getAttribute('fill');
+    const ref = fillAttr?.match(/^url\(#(.+)\)$/)?.[1];
+    if (ref && !definitions.has(ref)) {
+      entries.push({ category: 'simplified', code: 'svg.fill.unresolved', message: 'Wypełnienie url(#…) zredukowane do braku wypełnienia' });
+    }
+  }
+
   // Clip paths and masks become MaskGroups: the first shape inside the def is
   // the mask geometry, elements referencing it via clip-path/mask are content.
 
-  for (const _ of Array.from(root.querySelectorAll('filter'))) {
+  const filterCount = root.querySelectorAll('filter').length;
+  for (let i = 0; i < filterCount; i++) {
     entries.push({ category: 'unsupported', code: 'svg.filter.unsupported', message: 'Filtry SVG nie są obsługiwane' });
   }
   const defShapes = Array.from(root.querySelectorAll('clipPath, mask')).filter((def) => !def.closest('clipPath, mask'));

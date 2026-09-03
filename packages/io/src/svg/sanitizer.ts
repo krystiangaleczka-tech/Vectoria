@@ -43,6 +43,32 @@ export function sanitizeSvg(svgText: string, limits: typeof SVG_LIMITS = SVG_LIM
   result = result.replace(/\s+(?:xlink:)?href\s*=\s*(?:"javascript:[^"]*"|'javascript:[^']*'|javascript:[^\s>]*)/gi, '');
   result = result.replace(/\s+src\s*=\s*(?:"javascript:[^"]*"|'javascript:[^']*'|javascript:[^\s>]*)/gi, '');
 
+  // Strip vbscript: and disallowed data: URIs (allowlist: raster images only).
+  // data:image/svg+xml is intentionally blocked — an SVG payload can carry script.
+  const DATA_URI_ALLOWED = /^data:image\/(?:png|jpeg|webp|gif);base64,[a-z0-9+/=]+$/i;
+  const uriAttr = /\s(?:xlink:)?(?:href|src)\s*=\s*("data:[^"]*"|'data:[^']*'|data:[^\s>]*)/gi;
+  const blockedData = [...svgText.matchAll(uriAttr)]
+    .map((m) => m[1]!.replace(/^["']|["']$/g, ''))
+    .filter((uri) => !DATA_URI_ALLOWED.test(uri));
+
+  const vbscriptMatches = result.match(/\s(?:xlink:)?(?:href|src)\s*=\s*(?:"vbscript:[^"]*"|'vbscript:[^']*'|vbscript:[^\s>]*)/gi) ?? [];
+  result = result.replace(
+    /\s(?:xlink:)?(?:href|src)\s*=\s*(?:"vbscript:[^"]*"|'vbscript:[^']*'|vbscript:[^\s>]*)/gi,
+    '',
+  );
+  for (const uri of blockedData) {
+    const escaped = uri.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    result = result.replace(new RegExp(`\\s(?:xlink:)?(?:href|src)\\s*=\\s*(?:"${escaped}"|'${escaped}'|${escaped})`, 'gi'), '');
+  }
+  const totalBlocked = blockedData.length + vbscriptMatches.length;
+  if (totalBlocked > 0) {
+    warnings.push({
+      category: 'unsupported',
+      code: 'svg.uri.blocked',
+      message: `Usunięto ${totalBlocked} niedozwolonych URI (vbscript:/data:)`,
+    });
+  }
+
   // Strip external references http/https
   const external = result.match(/\s(?:xlink:)?href\s*=\s*"(?:https?:)?\/\/[^"]*"/gi) ?? [];
   if (external.length > 0) {

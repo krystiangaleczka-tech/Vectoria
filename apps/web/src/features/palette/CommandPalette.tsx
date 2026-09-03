@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import type { EditorCommand } from '@vectoria/editor-engine';
+import type { EditorCommand, EditorContext } from '@vectoria/editor-engine';
 
 export interface CommandPaletteProps {
   isOpen: boolean;
   onClose: () => void;
   commands: EditorCommand[];
+  ctx: EditorContext | null;
   onExecute: (commandId: string) => void;
 }
 
@@ -12,15 +13,15 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   isOpen,
   onClose,
   commands,
-  onExecute
+  ctx,
+  onExecute,
 }) => {
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
-
-  const filteredCommands = commands.filter(c => 
-    c.title.toLowerCase().includes(query.toLowerCase()) || 
+  const filteredCommands = commands.filter(c =>
+    c.title.toLowerCase().includes(query.toLowerCase()) ||
     c.id.toLowerCase().includes(query.toLowerCase())
   );
 
@@ -37,18 +38,23 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       onClose();
       e.preventDefault();
     } else if (e.key === 'ArrowDown') {
-      setSelectedIndex(prev => (prev + 1) % filteredCommands.length);
+      setSelectedIndex(prev => (prev + 1) % Math.max(1, filteredCommands.length));
       e.preventDefault();
     } else if (e.key === 'ArrowUp') {
-      setSelectedIndex(prev => (prev - 1 + filteredCommands.length) % filteredCommands.length);
+      setSelectedIndex(prev => (prev - 1 + Math.max(1, filteredCommands.length)) % Math.max(1, filteredCommands.length));
       e.preventDefault();
     } else if (e.key === 'Enter') {
       const selected = filteredCommands[selectedIndex];
       if (selected) {
-        onExecute(selected.id);
-        onClose();
+        const enabled = ctx ? selected.enabled(ctx) : true;
+        if (enabled) {
+          onExecute(selected.id);
+          onClose();
+        }
       }
       e.preventDefault();
+    } else if (e.key === 'Tab') {
+      e.preventDefault(); // trap focus inside dialog
     }
   };
 
@@ -95,43 +101,57 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
           boxSizing: 'border-box'
         }}
       />
-      <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+      <div style={{ maxHeight: '300px', overflowY: 'auto' }} role="listbox">
         {filteredCommands.length === 0 ? (
           <div style={{ padding: '16px', color: 'var(--color-text-secondary, #aaa)', textAlign: 'center' }}>
             Brak wyników
           </div>
         ) : (
-          filteredCommands.map((cmd, idx) => (
-            <div
-              key={cmd.id}
-              onClick={() => {
-                onExecute(cmd.id);
-                onClose();
-              }}
-              style={{
-                padding: '12px 16px',
-                cursor: 'pointer',
-                backgroundColor: idx === selectedIndex ? 'var(--color-bg-active, rgba(255, 255, 255, 0.1))' : 'transparent',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center'
-              }}
-              onMouseEnter={() => setSelectedIndex(idx)}
-            >
-              <span style={{ color: 'var(--color-text-primary, #fff)' }}>{cmd.title}</span>
-              {cmd.shortcut && (
-                <span style={{ 
-                  fontSize: '12px', 
-                  color: 'var(--color-text-secondary, #aaa)',
-                  backgroundColor: 'var(--color-bg-base)',
-                  padding: '2px 6px',
-                  borderRadius: '4px'
-                }}>
-                  {cmd.shortcut}
-                </span>
-              )}
-            </div>
-          ))
+          filteredCommands.map((cmd, idx) => {
+            const enabled = ctx ? cmd.enabled(ctx) : true;
+            const reason = cmd.enabledReason;
+            return (
+              <div
+                key={cmd.id}
+                role="option"
+                aria-selected={idx === selectedIndex}
+                aria-disabled={!enabled}
+                onClick={() => {
+                  if (!enabled) return;
+                  onExecute(cmd.id);
+                  onClose();
+                }}
+                style={{
+                  padding: '12px 16px',
+                  cursor: enabled ? 'pointer' : 'not-allowed',
+                  opacity: enabled ? 1 : 0.5,
+                  backgroundColor: idx === selectedIndex ? 'var(--color-bg-active, rgba(255, 255, 255, 0.1))' : 'transparent',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
+                }}
+                onMouseEnter={() => setSelectedIndex(idx)}
+              >
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                  <span style={{ color: 'var(--color-text-primary, #fff)' }}>{cmd.title}</span>
+                  {!enabled && reason && (
+                    <span style={{ fontSize: '11px', color: 'var(--color-text-secondary, #aaa)' }}>{reason}</span>
+                  )}
+                </div>
+                {cmd.shortcut && (
+                  <span style={{ 
+                    fontSize: '12px', 
+                    color: 'var(--color-text-secondary, #aaa)',
+                    backgroundColor: 'var(--color-bg-base)',
+                    padding: '2px 6px',
+                    borderRadius: '4px'
+                  }}>
+                    {cmd.shortcut}
+                  </span>
+                )}
+              </div>
+            );
+          })
         )}
       </div>
     </div>

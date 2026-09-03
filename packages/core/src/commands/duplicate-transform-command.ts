@@ -1,67 +1,63 @@
 import type { Command } from './command.js';
-import type { DocumentModel, ObjectId, SceneObject } from '../model/types.js';
+import type { DocumentModel, ObjectId, SceneObject, Transform2D } from '../model/types.js';
+import { isValidTransform } from '../model/transform.js';
 import { cloneObjectsWithNewIds } from '../clipboard/clipboard-fragment.js';
 
-/** Duplicate an object and apply a cumulative transformation to the copy.
- *  Used for 'Duplicate & Transform' (Cmd+D). */
+export interface DuplicateTransformOptions {
+  readonly dx?: number;
+  readonly dy?: number;
+  readonly rotationDeg?: number;
+}
+
+/** Duplicate objects and apply a delta transform to each copy (transform-again). */
 export class DuplicateTransformCommand implements Command {
   readonly type = 'DuplicateTransform';
-  readonly description = 'Duplicate and transform';
+  readonly description: string;
   private createdIds: ObjectId[] = [];
 
   constructor(
     private readonly sourceIds: readonly ObjectId[],
-  ) {}
+    private readonly options: DuplicateTransformOptions = { dx: 20, dy: 20 },
+  ) {
+    const { rotationDeg = 0 } = this.options;
+    this.description = rotationDeg !== 0 ? 'Duplicate and transform' : 'Duplicate';
+  }
 
   execute(doc: DocumentModel): DocumentModel {
+    const { dx = 0, dy = 0, rotationDeg = 0 } = this.options;
+    if (![dx, dy, rotationDeg].every(Number.isFinite)) return doc;
+
     const newObjects = { ...doc.objects };
     const newLayers = { ...doc.layers };
     let changed = false;
 
-    // We assume the caller (EditorApp/Tool) has just performed a transform on the source,
-    // but the task says: "Duplicate ze skumulowaną transformacją (transform-again na kopi)".
-    // Actually, the plan mentions delta transform applied to the copy.
-    // Wait, let's implement basic duplication first. If delta is needed, we should probably
-    // receive the delta or just do standard +20 offset if no delta provided?
-    // Wait, the plan says: "Klon + aplikuje deltę transform (position/rotation/scale) do kopii".
-    // Let's modify the constructor to accept the delta, or just do the standard duplication for now.
-    
-    // Let's check how the caller uses it. "Cmd+D fixed offset; DuplicateObjectsCommand; RepeatTransformCommand".
-    // Let's just create basic DuplicateTransformCommand which offsets by +20/+20 for now.
-    // Or wait, plan says: `DuplicateTransformCommand (klon + delta transform na kopii)`.
-
-    // Let's just create it with +20/+20 offset to satisfy the tests.
     for (const layerId of doc.layerIds) {
       const layer = doc.layers[layerId];
       if (!layer || layer.locked) continue;
-      
+
       const layerSources = layer.objectIds
         .filter(id => this.sourceIds.includes(id))
         .map(id => doc.objects[id])
         .filter((o): o is SceneObject => o !== undefined && !o.locked);
-        
+
       if (layerSources.length === 0) continue;
 
       const objectIds = [...layer.objectIds];
       const clones = cloneObjectsWithNewIds(layerSources);
-      
+
       for (const clone of clones) {
-        // Delta transform: simple offset for now
-        const modifiedClone = {
-          ...clone,
-          transform: {
-            ...clone.transform,
-            position: {
-              x: clone.transform.position.x + 20,
-              y: clone.transform.position.y + 20,
-            }
-          }
+        const transform: Transform2D = {
+          ...clone.transform,
+          position: { x: clone.transform.position.x + dx, y: clone.transform.position.y + dy },
+          rotation: clone.transform.rotation + (rotationDeg * Math.PI) / 180,
         };
+        if (!isValidTransform(transform)) continue;
+        const modifiedClone: SceneObject = { ...clone, transform };
         newObjects[modifiedClone.id] = modifiedClone;
         objectIds.push(modifiedClone.id);
         this.createdIds.push(modifiedClone.id);
       }
-      
+
       newLayers[layerId] = { ...layer, objectIds };
       changed = true;
     }
@@ -81,3 +77,4 @@ export class DuplicateTransformCommand implements Command {
     return { ...doc, objects, layers, updatedAt: new Date().toISOString() };
   }
 }
+

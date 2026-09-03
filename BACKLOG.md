@@ -505,33 +505,33 @@ Wymóg stopniowego rozszerzania artboardu o 10% wynika bezpośrednio z potrzeby 
 
 ## EPIC-14: Precyzja i produktywność
 
-- [ ] **PROD-001** Zbudować kontekstowy panel Properties
-- [ ] **PROD-002** Dodać Inspector dokumentu
-- [ ] **PROD-003** Dodać Inspector obiektu
-- [ ] **PROD-004** Dodać Inspector tekstu
-- [ ] **PROD-005** Dodać Inspector fill
-- [ ] **PROD-006** Dodać Inspector stroke
-- [ ] **PROD-007** Obsłużyć wyrażenia matematyczne w polach liczbowych
-- [ ] **PROD-008** Obsłużyć wartość procentową w polach liczbowych
-- [ ] **PROD-009** Dodać szybkie przełączanie jednostek
-- [ ] **PROD-010** Dodać copy
-- [ ] **PROD-011** Dodać paste z zachowaniem stylu
-- [ ] **PROD-012** Dodać paste z zachowaniem pozycji
-- [ ] **PROD-013** Dodać paste in place
-- [ ] **PROD-014** Dodać paste on all artboards
-- [ ] **PROD-015** Dodać duplicate and transform
-- [ ] **PROD-016** Dodać Select Same: fill
-- [ ] **PROD-017** Dodać Select Same: stroke
-- [ ] **PROD-018** Dodać Select Same: font
-- [ ] **PROD-019** Dodać Select Same: rozmiar
-- [ ] **PROD-020** Dodać Select Same: opacity
-- [ ] **PROD-021** Dodać Select Same: typ obiektu
-- [ ] **PROD-022** Dodać Find and Replace Object
-- [ ] **PROD-023** Dodać Find and Replace Style
-- [ ] **PROD-024** Zaimplementować Command Palette
-- [ ] **PROD-025** Dodać domyślne skróty: V, A, P, T, R, L, Space
-- [ ] **PROD-026** Dodać konfigurację skrótów klawiszowych
-- [ ] **PROD-027** Dodać własne presety interfejsu
+- [x] **PROD-001** Zbudować kontekstowy panel Properties
+- [x] **PROD-002** Dodać Inspector dokumentu
+- [x] **PROD-003** Dodać Inspector obiektu
+- [x] **PROD-004** Dodać Inspector tekstu
+- [x] **PROD-005** Dodać Inspector fill
+- [x] **PROD-006** Dodać Inspector stroke
+- [x] **PROD-007** Obsłużyć wyrażenia matematyczne w polach liczbowych
+- [x] **PROD-008** Obsłużyć wartość procentową w polach liczbowych
+- [x] **PROD-009** Dodać szybkie przełączanie jednostek
+- [x] **PROD-010** Dodać copy
+- [x] **PROD-011** Dodać paste z zachowaniem stylu
+- [x] **PROD-012** Dodać paste z zachowaniem pozycji
+- [x] **PROD-013** Dodać paste in place
+- [x] **PROD-014** Dodać paste on all artboards
+- [x] **PROD-015** Dodać duplicate and transform
+- [x] **PROD-016** Dodać Select Same: fill
+- [x] **PROD-017** Dodać Select Same: stroke
+- [x] **PROD-018** Dodać Select Same: font
+- [x] **PROD-019** Dodać Select Same: rozmiar
+- [x] **PROD-020** Dodać Select Same: opacity
+- [x] **PROD-021** Dodać Select Same: typ obiektu
+- [x] **PROD-022** Dodać Find and Replace Object
+- [x] **PROD-023** Dodać Find and Replace Style
+- [x] **PROD-024** Zaimplementować Command Palette
+- [x] **PROD-025** Dodać domyślne skróty: V, A, P, T, R, L, Space
+- [x] **PROD-026** Dodać konfigurację skrótów klawiszowych
+- [x] **PROD-027** Dodać własne presety interfejsu
 
 ## EPIC-15: Import, format i zapis
 
@@ -654,43 +654,7 @@ Wymóg stopniowego rozszerzania artboardu o 10% wynika bezpośrednio z potrzeby 
 - [ ] **AI-015** Dodać preview i potwierdzenie zmian proponowanych przez AI
 - [ ] **AI-016** Dodać Undo dla każdej operacji AI
 
-## Zakres wersji 0.1
 
-Wersja 0.1 ma umożliwiać realne otworzenie SVG, poprawienie go, narysowanie prostego logo/ikony i eksport bez utraty płynności. W tym etapie najważniejsze są: dokument, kamera, Select, Node, Pen, kształty, warstwy, fill/stroke, Undo/Redo, snap, align oraz SVG/PNG I/O. 
 
-- [ ] Zrealizować `CORE-001–010`
-- [ ] Zrealizować `PERF-001–081`
-- [ ] Zrealizować `DOC-001–029`
-- [ ] Zrealizować `HIST-001–009`
-- [ ] Zrealizować `SEL-001–037`
-- [ ] Zrealizować `SHAPE-001–021`
-- [ ] Zrealizować `PATH-001–031`
-- [ ] Zrealizować `STYLE-001–022`
-- [ ] Zrealizować `LAYER-001–017`
-- [ ] Zrealizować `PROD-001–026`
-- [ ] Zrealizować `IO-001–012` oraz `IO-017–019`
-- [ ] Zrealizować `EXPORT-001–011` oraz `EXPORT-015–017`
-- [ ] Zrealizować `UX-001–015`
-
-## Zakres wersji 0.2
-
-- [ ] Zrealizować `DRAW-001–017`
-- [ ] Zrealizować `EDIT-001–018`
-- [ ] Zrealizować `BOOL-001–016`
-- [ ] Zrealizować `TEXT-001–032`
-- [ ] Zrealizować `STYLE-023–041`
-- [ ] Zrealizować `ASSET-001–015`
-- [ ] Zrealizować `FX-001–010`
-- [ ] Zrealizować pełny Export for Screens i PDF export
-- [ ] Zrealizować wiele artboardów oraz rozwinięte zarządzanie assetami
-
-## Zakres wersji 0.3+
-
-- [ ] Zrealizować trace image, symbole, komponenty i Brand Kit
-- [ ] Zrealizować współdzielenie, komentarze, wersjonowanie chmurowe i publiczny preview
-- [ ] Zrealizować funkcje AI wspierające istniejący workflow
-- [ ] Zrealizować realtime collaboration
-- [ ] Zrealizować EPS/AI/CDR best-effort import
-- [ ] Zrealizować rozbudowane efekty, brush system, mesh, perspective i podstawowe 3D
 
 Najważniejsza kolejność implementacji pozostaje niezmienna: **silnik wydajności → kamera/render → zaznaczanie → Pen/Node → model dokumentu i historia → SVG I/O → kolor/warstwy → Boolean → tekst**. Dzięki temu Vectoria nie stanie się tylko listą narzędzi, ale pozostanie płynnym edytorem nawet przy dużych dokumentach i częstych zmianach ich wymiarów.

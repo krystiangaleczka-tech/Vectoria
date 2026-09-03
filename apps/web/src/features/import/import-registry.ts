@@ -1,4 +1,4 @@
-import { FormatProviderRegistry, svgProvider, epsProvider, cdrProvider, importVctFile } from '@vectoria/io';
+import { FormatProviderRegistry, svgProvider, epsProvider, cdrProvider, aiProvider, importVctFile } from '@vectoria/io';
 import { countReport } from '@vectoria/core';
 
 export const importRegistry = new FormatProviderRegistry();
@@ -6,6 +6,7 @@ export const importRegistry = new FormatProviderRegistry();
 importRegistry.register(svgProvider);
 importRegistry.register(epsProvider);
 importRegistry.register(cdrProvider);
+importRegistry.register(aiProvider);
 
 // VCT provider
 importRegistry.register({

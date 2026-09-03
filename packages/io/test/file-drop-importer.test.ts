@@ -82,4 +82,31 @@ describe('processDroppedFile (ASSET-001...005)', () => {
       expect(result.image.transform.position).toEqual({ x: 200, y: 150 });
     }
   });
+
+  it('imports raster image (JPG) as ImageObject', async () => {
+    const file = makeFile('fake-jpg-data', 'photo.jpg', 'image/jpeg');
+    const result = await processDroppedFile(file, { x: 50, y: 75 }, 'layer-1');
+
+    expect(result.kind).toBe('image');
+    if (result.kind === 'image') {
+      expect(result.image.type).toBe('image');
+      expect(result.image.name).toBe('photo');
+      expect(result.image.source.type).toBe('embed');
+      expect(result.image.transform.position).toEqual({ x: 50, y: 75 });
+    }
+  });
+
+  it('imports raster image (WebP) as ImageObject', async () => {
+    const file = makeFile('fake-webp-data', 'graphic.webp', 'image/webp');
+    const result = await processDroppedFile(file, { x: 10, y: 20 }, 'layer-1');
+
+    expect(result.kind).toBe('image');
+    if (result.kind === 'image') {
+      expect(result.image.type).toBe('image');
+      expect(result.image.name).toBe('graphic');
+      expect(result.image.source.type).toBe('embed');
+      expect(result.image.transform.position).toEqual({ x: 10, y: 20 });
+    }
+  });
 });
+

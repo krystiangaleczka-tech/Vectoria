@@ -17,6 +17,7 @@ import {
   DeleteObjectsCommand,
   PasteObjectsCommand,
   DuplicateTransformCommand,
+  ReplaceStylesBatchCommand,
   createClipboardFragment,
   TransformObjectsCommand,
   SetRectangleGeometryCommand,
@@ -109,7 +110,18 @@ import {
   type ImageObject,
   type ImageCrop,
 } from '@vectoria/core';
-import { Camera, emptySelection, selectionService, GeometryOperationSession, BooleanOperationSession, CommandRegistry } from '@vectoria/editor-engine';
+import {
+  Camera,
+  emptySelection,
+  selectionService,
+  GeometryOperationSession,
+  BooleanOperationSession,
+  CommandRegistry,
+  ShortcutManager,
+  DEFAULT_SHORTCUTS,
+  type ShortcutBinding,
+  type EditorContext,
+} from '@vectoria/editor-engine';
 import {
   bootstrapDocument,
   saveDocumentSnapshot,
@@ -147,6 +159,7 @@ import { TraceImageDialog } from '../features/dialogs/TraceImageDialog.js';
 import { CommandPalette } from '../features/palette/CommandPalette.js';
 import { ShortcutConfigDialog } from '../features/dialogs/ShortcutConfigDialog.js';
 import { useShortcutSettings } from '../hooks/useShortcutSettings.js';
+import { useLayoutPresets } from '../hooks/useLayoutPresets.js';
 import { useImportController } from '../features/import/useImportController.js';
 import { importRegistry } from '../features/import/import-registry.js';
 import { ImportDialog } from '../features/import/ImportDialog.js';
@@ -219,7 +232,13 @@ export const EditorApp: React.FC = () => {
   const history = useMemo(() => new CommandHistory(), []);
   const camera = useMemo(() => new Camera(), []);
   
-  const { shortcuts, saveShortcuts, resetShortcuts } = useShortcutSettings([]);
+  const { shortcuts, saveShortcuts, resetShortcuts } = useShortcutSettings(DEFAULT_SHORTCUTS as ShortcutBinding[]);
+  const { presets, savePreset } = useLayoutPresets();
+
+  const shortcutManager = useMemo(
+    () => new ShortcutManager(shortcuts, isMacPlatform()),
+    [shortcuts],
+  );
 
 
 
@@ -661,21 +680,24 @@ export const EditorApp: React.FC = () => {
     handleExecuteCommand(new DeleteObjectsCommand(selectedObjectIds));
   }, [doc, selectedObjectIds, handleExecuteCommand]);
 
-  const handlePaste = useCallback(() => {
+  const handlePaste = useCallback((mode: 'offset' | 'in-place' | 'all-artboards' = 'offset') => {
     if (!doc) return;
+    const pasteFragment = (fragment: import('@vectoria/core').ClipboardFragment) => {
+      const artboardIds = mode === 'all-artboards'
+        ? Object.values(doc.artboards).map((a) => a.id)
+        : [];
+      handleExecuteCommand(new PasteObjectsCommand(fragment, doc.activeLayerId, mode, artboardIds));
+    };
     void readFromSystemClipboard().then(systemFragment => {
       if (systemFragment) {
-        if (systemFragment.fragment) {
-          handleExecuteCommand(new PasteObjectsCommand(systemFragment.fragment, doc.activeLayerId, 'offset', []));
-        } else if (systemFragment.svgText) {
-          const file = new File([systemFragment.svgText], "Pasted SVG.svg", { type: "image/svg+xml" });
+        if (systemFragment.fragment) pasteFragment(systemFragment.fragment);
+        else if (systemFragment.svgText && mode === 'offset') {
+          const file = new File([systemFragment.svgText], 'Pasted SVG.svg', { type: 'image/svg+xml' });
           void importController.start(file);
         }
         return;
       }
-      if (clipboardRef.current.length > 0) {
-        handleExecuteCommand(new PasteObjectsCommand(createClipboardFragment(clipboardRef.current), doc.activeLayerId, 'offset', []));
-      }
+      if (clipboardRef.current.length > 0) pasteFragment(createClipboardFragment(clipboardRef.current));
     });
   }, [doc, handleExecuteCommand, importController]);
 
@@ -683,6 +705,21 @@ export const EditorApp: React.FC = () => {
     if (!doc || selectedObjectIds.length === 0) return;
     handleExecuteCommand(new DuplicateTransformCommand(selectedObjectIds));
   }, [doc, selectedObjectIds, handleExecuteCommand]);
+
+  const handleReplaceStyles = useCallback((updates: ReadonlyMap<ObjectId, Partial<ObjectStyle>>) => {
+    if (updates.size === 0) return;
+    handleExecuteCommand(new ReplaceStylesBatchCommand(updates));
+  }, [handleExecuteCommand]);
+
+  const handleSaveLayoutPreset = useCallback(() => {
+    savePreset({
+      id: crypto.randomUUID(),
+      name: `Preset ${presets.length + 1}`,
+      rightDockOpen,
+      activePanel: activeDockPanel,
+      theme,
+    });
+  }, [savePreset, presets.length, rightDockOpen, activeDockPanel, theme]);
 
   // Property panel mutation handlers (commands)
   const handleUpdatePosition = useCallback(
@@ -1231,7 +1268,8 @@ export const EditorApp: React.FC = () => {
     const targetLayerId = doc.activeLayerId;
     for (let i = 0; i < files.length; i++) {
       const file = files[i]!;
-      if (file.name.toLowerCase().endsWith('.vct')) {
+      const lowerName = file.name.toLowerCase();
+      if (lowerName.endsWith('.vct') || lowerName.endsWith('.ai') || lowerName.endsWith('.eps') || lowerName.endsWith('.cdr')) {
         void importController.start(file);
         continue;
       }
@@ -1383,9 +1421,44 @@ export const EditorApp: React.FC = () => {
       execute: () => handlePaste()
     });
     r.register({
+      id: 'edit.paste-in-place', title: 'Wklej na miejscu', shortcut: '⇧⌘V',
+      enabled: () => true,
+      execute: () => handlePaste('in-place')
+    });
+    r.register({
+      id: 'edit.paste-all-artboards', title: 'Wklej na wszystkich artboardach',
+      enabled: () => true,
+      execute: () => handlePaste('all-artboards')
+    });
+    r.register({
       id: 'select.same-fill', title: 'Zaznacz takie same: wypełnienie',
       enabled: () => selectedObjectIds.length === 1,
       execute: () => handleSelectSame('fill')
+    });
+    r.register({
+      id: 'select.same-stroke', title: 'Zaznacz takie same: obrys',
+      enabled: () => selectedObjectIds.length === 1,
+      execute: () => handleSelectSame('stroke')
+    });
+    r.register({
+      id: 'select.same-font', title: 'Zaznacz takie same: czcionka',
+      enabled: () => selectedObjectIds.length === 1,
+      execute: () => handleSelectSame('font')
+    });
+    r.register({
+      id: 'select.same-size', title: 'Zaznacz takie same: rozmiar',
+      enabled: () => selectedObjectIds.length === 1,
+      execute: () => handleSelectSame('size')
+    });
+    r.register({
+      id: 'select.same-opacity', title: 'Zaznacz takie same: krycie',
+      enabled: () => selectedObjectIds.length === 1,
+      execute: () => handleSelectSame('opacity')
+    });
+    r.register({
+      id: 'select.same-type', title: 'Zaznacz takie same: typ obiektu',
+      enabled: () => selectedObjectIds.length === 1,
+      execute: () => handleSelectSame('type')
     });
     r.register({
       id: 'view.command-palette', title: 'Paleta poleceń', shortcut: '⌘K',
@@ -1410,114 +1483,80 @@ export const EditorApp: React.FC = () => {
     return r;
   }, [handlePaste, handleSelectSame, handleFitArtboard, handleZoom100, selectedObjectIds.length]);
 
+  const paletteCtx = useMemo<EditorContext | null>(() => (doc ? {
+    doc,
+    selection: { objectIds: selectedObjectIds, nodeIds: [], mode: 'object' },
+    execute: handleExecuteCommand,
+    report: () => {},
+  } : null), [doc, selectedObjectIds, handleExecuteCommand]);
+
+  const runShortcutAction = useCallback((actionId: string, e: KeyboardEvent) => {
+    switch (actionId) {
+      case 'clipboard.copy': handleCopy(); break;
+      case 'clipboard.cut': handleCut(); break;
+      case 'clipboard.paste': handlePaste(); break;
+      case 'clipboard.paste-in-place': handlePaste('in-place'); break;
+      case 'clipboard.paste-all-artboards': handlePaste('all-artboards'); break;
+      case 'edit.duplicate': handleDuplicate(); break;
+      case 'edit.group': handleGroup(); break;
+      case 'edit.ungroup': handleUngroup(); break;
+      case 'edit.repeat-transform': handleRepeatTransform(); break;
+      case 'edit.undo': handleUndo(); break;
+      case 'edit.redo': handleRedo(); break;
+      case 'edit.outline-mode': handleToggleOutlineMode(); break;
+      case 'view.solo-layer': if (doc?.activeLayerId) handleToggleSoloLayer(doc.activeLayerId); break;
+      case 'view.find-replace': setFindReplaceOpen(true); break;
+      case 'view.command-palette': setCommandPaletteOpen(true); break;
+      case 'view.zoom-100': handleZoom100(); break;
+      case 'view.fit-artboard': handleFitArtboard(); break;
+      default:
+        if (actionId.startsWith('tool.')) {
+          const tool = actionId.slice(5);
+          setActiveTool(tool as ActiveTool);
+        }
+        break;
+    }
+    if (actionId !== 'clipboard.copy' && actionId !== 'clipboard.cut' && actionId !== 'clipboard.paste'
+      && actionId !== 'clipboard.paste-in-place' && actionId !== 'clipboard.paste-all-artboards') {
+      e.preventDefault();
+    }
+  }, [
+    handleCopy,
+    handleCut,
+    handlePaste,
+    handleDuplicate,
+    handleGroup,
+    handleUngroup,
+    handleRepeatTransform,
+    handleUndo,
+    handleRedo,
+    handleToggleOutlineMode,
+    doc,
+    handleToggleSoloLayer,
+    handleZoom100,
+    handleFitArtboard,
+    setActiveTool,
+  ]);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (
-        document.activeElement?.tagName === 'INPUT' ||
-        document.activeElement?.tagName === 'TEXTAREA'
-      ) {
+      const actionId = shortcutManager.match(e);
+      if (!actionId) {
+        if (e.key === 'Escape' && soloLayerId) setSoloLayerId(null);
         return;
       }
-
-      const isMac = isMacPlatform();
-      const cmdKey = isMac ? e.metaKey : e.ctrlKey;
-
-      if (cmdKey && e.key.toLowerCase() === 'c') {
-        handleCopy();
-      } else if (cmdKey && e.key.toLowerCase() === 'x') {
-        handleCut();
-      } else if (cmdKey && e.key.toLowerCase() === 'v') {
-        handlePaste();
-      } else if (cmdKey && e.key.toLowerCase() === 'd') {
-        handleDuplicate();
-      } else if (cmdKey && e.key.toLowerCase() === 'g') {
-        e.preventDefault();
-        if (e.shiftKey) handleUngroup();
-        else handleGroup();
-      } else if (cmdKey && e.shiftKey && e.key.toLowerCase() === 'r') {
-        e.preventDefault();
-        handleRepeatTransform();
-      } else if (cmdKey && e.key.toLowerCase() === 'z') {
-        e.preventDefault();
-        if (e.shiftKey) {
-          handleRedo();
-        } else {
-          handleUndo();
-        }
-      } else if (cmdKey && e.key.toLowerCase() === 'y') {
-        e.preventDefault();
-        handleToggleOutlineMode();
-      } else if (e.altKey && e.key.toLowerCase() === 's') {
-        e.preventDefault();
-        if (doc?.activeLayerId) handleToggleSoloLayer(doc.activeLayerId);
-      } else if (e.key === 'Escape') {
-        if (soloLayerId) {
-          setSoloLayerId(null);
-        }
-      } else if (cmdKey && e.key.toLowerCase() === 'f') {
-        e.preventDefault();
-        setFindReplaceOpen(true);
-      } else if (cmdKey && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        setCommandPaletteOpen(true);
-      } else if (cmdKey && e.key === '0') {
-        e.preventDefault();
-        handleZoom100();
-      } else if (cmdKey && e.key === '1') {
-        e.preventDefault();
-        handleFitArtboard();
-        } else if (!cmdKey && e.shiftKey && !e.altKey && e.key.toLowerCase() === 'e') {
-          setActiveTool('eraser');
-        } else if (!cmdKey && !e.shiftKey && !e.altKey) {
-           if (e.key.toLowerCase() === 'v') {
-             setActiveTool('select');
-            } else if (e.key.toLowerCase() === 'a') {
-              setActiveTool('direct-select');
-            } else if (e.key.toLowerCase() === 'o') {
-              setActiveTool(e.shiftKey ? 'node-lasso' : 'lasso');
-           } else if (e.key.toLowerCase() === 'r') {
-             setActiveTool('rectangle');
-            } else if (e.key.toLowerCase() === 'l') {
-              setActiveTool('ellipse');
-            } else if (e.key === '\\') {
-              setActiveTool('line');
-          } else if (e.key.toLowerCase() === 't') {
-              setActiveTool('text');
-          } else if (e.key.toLowerCase() === 'p') {
-              setActiveTool('pen');
-           } else if (e.key.toLowerCase() === 'n') {
-             setActiveTool('pencil');
-           } else if (e.key.toLowerCase() === 'b') {
-             setActiveTool('brush');
-            } else if (e.key.toLowerCase() === 's') {
-              setActiveTool('smooth');
-            } else if (e.key.toLowerCase() === 'q') {
-              setActiveTool('corner');
-            } else if (e.key.toLowerCase() === 'k') {
-             setActiveTool('knife');
-           } else if (e.key.toLowerCase() === 'c') {
-             setActiveTool('scissors');
-           } else if (e.key.toLowerCase() === 'w') {
-               setActiveTool('width');
-            } else if (e.key.toLowerCase() === 'i') {
-              setActiveTool('eyedropper');
-            } else if (e.key.toLowerCase() === 'g') {
-              setActiveTool('bucket');
-           } else if (e.key.toLowerCase() === 'h') {
-            setActiveTool('hand');
-          } else if (e.key.toLowerCase() === 'z') {
-            setActiveTool('zoom');
-        }
-      }
+      runShortcutAction(actionId, e);
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [doc, selectedObjectId, selectedObjectIds, handleExecuteCommand, handleUndo, handleRedo, handleZoom100, handleFitArtboard, handleSelectObjects, handleGroup, handleUngroup, handleRepeatTransform, handleCopy, handleCut, handlePaste, handleDuplicate]);
+  }, [shortcutManager, runShortcutAction, soloLayerId]);
 
   // Center / Fit artboard on initial load once ready
+  const initialFitDoneRef = useRef(false);
   useEffect(() => {
-    if (doc && (bootstrapState.status === 'ready' || bootstrapState.status === 'recovery-available' || bootstrapState.status === 'recovery-error')) {
+    if (!initialFitDoneRef.current && doc && (bootstrapState.status === 'ready' || bootstrapState.status === 'recovery-available' || bootstrapState.status === 'recovery-error')) {
+      initialFitDoneRef.current = true;
       // Delay slightly to let viewport mount
       const timer = setTimeout(() => {
         handleFitArtboard();
@@ -1654,10 +1693,13 @@ export const EditorApp: React.FC = () => {
         onCopy={handleCopy}
         onCut={handleCut}
         onPaste={handlePaste}
+        onPasteInPlace={() => handlePaste('in-place')}
+        onPasteAllArtboards={() => handlePaste('all-artboards')}
         onDuplicate={handleDuplicate}
         onSelectSame={handleSelectSame}
         onOpenCommandPalette={() => setCommandPaletteOpen(true)}
         onOpenShortcutConfig={() => setShortcutConfigOpen(true)}
+        onSaveLayoutPreset={handleSaveLayoutPreset}
       />
 
       {bootstrapState.status === 'recovery-error' && (
@@ -1862,46 +1904,48 @@ export const EditorApp: React.FC = () => {
          onReplaceFont={handleReplaceFontFamily}
        />
        <FindReplaceDialog
-         document={doc}
-         isOpen={findReplaceOpen}
-         onClose={() => setFindReplaceOpen(false)}
-         onSelectObject={handleSelectObject}
-         onReplaceMatch={handleReplaceSingleMatch}
-         onReplaceAll={handleBatchReplaceText}
+          document={doc}
+          isOpen={findReplaceOpen}
+          onClose={() => setFindReplaceOpen(false)}
+          onSelectObject={handleSelectObject}
+          onReplaceMatch={handleReplaceSingleMatch}
+          onReplaceAll={handleBatchReplaceText}
+          onReplaceStyles={handleReplaceStyles}
+        />
+        <SpecialCharactersPopover
+          isOpen={specialCharsOpen}
+          onClose={() => setSpecialCharsOpen(false)}
+          onSelectCharacter={handleInsertSpecialCharacter}
+        />
+        <WebFontImportDialog
+          isOpen={webFontImportOpen}
+          onClose={() => setWebFontImportOpen(false)}
+          onImport={handleWebFontImport}
+        />
+        {traceImageTarget && (
+          <TraceImageDialog
+            image={traceImageTarget}
+            isOpen={!!traceImageTarget}
+            onClose={() => setTraceImageTarget(null)}
+            onApply={(paths) => {
+              handleExecuteCommand(new TraceImageCommand(traceImageTarget.id, paths));
+              setTraceImageTarget(null);
+            }}
+          />
+        )}
+        
+        <CommandPalette
+         isOpen={commandPaletteOpen}
+         onClose={() => setCommandPaletteOpen(false)}
+         commands={commandRegistry.list()}
+         ctx={paletteCtx}
+         onExecute={(id) => {
+           const cmd = commandRegistry.list().find(c => c.id === id);
+           if (cmd && paletteCtx) {
+             cmd.execute(paletteCtx);
+           }
+         }}
        />
-       <SpecialCharactersPopover
-         isOpen={specialCharsOpen}
-         onClose={() => setSpecialCharsOpen(false)}
-         onSelectCharacter={handleInsertSpecialCharacter}
-       />
-       <WebFontImportDialog
-         isOpen={webFontImportOpen}
-         onClose={() => setWebFontImportOpen(false)}
-         onImport={handleWebFontImport}
-       />
-       {traceImageTarget && (
-         <TraceImageDialog
-           image={traceImageTarget}
-           isOpen={!!traceImageTarget}
-           onClose={() => setTraceImageTarget(null)}
-           onApply={(paths) => {
-             handleExecuteCommand(new TraceImageCommand(traceImageTarget.id, paths));
-             setTraceImageTarget(null);
-           }}
-         />
-       )}
-       
-       <CommandPalette
-        isOpen={commandPaletteOpen}
-        onClose={() => setCommandPaletteOpen(false)}
-        commands={commandRegistry.list()}
-        onExecute={(id) => {
-          const cmd = commandRegistry.list().find(c => c.id === id);
-          if (cmd && doc) {
-            cmd.execute({ doc, selection, execute: handleExecuteCommand, report: console.log });
-          }
-        }}
-      />
 
        <ShortcutConfigDialog
          isOpen={shortcutConfigOpen}
@@ -1910,8 +1954,8 @@ export const EditorApp: React.FC = () => {
          onSave={saveShortcuts}
          onReset={resetShortcuts}
        />
-       <ImportDialog
-         isOpen={importController.stage !== 'idle'}
+        <ImportDialog
+          isOpen={importController.stage !== 'idle' || !!importController.error}
          stage={importController.stage}
          fileName={null} // We'd need to store file name in controller to pass it here
          report={importController.report}

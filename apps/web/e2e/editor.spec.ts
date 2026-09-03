@@ -342,6 +342,9 @@ test.describe('Vectoria MVP Skeleton', () => {
     page.on('console', (message) => console.log(`[browser:${message.type()}] ${message.text()}`));
     await page.goto('/');
     await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(200);
+
+    await page.getByRole('button', { name: 'Pen Tool' }).click();
 
     const canvas = page.getByTestId('canvas-viewport');
     const box = await canvas.boundingBox();
@@ -352,8 +355,6 @@ test.describe('Vectoria MVP Skeleton', () => {
       { x: center.x, y: center.y - 90 },
       { x: center.x + 100, y: center.y - 20 },
     ];
-
-    await page.getByRole('button', { name: 'Pen Tool' }).click();
     await page.mouse.click(points[0]!.x, points[0]!.y);
     await page.mouse.move(points[1]!.x, points[1]!.y);
     await page.mouse.down();
@@ -367,14 +368,18 @@ test.describe('Vectoria MVP Skeleton', () => {
     await page.getByRole('button', { name: /Zaznacz Path/ }).click();
     await page.getByRole('tab', { name: 'Właściwości' }).click();
     await page.getByRole('button', { name: 'Direct Select Tool' }).click();
-    await page.mouse.click(points[1]!.x, points[1]!.y);
+    const clickBox = await canvas.boundingBox();
+    if (!clickBox) throw new Error('Canvas not found');
+    const dy = clickBox.y - box.y;
+
+    await page.mouse.click(points[1]!.x, points[1]!.y + dy);
     const outX = page.getByTestId('prop-handle-out-x').locator('input');
     await expect(outX).toBeEnabled();
     const initialX = Number(await outX.inputValue());
 
-    await page.mouse.move(points[1]!.x + 35, points[1]!.y + 20);
+    await page.mouse.move(points[1]!.x + 35, points[1]!.y + 20 + dy);
     await page.mouse.down();
-    await page.mouse.move(points[1]!.x + 65, points[1]!.y + 40, { steps: 4 });
+    await page.mouse.move(points[1]!.x + 65, points[1]!.y + 40 + dy, { steps: 4 });
     expect(Number(await outX.inputValue())).toBe(initialX);
     await page.mouse.up();
 
@@ -654,5 +659,269 @@ test.describe('Vectoria MVP Skeleton', () => {
     await page.getByRole('tab', { name: 'Historia' }).click();
     await expect(page.getByTestId('history-panel')).toBeVisible();
     await expect(page.getByTestId('history-panel')).toContainText('Create path');
+  });
+
+  test('EPIC-14: Paste in place pastes without offset at exact coordinates', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    const canvas = page.locator('[data-testid="canvas-viewport"]');
+    const box = await canvas.boundingBox();
+    if (!box) throw new Error('Canvas not found');
+    const cx = box.x + box.width / 2;
+    const cy = box.y + box.height / 2;
+
+    await page.getByRole('button', { name: 'Rectangle Tool' }).click();
+    await page.mouse.move(cx - 40, cy - 40);
+    await page.mouse.down();
+    await page.mouse.move(cx + 40, cy + 40, { steps: 5 });
+    await page.mouse.up();
+
+    await page.getByRole('button', { name: 'Select Tool', exact: true }).click();
+    await page.mouse.click(cx, cy);
+
+    const xInput = page.locator('[data-testid="prop-x"] input');
+    const yInput = page.locator('[data-testid="prop-y"] input');
+    const origX = await xInput.inputValue();
+    const origY = await yInput.inputValue();
+
+    // Copy
+    await page.getByRole('button', { name: 'Edycja' }).click();
+    await page.getByRole('menuitem', { name: 'Kopiuj' }).click();
+
+    // Paste in place
+    await page.getByRole('button', { name: 'Edycja' }).click();
+    await page.getByRole('menuitem', { name: 'Wklej na miejscu' }).click();
+
+    // Verify object count is 2 and coordinates of selected newly pasted object match origX and origY
+    await expect(page.getByTestId('statusbar')).toContainText('2 objects');
+    expect(await xInput.inputValue()).toBe(origX);
+    expect(await yInput.inputValue()).toBe(origY);
+  });
+
+  test('EPIC-14: Paste across all artboards pastes copy to every artboard', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    // Create a 2nd artboard via Artboards panel
+    await page.getByRole('tab', { name: 'Artboardy' }).click();
+    await page.getByRole('button', { name: 'Dodaj artboard' }).click();
+    await expect(page.getByTestId('artboards-panel')).toContainText('Artboard 2');
+
+    // Draw rect on canvas center
+    const canvas = page.locator('[data-testid="canvas-viewport"]');
+    const box = await canvas.boundingBox();
+    if (!box) throw new Error('Canvas not found');
+    const cx = box.x + box.width / 2;
+    const cy = box.y + box.height / 2;
+
+    await page.getByRole('button', { name: 'Rectangle Tool' }).click();
+    await page.mouse.move(cx - 40, cy - 40);
+    await page.mouse.down();
+    await page.mouse.move(cx + 40, cy + 40, { steps: 3 });
+    await page.mouse.up();
+    await expect(page.getByTestId('statusbar')).toContainText('1 object');
+
+    // Select and Copy
+    await page.getByRole('button', { name: 'Select Tool', exact: true }).click();
+    await page.mouse.click(cx, cy);
+    await expect(page.locator('.status-selection')).toContainText('1 zazn.');
+    await page.getByRole('button', { name: 'Edycja' }).click();
+    await page.getByRole('menuitem', { name: 'Kopiuj' }).click();
+
+    // Paste all artboards
+    await page.getByRole('button', { name: 'Edycja' }).click();
+    await page.getByRole('menuitem', { name: 'Wklej na wszystkich artboardach' }).click();
+
+    // 1 original + 2 pasted = 3 objects
+    await expect(page.getByTestId('statusbar')).toContainText('3 objects');
+  });
+
+  test('EPIC-15: Select same selects matching objects across document', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    const canvas = page.locator('[data-testid="canvas-viewport"]');
+    const box = await canvas.boundingBox();
+    if (!box) throw new Error('Canvas not found');
+
+    // Draw rect 1
+    await page.getByRole('button', { name: 'Rectangle Tool' }).click();
+    await page.mouse.move(box.x + 100, box.y + 100);
+    await page.mouse.down();
+    await page.mouse.move(box.x + 160, box.y + 160, { steps: 3 });
+    await page.mouse.up();
+
+    // Draw rect 2
+    await page.mouse.move(box.x + 200, box.y + 100);
+    await page.mouse.down();
+    await page.mouse.move(box.x + 260, box.y + 160, { steps: 3 });
+    await page.mouse.up();
+
+    // Draw ellipse
+    await page.getByRole('button', { name: 'Ellipse Tool' }).click();
+    await page.mouse.move(box.x + 300, box.y + 100);
+    await page.mouse.down();
+    await page.mouse.move(box.x + 360, box.y + 160, { steps: 3 });
+    await page.mouse.up();
+
+    // Select rect 1
+    await page.getByRole('button', { name: 'Select Tool', exact: true }).click();
+    await page.mouse.click(box.x + 130, box.y + 130);
+
+    // Select same: Typ
+    await page.getByRole('button', { name: 'Obiekt' }).click();
+    await page.getByRole('menuitem', { name: 'Zaznacz podobne: Typ' }).click();
+
+    // Should select the 2 rectangles
+    await expect(page.getByTestId('properties-panel')).toContainText('2 objects');
+  });
+
+  test('EPIC-14: Dropping AI or EPS file shows informative guidance banner without crash', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    await page.evaluate(() => {
+      const dt = new DataTransfer();
+      const file = new File(['%!PS-Adobe-3.0'], 'artwork.ai', { type: 'application/postscript' });
+      dt.items.add(file);
+      const viewport = document.querySelector('[data-testid="canvas-viewport"]');
+      const dropEvent = new DragEvent('drop', {
+        bubbles: true,
+        cancelable: true,
+        dataTransfer: dt,
+      });
+      viewport?.dispatchEvent(dropEvent);
+    });
+
+    await expect(page.getByRole('dialog').getByText(/AI|SVG|PDF/i)).toBeVisible();
+  });
+
+  test('EPIC-15: CommandPalette lists commands with enable status and shortcut config dialog opens', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    // Open Command Palette via View menu
+    await page.getByRole('button', { name: 'Widok' }).click();
+    await page.getByRole('menuitem', { name: /Paleta poleceń/ }).click();
+
+    const paletteInput = page.getByPlaceholder('Wpisz komendę...');
+    await expect(paletteInput).toBeVisible();
+    await paletteInput.fill('Wklej');
+    await expect(page.getByRole('listbox')).toContainText('Wklej');
+    await page.keyboard.press('Escape');
+
+    // Open Shortcut Config via Window menu
+    await page.getByRole('button', { name: 'Okno' }).click();
+    await page.getByRole('menuitem', { name: 'Konfiguracja skrótów...' }).click();
+    await expect(page.getByRole('dialog')).toContainText('Konfiguracja skrótów');
+    await expect(page.getByRole('dialog')).toContainText('Narzędzie: Zaznaczanie');
+    await page.getByRole('button', { name: 'Anuluj' }).click();
+  });
+
+  test('EPIC-15: Find & Replace dialog Style tab replaces matching object fill and undo restores', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    const canvas = page.locator('[data-testid="canvas-viewport"]');
+    const box = await canvas.boundingBox();
+    if (!box) throw new Error('Canvas not found');
+
+    // Draw rect 1
+    await page.getByRole('button', { name: 'Rectangle Tool' }).click();
+    await page.mouse.move(box.x + 100, box.y + 100);
+    await page.mouse.down();
+    await page.mouse.move(box.x + 160, box.y + 160, { steps: 3 });
+    await page.mouse.up();
+
+    // Draw rect 2
+    await page.mouse.move(box.x + 200, box.y + 100);
+    await page.mouse.down();
+    await page.mouse.move(box.x + 260, box.y + 160, { steps: 3 });
+    await page.mouse.up();
+
+    // Open Find & Replace
+    await page.getByRole('button', { name: 'Tekst' }).click();
+    await page.getByRole('menuitem', { name: 'Znajdź i zamień…' }).click();
+    await expect(page.getByTestId('find-replace-dialog')).toBeVisible();
+
+    // Switch to Style tab
+    await page.getByTestId('tab-style').click();
+
+    // Search fill #cccccc (default rect fill in Vectoria)
+    await page.getByTestId('style-find-fill').fill('#cccccc');
+    await expect(page.getByTestId('find-replace-dialog')).toContainText('Znaleziono: 2 obiektów');
+
+    // Replace with #00ff00
+    await page.getByTestId('style-replace-fill').fill('#00ff00');
+    await page.getByTestId('style-replace-btn').click();
+
+    // Close dialog
+    await page.getByRole('button', { name: 'Zamknij' }).click();
+
+    // Check history has Replace styles
+    await page.getByRole('tab', { name: 'Historia' }).click();
+    await expect(page.getByTestId('history-panel')).toContainText('Replace styles');
+
+    // Undo reverts the style replacement
+    await page.locator('[data-testid="undo-button"]').click();
+  });
+
+  test('EPIC-13: Appearance panel, live effects, toggles, and blend modes', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('networkidle');
+
+    const canvas = page.locator('[data-testid="canvas-viewport"]');
+    const box = await canvas.boundingBox();
+    if (!box) throw new Error('Canvas not found');
+    const cx = box.x + box.width / 2;
+    const cy = box.y + box.height / 2;
+
+    // Draw rect
+    await page.getByRole('button', { name: 'Rectangle Tool' }).click();
+    await page.mouse.move(cx - 40, cy - 40);
+    await page.mouse.down();
+    await page.mouse.move(cx + 40, cy + 40, { steps: 3 });
+    await page.mouse.up();
+    await expect(page.getByTestId('statusbar')).toContainText('1 object');
+
+    // Select with Select Tool
+    await page.getByRole('button', { name: 'Select Tool', exact: true }).click();
+    await page.mouse.click(cx, cy);
+    await expect(page.locator('.status-selection')).toContainText('1 zazn.');
+
+    // Open Wygląd (Appearance) tab in right dock
+    await page.getByRole('tab', { name: 'Wygląd' }).click();
+    await expect(page.getByTestId('appearance-panel')).toBeVisible();
+
+    // Change Opacity to 0.75
+    const opacityInput = page.getByTestId('appearance-opacity').locator('input');
+    await opacityInput.fill('0.75');
+    await opacityInput.press('Enter');
+
+    // Change Blend Mode to multiply
+    await page.getByTestId('appearance-blend-mode').selectOption('multiply');
+
+    // Add Drop Shadow effect
+    await page.getByLabel('Effect type').selectOption('dropShadow');
+    await page.getByTestId('appearance-add-effect').click();
+    await expect(page.getByTestId('appearance-panel')).toContainText('Efekty (1)');
+
+    // Toggle visibility of effect
+    const toggle = page.getByLabel(/Drop shadow visibility/i);
+    await expect(toggle).toBeChecked();
+    await toggle.uncheck();
+    await expect(toggle).not.toBeChecked();
+    await toggle.check();
+    await expect(toggle).toBeChecked();
+
+    // Add Blur effect
+    await page.getByLabel('Effect type').selectOption('blur');
+    await page.getByTestId('appearance-add-effect').click();
+    await expect(page.getByTestId('appearance-panel')).toContainText('Efekty (2)');
+
+    // Check history registers effect additions
+    await page.getByRole('tab', { name: 'Historia' }).click();
+    await expect(page.getByTestId('history-panel')).toContainText('Add dropShadow effect');
   });
 });

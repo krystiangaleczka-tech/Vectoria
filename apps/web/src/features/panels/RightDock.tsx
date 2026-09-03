@@ -120,6 +120,7 @@ export interface RightDockProps {
 
 const panels: readonly { id: DockPanel; label: string; icon: React.ComponentProps<typeof VectoriaIcon>['name'] }[] = [
   { id: 'properties', label: 'Właściwości', icon: 'sliders' as React.ComponentProps<typeof VectoriaIcon>['name'] },
+  { id: 'appearance', label: 'Wygląd', icon: 'brush' as React.ComponentProps<typeof VectoriaIcon>['name'] },
   { id: 'layers', label: 'Warstwy', icon: 'layers' },
   { id: 'assets', label: 'Zasoby', icon: 'folder' },
   { id: 'links', label: 'Linki', icon: 'link' },

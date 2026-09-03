@@ -44,10 +44,13 @@ interface AppMenuBarProps {
   onCopy: () => void;
   onCut: () => void;
   onPaste: () => void;
+  onPasteInPlace?: () => void;
+  onPasteAllArtboards?: () => void;
   onDuplicate: () => void;
   onSelectSame: (target: import('@vectoria/core').SelectSameTarget) => void;
   onOpenCommandPalette?: () => void;
   onOpenShortcutConfig?: () => void;
+  onSaveLayoutPreset?: () => void;
 }
 
 type MenuName = 'Plik' | 'Edycja' | 'Obiekt' | 'Tekst' | 'Widok' | 'Okno' | 'Pomoc';
@@ -93,10 +96,13 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
   onCopy,
   onCut,
   onPaste,
+  onPasteInPlace,
+  onPasteAllArtboards,
   onDuplicate,
   onSelectSame,
   onOpenCommandPalette,
   onOpenShortcutConfig,
+  onSaveLayoutPreset,
 }) => {
   const [openMenu, setOpenMenu] = useState<MenuName | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -139,6 +145,8 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
         <MenuItem label="Wytnij" shortcut="Cmd+X" disabled={selectedObjectIds.length === 0} onClick={() => run(onCut)} />
         <MenuItem label="Kopiuj" shortcut="Cmd+C" disabled={selectedObjectIds.length === 0} onClick={() => run(onCopy)} />
         <MenuItem label="Wklej" shortcut="Cmd+V" onClick={() => run(onPaste)} />
+        <MenuItem label="Wklej na miejscu" shortcut="⇧⌘V" onClick={() => run(() => onPasteInPlace?.())} />
+        <MenuItem label="Wklej na wszystkich artboardach" onClick={() => run(() => onPasteAllArtboards?.())} />
         <MenuItem label="Zaznacz wszystko" disabled />
       </>;
     }
@@ -153,6 +161,7 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
         <MenuItem label={`${snapToGrid ? 'Wyłącz' : 'Włącz'} snap do siatki`} onClick={() => run(onToggleSnap)} />
         <MenuItem label={`Motyw: ${theme === 'dark' ? 'jasny' : 'ciemny'}`} onClick={() => run(onToggleTheme)} />
         <MenuItem label="Paleta poleceń..." shortcut="Cmd+K" onClick={() => run(() => onOpenCommandPalette?.())} />
+        <MenuItem label="Zapisz układ jako preset…" onClick={() => run(() => onSaveLayoutPreset?.())} />
       </>;
     }
     if (menu === 'Obiekt') {
@@ -160,6 +169,10 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
         <MenuItem label="Zaznacz podobne: Wypełnienie" disabled={selectedObjectIds.length !== 1} onClick={() => run(() => onSelectSame('fill'))} />
         <MenuItem label="Zaznacz podobne: Obrys" disabled={selectedObjectIds.length !== 1} onClick={() => run(() => onSelectSame('stroke'))} />
         <MenuItem label="Zaznacz podobne: Wypełnienie i Obrys" disabled={selectedObjectIds.length !== 1} onClick={() => run(() => onSelectSame('fill-stroke'))} />
+        <MenuItem label="Zaznacz podobne: Czcionka" disabled={selectedObjectIds.length !== 1} onClick={() => run(() => onSelectSame('font'))} />
+        <MenuItem label="Zaznacz podobne: Rozmiar" disabled={selectedObjectIds.length !== 1} onClick={() => run(() => onSelectSame('size'))} />
+        <MenuItem label="Zaznacz podobne: Krycie" disabled={selectedObjectIds.length !== 1} onClick={() => run(() => onSelectSame('opacity'))} />
+        <MenuItem label="Zaznacz podobne: Typ" disabled={selectedObjectIds.length !== 1} onClick={() => run(() => onSelectSame('type'))} />
         <MenuItem label="Group" shortcut="Cmd+G" disabled={selectedObjectIds.length < 2} onClick={() => run(onGroup)} />
         <MenuItem label="Ungroup" shortcut="Cmd+Shift+G" disabled={selectedObjectIds.length === 0} onClick={() => run(onUngroup)} />
         <MenuItem label="Powiel i przekształć" shortcut="Cmd+D" disabled={selectedObjectIds.length === 0} onClick={() => run(onDuplicate)} />

@@ -30,9 +30,7 @@ export const epsProvider: FormatProvider = {
   async import(file: File): Promise<ProviderResult> {
     const head = new Uint8Array(await file.slice(0, 4).arrayBuffer());
     const isEps = head[0] === 0x25 && head[1] === 0x21 && head[2] === 0x50 && head[3] === 0x53; // '%!PS'
-    if (!isEps && file.name.toLowerCase().endsWith('.eps')) {
-      // EPS files sometimes have a DOS EPS header (C5 D0 D3 C6) or standard text
-    }
+    if (!isEps) throw new Error('Plik nie jest poprawnym dokumentem EPS');
     
     return {
       status: 'unsupported',
@@ -40,6 +38,30 @@ export const epsProvider: FormatProvider = {
         category: 'unsupported',
         code: 'eps.parser.p2',
         message: 'Natywny import EPS jest w przygotowaniu. Przekonwertuj plik na SVG lub PDF i zaimportuj ponownie.',
+      }]),
+    };
+  },
+};
+
+/**
+ * Format provider for Adobe Illustrator (.ai) files providing honest unsupported reporting
+ * and actionable user guidance to preserve document integrity.
+ */
+export const aiProvider: FormatProvider = {
+  id: 'ai',
+  label: 'Adobe Illustrator (.ai)',
+  canImport: (file) => file.name.toLowerCase().endsWith('.ai'),
+  async import(file: File): Promise<ProviderResult> {
+    const head = new Uint8Array(await file.slice(0, 4).arrayBuffer());
+    const isPs = head[0] === 0x25 && head[1] === 0x21 && head[2] === 0x50 && head[3] === 0x53; // '%!PS'
+    const isPdf = head[0] === 0x25 && head[1] === 0x50 && head[2] === 0x44 && head[3] === 0x46; // '%PDF'
+    if (!isPs && !isPdf) throw new Error('Plik nie jest poprawnym dokumentem AI');
+    return {
+      status: 'unsupported',
+      report: countReport([{
+        category: 'unsupported',
+        code: 'ai.parser.best-effort',
+        message: 'Natywny import AI jest w przygotowaniu. Zapisz plik jako SVG lub PDF (z kompatybilnością) i zaimportuj ponownie.',
       }]),
     };
   },

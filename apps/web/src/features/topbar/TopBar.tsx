@@ -46,10 +46,13 @@ export interface TopBarProps {
   onCopy: () => void;
   onCut: () => void;
   onPaste: () => void;
+  onPasteInPlace?: () => void;
+  onPasteAllArtboards?: () => void;
   onDuplicate: () => void;
   onSelectSame: (target: import('@vectoria/core').SelectSameTarget) => void;
   onOpenCommandPalette?: () => void;
   onOpenShortcutConfig?: () => void;
+  onSaveLayoutPreset?: () => void;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -94,10 +97,13 @@ export const TopBar: React.FC<TopBarProps> = ({
   onCopy,
   onCut,
   onPaste,
+  onPasteInPlace,
+  onPasteAllArtboards,
   onDuplicate,
   onSelectSame,
   onOpenCommandPalette,
   onOpenShortcutConfig,
+  onSaveLayoutPreset,
 }) => {
   return (
     <header
@@ -152,10 +158,13 @@ export const TopBar: React.FC<TopBarProps> = ({
         onCopy={onCopy}
         onCut={onCut}
         onPaste={onPaste}
+        onPasteInPlace={onPasteInPlace}
+        onPasteAllArtboards={onPasteAllArtboards}
         onDuplicate={onDuplicate}
         onSelectSame={onSelectSame}
         onOpenCommandPalette={onOpenCommandPalette}
         onOpenShortcutConfig={onOpenShortcutConfig}
+        onSaveLayoutPreset={onSaveLayoutPreset}
       />
       <DocumentTabs documentName={documentName} dirty={saveStatus !== 'saved-locally'} />
     </header>

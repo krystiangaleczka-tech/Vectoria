@@ -141,3 +141,5 @@ export {
 } from './hierarchy-commands.js';
 export { PasteObjectsCommand, type PasteMode } from './paste-commands.js';
 export { DuplicateTransformCommand } from './duplicate-transform-command.js';
+export { ReplaceStylesBatchCommand } from './replace-styles-command.js';
+

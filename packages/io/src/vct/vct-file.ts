@@ -1,6 +1,6 @@
 import type { DocumentModel } from '@vectoria/core';
 import { validateInvariants } from '@vectoria/core';
-import { parseAndMigrateDocument, PersistedDocumentSchema, serializeDocument } from '../schema/document-v1.js';
+import { parseAndMigrateDocument, PersistedDocumentSchema, type PersistedDocument } from '../schema/document-v1.js';
 import { compressDocument, decompressDocument } from '../storage/worker-client.js';
 
 const VCT_MIME = 'application/x-vectoria-vct';
@@ -14,9 +14,17 @@ export async function exportVctFile(document: DocumentModel): Promise<Blob> {
   if (violations.length > 0) {
     throw new Error(`Refusing to export invalid document: ${violations.map((v) => v.code).join(', ')}`);
   }
-  const json = serializeDocument(document);
+  const persisted: PersistedDocument = {
+    app: 'vectoria',
+    schemaVersion: document.schemaVersion,
+    document,
+    revision: 1,
+    savedAt: new Date().toISOString(),
+    status: 'saved',
+  };
+  const json = JSON.stringify(persisted);
   try {
-    const compressed = await compressDocument(JSON.parse(json));
+    const compressed = await compressDocument(persisted);
     return new Blob([compressed], { type: VCT_MIME });
   } catch {
     return new Blob([json], { type: VCT_MIME }); // uncompressed fallback
@@ -35,10 +43,10 @@ export async function importVctFile(file: File): Promise<DocumentModel> {
   } catch {
     raw = JSON.parse(new TextDecoder().decode(buffer)); // plain JSON .vct
   }
-  const persisted = PersistedDocumentSchema.parse(raw);
-  const document = parseAndMigrateDocument(persisted.document);
-  if (persisted.schemaVersion !== document.schemaVersion) {
-    throw new Error(`Nieobsługiwana wersja schematu: ${persisted.schemaVersion}. Zaktualizuj aplikację.`);
+  const persistedResult = PersistedDocumentSchema.safeParse(raw);
+  const document = parseAndMigrateDocument(persistedResult.success ? persistedResult.data.document : raw);
+  if (persistedResult.success && persistedResult.data.schemaVersion !== document.schemaVersion) {
+    throw new Error(`Nieobsługiwana wersja schematu: ${persistedResult.data.schemaVersion}. Zaktualizuj aplikację.`);
   }
   const violations = validateInvariants(document);
   if (violations.length > 0) {
