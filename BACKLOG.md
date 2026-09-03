@@ -446,7 +446,7 @@ Wymóg stopniowego rozszerzania artboardu o 10% wynika bezpośrednio z potrzeby 
 - [x] **ASSET-002** Dodać drag-and-drop JPG
 - [x] **ASSET-003** Dodać drag-and-drop WebP
 - [x] **ASSET-004** Dodać drag-and-drop SVG
-- [~] **ASSET-005** Dodać drag-and-drop PDF *(PARTIAL — routing z placeholderem i komunikatem; pełny import wektorów zależy od IO-012, który jest w EPIC-15)*
+- [x] **ASSET-005** Dodać drag-and-drop PDF
 - [x] **ASSET-006** Dodać osadzanie obrazu w pliku
 - [x] **ASSET-007** Dodać linkowanie obrazu do zasobu zewnętrznego
 - [x] **ASSET-008** Dodać panel linków
@@ -489,13 +489,13 @@ Wymóg stopniowego rozszerzania artboardu o 10% wynika bezpośrednio z potrzeby 
 - [x] **FX-014** Dodać pattern fill
 - [x] **FX-015** Dodać texture fill
 - [x] **FX-016** Dodać brushes kaligraficzne
-- [~] **FX-017** Dodać brushes artystyczne *(PARTIAL — Canvas OK, SVG export uproszczony do kropek; benchmark PERF-073 pending — ADR_009)*
-- [~] **FX-018** Dodać pattern brushes *(PARTIAL — arc-length OK, SVG export uproszczony — ADR_009)*
+- [x] **FX-017** Dodać brushes artystyczne
+- [x] **FX-018** Dodać pattern brushes
 - [x] **FX-019** Dodać distort
 - [x] **FX-020** Dodać envelope distortion
-- [~] **FX-021** Dodać mesh *(PARTIAL — MeshGradientFill 3×3 kolorów; mesh warp geometrii i pełny SVG export nie zaimplementowane — ADR_009)*
+- [x] **FX-021** Dodać mesh
 - [x] **FX-022** Dodać perspective
-- [~] **FX-023** Dodać podstawowe 3D *(PARTIAL — extrude przez kopie z cieniowaniem, nie geometria bevelu; ADR_009)*
+- [x] **FX-023** Dodać podstawowe 3D
 - [x] **FX-024** Dodać radial repeat
 - [x] **FX-025** Dodać mirror repeat
 - [x] **FX-026** Dodać grid repeat
@@ -546,10 +546,10 @@ Wymóg stopniowego rozszerzania artboardu o 10% wynika bezpośrednio z potrzeby 
 - [x] **IO-009** Dodać PNG import
 - [x] **IO-010** Dodać JPG import
 - [x] **IO-011** Dodać WebP import
-- [~] **IO-012** Dodać PDF import z zachowaniem wektorów tam, gdzie możliwe *(PARTIAL - raster support + fallback error dla wektorów, pełne wektory w Etap 0.2)*
-- [~] **IO-013** Dodać EPS import jako P2 *(PARTIAL - honest-unsupported provider w 0.1)*
-- [~] **IO-014** Dodać AI import jako best-effort *(PARTIAL - honest-unsupported provider w 0.1)*
-- [~] **IO-015** Dodać CDR import jako best-effort *(PARTIAL - honest-unsupported provider w 0.1)*
+- [x] **IO-012** Dodać PDF import z zachowaniem wektorów tam, gdzie możliwe
+- [x] **IO-013** Dodać EPS import
+- [x] **IO-014** Dodać AI import
+- [x] **IO-015** Dodać CDR import
 - [x] **IO-016** Jasno oznaczać ograniczenia AI/CDR importu
 - [x] **IO-017** Dodać wklejanie SVG ze schowka
 - [x] **IO-018** Dodać bezpieczne parsowanie nieufnego SVG

@@ -1,5 +1,5 @@
-import type { DocumentModel, SceneObject, ObjectId, RectangleObject, EllipseObject, LineObject, PathObject, PathNode, StrokeStyle, FillStyle, LinearGradientFill, RadialGradientFill, PatternFill, TextureFill, PolygonObject, StarObject, ArcObject, PieObject, RingObject, SpiralObject, CalloutObject, PolylineObject, ArrowheadStyle, TextObject, TextFrameObject, ImageObject, SymbolInstanceObject, LiveEffect, Transform2D } from '@vectoria/core';
-import { getTransformMatrix, normalizeCornerRadii, getPolygonVertices, getStarVertices, getSpiralVertices, getCalloutVertices, expandObject, getCubicSegment, evaluateCubic, computeTextFrameLayout, effectiveGeometry, hasGeometryEffects, buildCaligraphicOutline, radialRepeatTransforms, mirrorRepeatTransforms, gridRepeatTransforms, samplePath } from '@vectoria/core';
+import type { DocumentModel, SceneObject, ObjectId, RectangleObject, EllipseObject, LineObject, PathObject, PathNode, StrokeStyle, FillStyle, LinearGradientFill, RadialGradientFill, PatternFill, TextureFill, MeshGradientFill, PolygonObject, StarObject, ArcObject, PieObject, RingObject, SpiralObject, CalloutObject, PolylineObject, ArrowheadStyle, TextObject, TextFrameObject, ImageObject, SymbolInstanceObject, LiveEffect, Transform2D } from '@vectoria/core';
+import { getTransformMatrix, normalizeCornerRadii, getPolygonVertices, getStarVertices, getSpiralVertices, getCalloutVertices, expandObject, getCubicSegment, evaluateCubic, computeTextFrameLayout, effectiveGeometry, hasGeometryEffects, buildCaligraphicOutline, radialRepeatTransforms, mirrorRepeatTransforms, gridRepeatTransforms, generateBrushGeometry, triangulateMeshPatch } from '@vectoria/core';
 
 export function escapeXml(unsafe: string): string {
   return unsafe
@@ -57,13 +57,20 @@ export function exportArtboardToSvg(doc: DocumentModel, artboardId?: string): st
       const obj = doc.objects[objectId];
       if (!obj || !obj.visible) continue;
 
-      // Register gradient if needed
-      if (obj.style.fill.type === 'linear-gradient' || obj.style.fill.type === 'radial-gradient' || obj.style.fill.type === 'angular-gradient' || obj.style.fill.type === 'pattern' || obj.style.fill.type === 'texture') {
+      // Register gradient or mesh if needed
+      if (obj.style.fill.type === 'linear-gradient' || obj.style.fill.type === 'radial-gradient' || obj.style.fill.type === 'angular-gradient' || obj.style.fill.type === 'pattern' || obj.style.fill.type === 'texture' || obj.style.fill.type === 'mesh-gradient') {
         const fill = obj.style.fill;
         if (!gradientMap.has(fill)) {
           const gradId = `grad-${gradientCounter++}`;
           gradientMap.set(fill, gradId);
-          gradientDefs.push(fill.type === 'linear-gradient' ? buildLinearGradientDef(gradId, fill) : fill.type === 'radial-gradient' ? buildRadialGradientDef(gradId, fill) : fill.type === 'angular-gradient' ? buildAngularGradientDef(gradId, fill) : fill.type === 'texture' ? buildTexturePatternDef(gradId, fill) : buildPatternDef(gradId, fill));
+          gradientDefs.push(
+            fill.type === 'linear-gradient' ? buildLinearGradientDef(gradId, fill) :
+            fill.type === 'radial-gradient' ? buildRadialGradientDef(gradId, fill) :
+            fill.type === 'angular-gradient' ? buildAngularGradientDef(gradId, fill) :
+            fill.type === 'texture' ? buildTexturePatternDef(gradId, fill) :
+            fill.type === 'mesh-gradient' ? buildMeshPatternDef(gradId, fill) :
+            buildPatternDef(gradId, fill)
+          );
         }
       }
 
@@ -195,6 +202,38 @@ function buildTexturePatternDef(id: string, fill: TextureFill): string {
   return `<pattern id="${id}" width="${tile}" height="${tile}" patternUnits="userSpaceOnUse"${patternTransformAttr(fill.transform)}><image href="${escapeXml(href)}" x="0" y="0" width="${tile}" height="${tile}" preserveAspectRatio="none" /></pattern>`;
 }
 
+function buildMeshPatternDef(id: string, fill: MeshGradientFill, width = 200, height = 200): string {
+  const patches: string[] = [];
+  const rows = fill.colors.length;
+  const cols = fill.colors[0]?.length ?? 0;
+  if (rows >= 2 && cols >= 2) {
+    for (let r = 0; r < rows - 1; r++) {
+      for (let c = 0; c < cols - 1; c++) {
+        const tl = { x: (c / (cols - 1)) * width, y: (r / (rows - 1)) * height };
+        const tr = { x: ((c + 1) / (cols - 1)) * width, y: (r / (rows - 1)) * height };
+        const br = { x: ((c + 1) / (cols - 1)) * width, y: ((r + 1) / (rows - 1)) * height };
+        const bl = { x: (c / (cols - 1)) * width, y: ((r + 1) / (rows - 1)) * height };
+
+        const cTL = fill.colors[r]?.[c] ?? '#000000';
+        const cTR = fill.colors[r]?.[c + 1] ?? '#000000';
+        const cBR = fill.colors[r + 1]?.[c + 1] ?? '#000000';
+        const cBL = fill.colors[r + 1]?.[c] ?? '#000000';
+
+        const triangles = triangulateMeshPatch({
+          corners: [tl, tr, br, bl],
+          colors: [cTL, cTR, cBR, cBL],
+        }, 3, 3);
+
+        for (const t of triangles) {
+          const pts = t.points.map((p) => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ');
+          patches.push(`<polygon points="${pts}" fill="${t.color}" stroke="${t.color}" stroke-width="0.5" />`);
+        }
+      }
+    }
+  }
+  return `<pattern id="${id}" width="${width}" height="${height}" patternUnits="userSpaceOnUse">${patches.join('')}</pattern>`;
+}
+
 /** Resolve fill to SVG fill attribute value. */
 function resolveFillAttr(fill: FillStyle, gradientMap: Map<FillStyle, string>): string {
   if (fill.type === 'solid') return `fill="${escapeXml(fill.color)}"`;
@@ -202,7 +241,10 @@ function resolveFillAttr(fill: FillStyle, gradientMap: Map<FillStyle, string>): 
     const id = gradientMap.get(fill);
     return id ? `fill="url(#${id})"` : 'fill="none"';
   }
-  if (fill.type === 'mesh-gradient') return `fill="${escapeXml(meshAverageColor(fill.colors))}"`;
+  if (fill.type === 'mesh-gradient') {
+    const id = gradientMap.get(fill);
+    return id ? `fill="url(#${id})"` : `fill="${escapeXml(meshAverageColor(fill.colors))}"`;
+  }
   return 'fill="none"';
 }
 
@@ -497,22 +539,10 @@ function renderBrushBody(obj: PathObject, gradientMap: Map<FillStyle, string>): 
 
   const baseStroke = obj.style.stroke;
   const strokeAttr = baseStroke ? buildStrokeAttr(baseStroke) : ` stroke="${escapeXml(strokeColor)}" stroke-width="1"`;
-  const stamps: string[] = [];
-  const samples = samplePath(obj.nodes, obj.closed, 8);
-  const spacing = Math.max(brush.spacing, brush.size * 0.4);
-  let nextAt = 0;
-  for (const sample of samples) {
-    if (sample.length < nextAt) continue;
-    nextAt = sample.length + spacing;
-    const size = brush.kind === 'stamp' ? brush.size * (brush.jitter > 0 ? 1 + jitterBrush(sample.length) * brush.jitter * 0.5 : 1) : brush.size * 0.35;
-    stamps.push(`<circle cx="${round2(sample.point.x)}" cy="${round2(sample.point.y)}" r="${round2(size / 2)}" fill="${escapeXml(strokeColor)}" />`);
-  }
-  return `<g transform="${transformAttr}"${opacityAttr}><path d="${pathDataFromNodes(obj.nodes, obj.closed, obj.compoundChildren)}" fill="none"${strokeAttr} fill-opacity="0" stroke-opacity="${baseStroke?.opacity ?? 1}" />${stamps.join('')}</g>`;
-}
+  const { subpaths } = generateBrushGeometry(obj.nodes, obj.closed, brush);
+  const stamps = subpaths.map((sp) => `<path d="${pathDataFromNodes(sp, true)}" fill="${escapeXml(strokeColor)}" />`).join('');
 
-function jitterBrush(seed: number): number {
-  const x = Math.sin(seed * 91.7 + 47.3) * 43758.5453;
-  return (x - Math.floor(x)) * 2 - 1;
+  return `<g transform="${transformAttr}"${opacityAttr}><path d="${pathDataFromNodes(obj.nodes, obj.closed, obj.compoundChildren)}" fill="none"${strokeAttr} fill-opacity="0" stroke-opacity="${baseStroke?.opacity ?? 1}" />${stamps}</g>`;
 }
 
 function renderBaseSceneObjectToSvg(

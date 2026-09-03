@@ -8,6 +8,7 @@ import {
   ReorderLayersCommand,
   MoveObjectsToLayerCommand,
   LockObjectAttributesCommand,
+  canMoveLayer,
 } from '../src/commands/layer-commands.js';
 import { createDefaultDocument, defaultObjectStyle, defaultCornerRadii } from '../src/model/factory.js';
 import { createTransform } from '../src/model/transform.js';
@@ -246,4 +247,38 @@ describe('Layer Commands (EPIC-11)', () => {
     expect(doc.objects[rect.id]!.lockedAttributes).toBeUndefined();
     expect(validateInvariants(doc)).toEqual([]);
   });
+
+  it('blocks cyclic hierarchy at arbitrary depth', () => {
+    // Construct a 20-level hierarchy: layer-1 -> layer-2 -> ... -> layer-20
+    let doc = createDefaultDocument({ name: 'Deep Hierarchy Doc' });
+    const layers: Record<string, import('../src/model/types.js').Layer> = {};
+    const layerIds: string[] = [];
+
+    for (let i = 1; i <= 20; i++) {
+      const id = `layer-${i}`;
+      layerIds.push(id);
+      layers[id] = {
+        id,
+        name: `Layer ${i}`,
+        visible: true,
+        locked: false,
+        opacity: 1,
+        objectIds: [],
+        parentId: i === 1 ? null : `layer-${i - 1}`,
+      };
+    }
+
+    doc = {
+      ...doc,
+      layers,
+      layerIds,
+    };
+
+    // Moving layer-1 under layer-20 would create a cycle: layer-1 -> ... -> layer-20 -> layer-1
+    expect(canMoveLayer(doc, 'layer-1', 'layer-20')).toBe(false);
+
+    // Moving independent or leaf layers under layer-1 is allowed
+    expect(canMoveLayer(doc, 'layer-20', 'layer-1')).toBe(true);
+  });
 });
+

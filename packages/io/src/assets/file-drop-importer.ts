@@ -4,6 +4,7 @@ import { createTransform, defaultObjectStyle } from '@vectoria/core';
 import { importSvgWithReport } from '../svg/import.js';
 import { sanitizeSvg } from '../svg/sanitizer.js';
 import { importPdfPageAsImageObject } from './pdf-import-service.js';
+import { importPdf } from '../pdf/pdf-vector-importer.js';
 
 // ─── Limity bezpieczeństwa ────────────────────────────────────────────────────
 
@@ -132,9 +133,33 @@ export async function processDroppedFile(
     };
   }
 
-  // PDF -> Vector / Page Raster Import (ASSET-005)
+  // PDF -> Vector / Page Raster Import (ASSET-005 & IO-012)
   if (mime === 'application/pdf' || name.endsWith('.pdf')) {
     const buffer = await readFileAsArrayBuffer(file);
+    try {
+      const vectorResult = await importPdf(buffer);
+      if (vectorResult.objects.length > 0) {
+        const offsetObjects = vectorResult.objects.map((obj) => ({
+          ...obj,
+          layerId: targetLayerId,
+          transform: {
+            ...obj.transform,
+            position: {
+              x: obj.transform.position.x + dropPosition.x,
+              y: obj.transform.position.y + dropPosition.y,
+            },
+          },
+        }));
+        return {
+          kind: 'vector',
+          objects: offsetObjects,
+          message: `Zaimportowano ${vectorResult.objects.length} elementów wektorowych z PDF`,
+        };
+      }
+    } catch {
+      // Fall back to raster import
+    }
+
     const result = await importPdfPageAsImageObject(buffer, {
       dropPosition,
       targetLayerId,

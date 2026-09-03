@@ -115,6 +115,7 @@ export {
   ReorderLayersCommand,
   MoveObjectsToLayerCommand,
   LockObjectAttributesCommand,
+  canMoveLayer,
 } from './layer-commands.js';
 export {
   CreateImageObjectCommand,

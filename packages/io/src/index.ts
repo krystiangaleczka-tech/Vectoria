@@ -17,3 +17,7 @@ export * from './vct/vct-file.js';
 export * from './providers/format-provider.js';
 export * from './providers/svg-file-provider.js';
 export * from './providers/honest-unsupported-providers.js';
+export * from './pdf/pdf-vector-importer.js';
+export * from './eps/eps-parser.js';
+export * from './ai/ai-importer.js';
+export * from './cdr/cdr-parser.js';

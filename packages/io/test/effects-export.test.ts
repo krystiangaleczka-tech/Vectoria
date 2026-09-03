@@ -93,7 +93,7 @@ describe('EPIC-13 SVG export of live effects', () => {
     expect(svg).toContain('<image href="data:image/png;base64,AAAA"');
   });
 
-  it('exports mesh gradient as average color with documented fallback', () => {
+  it('exports mesh gradient as high-fidelity triangulated mesh pattern', () => {
     const doc = makeDoc([
       makeRect('fx-mesh', createDefaultDocument(), {
         ...defaultObjectStyle,
@@ -101,7 +101,9 @@ describe('EPIC-13 SVG export of live effects', () => {
       }),
     ]);
     const svg = exportArtboardToSvg(doc);
-    expect(svg).toMatch(/fill="#(56|55|57)[0-9a-f]{2}(aa|ab|ac|55)"/i);
+    expect(svg).toContain('fill="url(#grad-0)"');
+    expect(svg).toContain('<pattern id="grad-0"');
+    expect(svg).toContain('<polygon points="');
   });
 
   it('exports repeat effects as transformed copies', () => {

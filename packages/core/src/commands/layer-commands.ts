@@ -475,3 +475,32 @@ export class LockObjectAttributesCommand implements Command {
     };
   }
 }
+
+/**
+ * Recursively checks whether moving sourceId under targetId would introduce a circular hierarchy.
+ * Traverses parentId upwards through any arbitrary depth with cycle guards.
+ */
+export function canMoveLayer(
+  document: DocumentModel,
+  sourceId: string,
+  targetId: string,
+): boolean {
+  if (sourceId === targetId) return false;
+
+  let current: string | null = targetId;
+  const visited = new Set<string>();
+
+  while (current) {
+    if (current === sourceId) {
+      return false;
+    }
+    if (visited.has(current)) {
+      return false;
+    }
+    visited.add(current);
+    current = document.layers[current]?.parentId ?? null;
+  }
+
+  return true;
+}
+

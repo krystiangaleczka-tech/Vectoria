@@ -24,4 +24,7 @@ export * from './clipboard/clipboard-fragment.js';
 export * from './query/find-text.js';
 export * from './query/find-style.js';
 export * from './query/select-same.js';
+export * from './geometry/brush-geometry.js';
+export * from './geometry/mesh-warp.js';
+export * from './geometry/extrusion-3d.js';
 export * from './import/import-types.js';

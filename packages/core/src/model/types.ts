@@ -631,6 +631,7 @@ export interface Layer {
   readonly objectIds: readonly ObjectId[];
   readonly labelColor?: string;
   readonly isTemplate?: boolean;
+  readonly parentId?: LayerId | null;
 }
 
 // ─── Artboard ─────────────────────────────────────────────────────────────────

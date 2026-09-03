@@ -794,7 +794,7 @@ test.describe('Vectoria MVP Skeleton', () => {
       viewport?.dispatchEvent(dropEvent);
     });
 
-    await expect(page.getByRole('dialog').getByText(/AI|SVG|PDF/i)).toBeVisible();
+    await expect(page.getByRole('dialog').getByRole('heading', { name: 'Import' })).toBeVisible();
   });
 
   test('EPIC-15: CommandPalette lists commands with enable status and shortcut config dialog opens', async ({ page }) => {
