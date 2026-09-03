@@ -226,6 +226,7 @@ export const EditorApp: React.FC = () => {
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [shortcutConfigOpen, setShortcutConfigOpen] = useState(false);
   const [soloLayerId, setSoloLayerId] = useState<string | null>(null);
+  const [previewTransforms, setPreviewTransforms] = useState<Record<string, import('@vectoria/core').Transform2D>>({});
 
   const importController = useImportController(importRegistry);
 
@@ -514,6 +515,11 @@ export const EditorApp: React.FC = () => {
     setActiveDockPanel(panel);
     setRightDockOpen(true);
   }, []);
+
+  const handleOpenTransform = useCallback(() => {
+    setActiveTool('select');
+    handleShowPanel('properties');
+  }, [handleShowPanel]);
 
   const cleanupPlan = useMemo<CleanupPlan>(() => {
     if (!doc) return { findings: [], selectedFindingIds: [] };
@@ -1509,6 +1515,7 @@ export const EditorApp: React.FC = () => {
       case 'view.command-palette': setCommandPaletteOpen(true); break;
       case 'view.zoom-100': handleZoom100(); break;
       case 'view.fit-artboard': handleFitArtboard(); break;
+      case 'object.transform': handleOpenTransform(); break;
       default:
         if (actionId.startsWith('tool.')) {
           const tool = actionId.slice(5);
@@ -1535,6 +1542,7 @@ export const EditorApp: React.FC = () => {
     handleToggleSoloLayer,
     handleZoom100,
     handleFitArtboard,
+    handleOpenTransform,
     setActiveTool,
   ]);
 
@@ -1700,6 +1708,7 @@ export const EditorApp: React.FC = () => {
         onOpenCommandPalette={() => setCommandPaletteOpen(true)}
         onOpenShortcutConfig={() => setShortcutConfigOpen(true)}
         onSaveLayoutPreset={handleSaveLayoutPreset}
+        onOpenTransform={handleOpenTransform}
       />
 
       {bootstrapState.status === 'recovery-error' && (
@@ -1719,16 +1728,18 @@ export const EditorApp: React.FC = () => {
         document={doc}
         activeTool={activeTool}
         selectedObjectId={selectedObjectId}
+        previewTransforms={previewTransforms}
         onUpdatePosition={handleUpdatePosition}
-         onUpdateDimensions={handleUpdateDimensions}
-          onUpdateLineEndpoint={handleUpdateLineEndpoint}
-          onUpdateFill={handleUpdateFill}
-          freehandSettings={freehandSettings}
-           onFreehandSettingsChange={setFreehandSettings}
-            styleSampleTarget={styleSampleTarget}
-            onStyleSampleTargetChange={setStyleSampleTarget}
-            styleSampleTolerance={styleSampleTolerance}
-            onStyleSampleToleranceChange={setStyleSampleTolerance}
+        onUpdateDimensions={handleUpdateDimensions}
+        onUpdateRotation={handleUpdateRotation}
+        onUpdateLineEndpoint={handleUpdateLineEndpoint}
+        onUpdateFill={handleUpdateFill}
+        freehandSettings={freehandSettings}
+        onFreehandSettingsChange={setFreehandSettings}
+        styleSampleTarget={styleSampleTarget}
+        onStyleSampleTargetChange={setStyleSampleTarget}
+        styleSampleTolerance={styleSampleTolerance}
+        onStyleSampleToleranceChange={setStyleSampleTolerance}
       />
 
       {/* Main Workspace Area */}
@@ -1776,6 +1787,7 @@ export const EditorApp: React.FC = () => {
             outlineMode={outlineMode}
             soloLayerId={soloLayerId}
             onDropFiles={handleDropFiles}
+            onDragPreviewChange={setPreviewTransforms}
            />
         </div>
 

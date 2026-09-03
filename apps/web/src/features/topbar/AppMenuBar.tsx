@@ -51,6 +51,7 @@ interface AppMenuBarProps {
   onOpenCommandPalette?: () => void;
   onOpenShortcutConfig?: () => void;
   onSaveLayoutPreset?: () => void;
+  onOpenTransform?: () => void;
 }
 
 type MenuName = 'Plik' | 'Edycja' | 'Obiekt' | 'Tekst' | 'Widok' | 'Okno' | 'Pomoc';
@@ -103,6 +104,7 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
   onOpenCommandPalette,
   onOpenShortcutConfig,
   onSaveLayoutPreset,
+  onOpenTransform,
 }) => {
   const [openMenu, setOpenMenu] = useState<MenuName | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -177,6 +179,7 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
         <MenuItem label="Ungroup" shortcut="Cmd+Shift+G" disabled={selectedObjectIds.length === 0} onClick={() => run(onUngroup)} />
         <MenuItem label="Powiel i przekształć" shortcut="Cmd+D" disabled={selectedObjectIds.length === 0} onClick={() => run(onDuplicate)} />
         <MenuItem label="Repeat transform" shortcut="Cmd+Shift+R" disabled={selectedObjectIds.length === 0} onClick={() => run(onRepeatTransform)} />
+        <MenuItem label="Przekształcenia..." shortcut="Ctrl+T" disabled={selectedObjectIds.length === 0} onClick={() => run(onOpenTransform)} />
         <MenuItem label="Convert to curves" disabled={selectedObjectIds.length === 0} onClick={() => run(() => onConvertToCurves(selectedObjectIds))} />
         <MenuItem label="Clean Up document" onClick={() => run(onOpenCleanup)} />
       </>;

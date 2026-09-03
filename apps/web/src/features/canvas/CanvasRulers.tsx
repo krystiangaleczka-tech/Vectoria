@@ -164,17 +164,17 @@ export const CanvasRulers: React.FC<CanvasRulersProps> = ({ camera, unit, onAddG
 
   return (
     <>
-      <div className="ruler-corner" aria-hidden="true" style={{ width: RULER_SIZE, height: RULER_SIZE, position: 'absolute', top: 0, left: 0, zIndex: 11 }} />
+      <div className="ruler-corner" aria-hidden="true" style={{ width: RULER_SIZE, height: RULER_SIZE, position: 'absolute', top: 0, left: 0, zIndex: 3 }} />
       <canvas
         ref={horizontalRef}
         className="ruler ruler-horizontal"
-        style={{ position: 'absolute', top: 0, left: RULER_SIZE, cursor: 'ns-resize', zIndex: 10 }}
+        style={{ position: 'absolute', top: 0, left: RULER_SIZE, cursor: 'ns-resize', zIndex: 2 }}
         onPointerDown={(e) => handlePointerDown('horizontal', e)}
       />
       <canvas
         ref={verticalRef}
         className="ruler ruler-vertical"
-        style={{ position: 'absolute', top: RULER_SIZE, left: 0, cursor: 'ew-resize', zIndex: 10 }}
+        style={{ position: 'absolute', top: RULER_SIZE, left: 0, cursor: 'ew-resize', zIndex: 2 }}
         onPointerDown={(e) => handlePointerDown('vertical', e)}
       />
     </>

@@ -1596,8 +1596,9 @@ export function renderOverlay(
         renderLineSelectionOutline(ctx, camera, obj as LineObject);
         break;
       case 'path':
-         renderPathSelectionOutline(ctx, camera, options?.pathPreviews?.get(objectId) ? { ...obj, nodes: options.pathPreviews.get(objectId)! } : obj as PathObject);
-         break;
+        renderPathSelectionOutline(ctx, camera, options?.pathPreviews?.get(objectId) ? { ...obj, nodes: options.pathPreviews.get(objectId)! } : obj as PathObject);
+        renderBoundsSelectionOutline(ctx, camera, getObjectBounds(obj, doc));
+        break;
        case 'group': {
          const bound = getObjectBounds(obj, doc);
          renderBoundsSelectionOutline(ctx, camera, bound);
@@ -1717,12 +1718,42 @@ function renderBoundsSelectionOutline(
 ): void {
   const topLeft = camera.worldToScreen({ x: bound.x, y: bound.y });
   const bottomRight = camera.worldToScreen({ x: bound.x + bound.width, y: bound.y + bound.height });
+  const width = bottomRight.x - topLeft.x;
+  const height = bottomRight.y - topLeft.y;
   ctx.strokeStyle = themeColor('--color-selection', '#5caeff');
   ctx.fillStyle = themeColor('--color-selection-fill', 'rgba(92, 174, 255, 0.13)');
   ctx.lineWidth = 1.5;
-  ctx.strokeRect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
-  ctx.fillRect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
-  drawScreenHandles(ctx, camera, [topLeft, { x: bottomRight.x, y: topLeft.y }, bottomRight, { x: topLeft.x, y: bottomRight.y }]);
+  ctx.strokeRect(topLeft.x, topLeft.y, width, height);
+  ctx.fillRect(topLeft.x, topLeft.y, width, height);
+
+  const midX = topLeft.x + width / 2;
+  const midY = topLeft.y + height / 2;
+  const handles: Vec2[] = [
+    topLeft,
+    { x: midX, y: topLeft.y },
+    { x: bottomRight.x, y: topLeft.y },
+    { x: bottomRight.x, y: midY },
+    bottomRight,
+    { x: midX, y: bottomRight.y },
+    { x: topLeft.x, y: bottomRight.y },
+    { x: topLeft.x, y: midY },
+  ];
+  drawScreenHandles(ctx, camera, handles);
+
+  // Rotation handle above top center
+  ctx.save();
+  ctx.strokeStyle = themeColor('--color-selection', '#5caeff');
+  ctx.fillStyle = themeColor('--color-node', '#ffffff');
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(midX, topLeft.y);
+  ctx.lineTo(midX, topLeft.y - 20);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(midX, topLeft.y - 20, 4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
 }
 
 export interface FreehandOverlayOptions {
@@ -1805,7 +1836,16 @@ function renderRectangleSelectionOutline(
   // Selection fill
   ctx.fillStyle = themeColor('--color-selection-fill', 'rgba(92, 174, 255, 0.13)');
   ctx.fillRect(0, 0, obj.width, obj.height);
-  drawResizeHandles(ctx, camera, [{ x: 0, y: 0 }, { x: obj.width, y: 0 }, { x: obj.width, y: obj.height }, { x: 0, y: obj.height }]);
+  drawResizeHandles(ctx, camera, [
+    { x: 0, y: 0 },
+    { x: obj.width / 2, y: 0 },
+    { x: obj.width, y: 0 },
+    { x: obj.width, y: obj.height / 2 },
+    { x: obj.width, y: obj.height },
+    { x: obj.width / 2, y: obj.height },
+    { x: 0, y: obj.height },
+    { x: 0, y: obj.height / 2 },
+  ]);
   drawRotationHandle(ctx, camera, obj.width / 2, 0);
 
   ctx.restore();
@@ -1834,7 +1874,16 @@ function renderEllipseSelectionOutline(
   ctx.beginPath();
   ctx.ellipse(rx, ry, rx, ry, 0, 0, Math.PI * 2);
   ctx.stroke();
-  drawResizeHandles(ctx, camera, [{ x: 0, y: 0 }, { x: obj.width, y: 0 }, { x: obj.width, y: obj.height }, { x: 0, y: obj.height }]);
+  drawResizeHandles(ctx, camera, [
+    { x: 0, y: 0 },
+    { x: obj.width / 2, y: 0 },
+    { x: obj.width, y: 0 },
+    { x: obj.width, y: obj.height / 2 },
+    { x: obj.width, y: obj.height },
+    { x: obj.width / 2, y: obj.height },
+    { x: 0, y: obj.height },
+    { x: 0, y: obj.height / 2 },
+  ]);
   drawRotationHandle(ctx, camera, obj.width / 2, 0);
 
   ctx.restore();

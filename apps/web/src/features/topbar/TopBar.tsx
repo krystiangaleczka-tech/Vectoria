@@ -53,6 +53,7 @@ export interface TopBarProps {
   onOpenCommandPalette?: () => void;
   onOpenShortcutConfig?: () => void;
   onSaveLayoutPreset?: () => void;
+  onOpenTransform?: () => void;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -104,17 +105,19 @@ export const TopBar: React.FC<TopBarProps> = ({
   onOpenCommandPalette,
   onOpenShortcutConfig,
   onSaveLayoutPreset,
+  onOpenTransform,
 }) => {
   return (
     <header
       data-testid="topbar"
       style={{
+        position: 'relative',
         height: '72px',
         minHeight: '72px',
         backgroundColor: 'var(--color-topbar)',
         display: 'flex',
         flexDirection: 'column',
-        zIndex: 10,
+        zIndex: 50,
       }}
     >
       <AppMenuBar
@@ -165,6 +168,7 @@ export const TopBar: React.FC<TopBarProps> = ({
         onOpenCommandPalette={onOpenCommandPalette}
         onOpenShortcutConfig={onOpenShortcutConfig}
         onSaveLayoutPreset={onSaveLayoutPreset}
+        onOpenTransform={onOpenTransform}
       />
       <DocumentTabs documentName={documentName} dirty={saveStatus !== 'saved-locally'} />
     </header>

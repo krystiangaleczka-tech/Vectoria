@@ -99,10 +99,71 @@ export interface CanvasViewportProps {
   outlineMode?: boolean;
   soloLayerId?: string | null;
   onDropFiles?: (files: FileList, worldPos: Vec2) => void;
+  onDragPreviewChange?: (preview: Record<string, import('@vectoria/core').Transform2D>) => void;
+}
+
+const DRAG_THRESHOLD_PX = 3;
+
+interface ObjectHandleInfo {
+  rotationHandle: Vec2;
+  resizeHandles: { id: string; point: Vec2 }[];
+  pivotWorld: Vec2;
+  bounds: import('@vectoria/shared').Rect;
+}
+
+function getObjectHandles(
+  object: SceneObject,
+  camera: Camera,
+  doc: DocumentModel
+): ObjectHandleInfo {
+  const isRectOrEllipse = object.type === 'rectangle' || object.type === 'ellipse';
+  if (isRectOrEllipse) {
+    const width = object.width;
+    const height = object.height;
+    const matrix = getTransformMatrix(object.transform);
+    const toScreen = (local: Vec2) => camera.worldToScreen(mat3TransformPoint(matrix, local));
+    const rotationHandle = toScreen({ x: width / 2, y: -20 / camera.zoom });
+    const pivotWorld = mat3TransformPoint(matrix, { x: width / 2, y: height / 2 });
+    const resizeHandles = [
+      { id: 'nw', point: toScreen({ x: 0, y: 0 }) },
+      { id: 'n', point: toScreen({ x: width / 2, y: 0 }) },
+      { id: 'ne', point: toScreen({ x: width, y: 0 }) },
+      { id: 'e', point: toScreen({ x: width, y: height / 2 }) },
+      { id: 'se', point: toScreen({ x: width, y: height }) },
+      { id: 's', point: toScreen({ x: width / 2, y: height }) },
+      { id: 'sw', point: toScreen({ x: 0, y: height }) },
+      { id: 'w', point: toScreen({ x: 0, y: height / 2 }) },
+    ];
+    return {
+      rotationHandle,
+      resizeHandles,
+      pivotWorld,
+      bounds: { x: object.transform.position.x, y: object.transform.position.y, width, height },
+    };
+  }
+
+  const bounds = getObjectBounds(object, doc);
+  const topLeft = camera.worldToScreen({ x: bounds.x, y: bounds.y });
+  const bottomRight = camera.worldToScreen({ x: bounds.x + bounds.width, y: bounds.y + bounds.height });
+  const midX = (topLeft.x + bottomRight.x) / 2;
+  const midY = (topLeft.y + bottomRight.y) / 2;
+  const rotationHandle = { x: midX, y: topLeft.y - 20 };
+  const pivotWorld = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
+  const resizeHandles = [
+    { id: 'nw', point: topLeft },
+    { id: 'n', point: { x: midX, y: topLeft.y } },
+    { id: 'ne', point: { x: bottomRight.x, y: topLeft.y } },
+    { id: 'e', point: { x: bottomRight.x, y: midY } },
+    { id: 'se', point: bottomRight },
+    { id: 's', point: { x: midX, y: bottomRight.y } },
+    { id: 'sw', point: { x: topLeft.x, y: bottomRight.y } },
+    { id: 'w', point: { x: topLeft.x, y: midY } },
+  ];
+  return { rotationHandle, resizeHandles, pivotWorld, bounds };
 }
 
 interface DragState {
-   type: 'pan' | 'create-shape' | 'move-object' | 'move-node' | 'move-handle' | 'resize-object' | 'rotate-object' | 'gradient-handle' | 'style-sample' | 'marquee' | 'lasso' | 'node-lasso' | 'text-create' | 'text-select';
+  type: 'pan' | 'create-shape' | 'move-object' | 'move-node' | 'move-handle' | 'resize-object' | 'rotate-object' | 'gradient-handle' | 'style-sample' | 'marquee' | 'lasso' | 'node-lasso' | 'text-create' | 'text-select';
   shape?: BasicShapeTool;
   startScreen: Vec2;
   startWorld: Vec2;
@@ -112,6 +173,8 @@ interface DragState {
   objectIds?: readonly ObjectId[];
   initialTransforms?: Readonly<Record<string, import('@vectoria/core').Transform2D>>;
   initialSize?: { width: number; height: number };
+  initialBounds?: import('@vectoria/shared').Rect;
+  handleId?: string;
   pivotWorld?: Vec2;
   initialTransform?: import('@vectoria/core').Transform2D;
   nodeIndex?: number;
@@ -208,6 +271,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   outlineMode = false,
   soloLayerId = null,
   onDropFiles,
+  onDragPreviewChange,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const bgCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -227,6 +291,13 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   const dragSessionRef = useRef<DragSession | null>(null);
   const [isSpacePressed, setIsSpacePressed] = React.useState(false);
   const [dragPreview, setDragPreview] = React.useState<Record<string, import('@vectoria/core').Transform2D>>({});
+  const updateDragPreview = React.useCallback(
+    (preview: Record<string, import('@vectoria/core').Transform2D>) => {
+      setDragPreview(preview);
+      onDragPreviewChange?.(preview);
+    },
+    [onDragPreviewChange]
+  );
   const [stylePreview, setStylePreview] = React.useState<Record<string, import('@vectoria/core').ObjectStyle>>({});
   const [pathPreview, setPathPreview] = React.useState<Record<string, readonly import('@vectoria/core').PathNode[]>>({});
   const [cornerPreview, setCornerPreview] = React.useState<import('@vectoria/core').GeometryPreview | null>(null);
@@ -887,20 +958,39 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       }
     } else if (activeTool === 'select') {
       const selected = selectedObjectId ? doc.objects[selectedObjectId] : null;
-      const selectedSize = selected && (selected.type === 'rectangle' || selected.type === 'ellipse') ? { width: selected.width, height: selected.height } : null;
-      if (selected && selectedSize) {
-        const matrix = getTransformMatrix(selected.transform);
-        const handle = camera.worldToScreen(mat3TransformPoint(matrix, { x: selectedSize.width, y: selectedSize.height }));
-        const pivotWorld = mat3TransformPoint(matrix, { x: selectedSize.width / 2, y: selectedSize.height / 2 });
-        const rotationHandle = camera.worldToScreen(mat3TransformPoint(matrix, { x: selectedSize.width / 2, y: -20 / camera.zoom }));
+      if (selected) {
+        const { rotationHandle, resizeHandles, pivotWorld, bounds } = getObjectHandles(selected, camera, doc);
         if (!e.shiftKey && Math.hypot(screenPos.x - rotationHandle.x, screenPos.y - rotationHandle.y) <= 12) {
-          (e.target as HTMLElement).setPointerCapture(e.pointerId);
-          dragStateRef.current = { type: 'rotate-object', startScreen: screenPos, startWorld: worldPos, currentWorld: worldPos, pointerId: e.pointerId, objectIds: [selected.id], initialTransforms: { [selected.id]: selected.transform }, initialTransform: selected.transform, pivotWorld };
+          try { (e.target as HTMLElement).setPointerCapture(e.pointerId); } catch { /* capture failed */ }
+          dragStateRef.current = {
+            type: 'rotate-object',
+            startScreen: screenPos,
+            startWorld: worldPos,
+            currentWorld: worldPos,
+            pointerId: e.pointerId,
+            objectIds: [selected.id],
+            initialTransforms: { [selected.id]: selected.transform },
+            initialTransform: selected.transform,
+            pivotWorld,
+          };
           return;
         }
-        if (Math.hypot(screenPos.x - handle.x, screenPos.y - handle.y) <= 12) {
-          (e.target as HTMLElement).setPointerCapture(e.pointerId);
-          dragStateRef.current = { type: 'resize-object', startScreen: screenPos, startWorld: worldPos, currentWorld: worldPos, pointerId: e.pointerId, initialSize: selectedSize };
+        const hitResize = resizeHandles.find(
+          (h) => Math.hypot(screenPos.x - h.point.x, screenPos.y - h.point.y) <= 12
+        );
+        if (hitResize) {
+          try { (e.target as HTMLElement).setPointerCapture(e.pointerId); } catch { /* capture failed */ }
+          dragStateRef.current = {
+            type: 'resize-object',
+            startScreen: screenPos,
+            startWorld: worldPos,
+            currentWorld: worldPos,
+            pointerId: e.pointerId,
+            objectIds: [selected.id],
+            initialSize: { width: bounds.width, height: bounds.height },
+            initialBounds: bounds,
+            handleId: hitResize.id,
+          };
           return;
         }
       }
@@ -935,6 +1025,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       }
 
       if (hit) {
+        try { (e.target as HTMLElement).setPointerCapture(e.pointerId); } catch { /* capture failed */ }
         onSelectSelection?.(picked.selection);
         const dragIds = picked.selection.objectIds;
         const obj = doc.objects[hit.objectId];
@@ -964,10 +1055,12 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
 
   const handlePointerMove = (e: React.PointerEvent) => {
     const screenPos = getPointerScreen(e);
-    const worldPos = snapWorldPoint(camera.screenToWorld(screenPos));
+    const rawWorldPos = camera.screenToWorld(screenPos);
+    const drag = dragStateRef.current;
+    const isSnapKeyDown = e.ctrlKey || e.metaKey;
+    const worldPos = (snapToGrid || isSnapKeyDown) && !drag ? snapWorldPoint(rawWorldPos) : rawWorldPos;
     onCursorMove(worldPos);
 
-    const drag = dragStateRef.current;
     const freehandOperation = freehandOperationRef.current;
     
     const wasAltKey = altKeyRef.current;
@@ -1034,6 +1127,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       setFreehandVersion((version) => version + 1);
       return;
     }
+
     if (!drag) {
       if (activeTool === 'pen') {
         penToolRef.current?.pointerMove({ screenPoint: screenPos, worldPoint: worldPos, shiftKey: e.shiftKey, altKey: e.altKey });
@@ -1088,14 +1182,23 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       });
       setPathPreview({ [objectId]: nodes });
     } else if (drag.type === 'move-object') {
-      drag.currentWorld = worldPos;
-      dragSessionRef.current?.update(worldPos);
+      const screenDist = Math.hypot(screenPos.x - drag.startScreen.x, screenPos.y - drag.startScreen.y);
+      if (screenDist < DRAG_THRESHOLD_PX) {
+        return;
+      }
+      drag.currentWorld = rawWorldPos;
+      dragSessionRef.current?.update(rawWorldPos);
       if (drag.objectIds && drag.initialTransforms) {
-        let deltaWorld = dragSessionRef.current?.delta ?? { x: worldPos.x - drag.startWorld.x, y: worldPos.y - drag.startWorld.y };
+        let deltaWorld = { x: rawWorldPos.x - drag.startWorld.x, y: rawWorldPos.y - drag.startWorld.y };
         
-        // Smart object snap
-        if (dragSessionRef.current) {
-          const dragRect = { x: dragSessionRef.current.transform.initialBounds.x + deltaWorld.x, y: dragSessionRef.current.transform.initialBounds.y + deltaWorld.y, width: dragSessionRef.current.transform.initialBounds.width, height: dragSessionRef.current.transform.initialBounds.height };
+        // Smart object snap only when Ctrl is held (Decyzja 3)
+        if (isSnapKeyDown && dragSessionRef.current) {
+          const dragRect = {
+            x: dragSessionRef.current.transform.initialBounds.x + deltaWorld.x,
+            y: dragSessionRef.current.transform.initialBounds.y + deltaWorld.y,
+            width: dragSessionRef.current.transform.initialBounds.width,
+            height: dragSessionRef.current.transform.initialBounds.height,
+          };
           const snap = calculateObjectSnap(dragRect, doc, new Set(drag.objectIds), doc.snap.tolerancePx, camera.zoom);
           if (snap.snappedX || snap.snappedY) {
             objectSnapRef.current = snap;
@@ -1113,18 +1216,50 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
           if (!initial) continue;
           preview[objectId] = { ...initial, position: { x: initial.position.x + deltaWorld.x, y: initial.position.y + deltaWorld.y } };
         }
-        setDragPreview(preview);
+        updateDragPreview(preview);
       }
     } else if (drag.type === 'rotate-object' && drag.initialTransform && drag.pivotWorld) {
       const startAngle = Math.atan2(drag.startWorld.y - drag.pivotWorld.y, drag.startWorld.x - drag.pivotWorld.x);
-      const currentAngle = Math.atan2(worldPos.y - drag.pivotWorld.y, worldPos.x - drag.pivotWorld.x);
+      const currentAngle = Math.atan2(rawWorldPos.y - drag.pivotWorld.y, rawWorldPos.x - drag.pivotWorld.x);
       const object = doc.objects[drag.objectIds?.[0] ?? ''];
-      if (object && (object.type === 'rectangle' || object.type === 'ellipse')) {
-        setDragPreview({ [object.id]: { ...drag.initialTransform, position: drag.pivotWorld, pivot: { x: object.width / 2, y: object.height / 2 }, rotation: drag.initialTransform.rotation + currentAngle - startAngle } });
-        drag.currentWorld = worldPos;
+      if (object) {
+        let rotation = drag.initialTransform.rotation + currentAngle - startAngle;
+        if (e.shiftKey) {
+          const step = Math.PI / 12;
+          rotation = Math.round(rotation / step) * step;
+        }
+        const preview = {
+          [object.id]: {
+            ...drag.initialTransform,
+            rotation,
+          },
+        };
+        updateDragPreview(preview);
+        drag.currentWorld = rawWorldPos;
       }
     } else if (drag.type === 'resize-object') {
-      drag.currentWorld = worldPos;
+      drag.currentWorld = rawWorldPos;
+      const object = selectedObjectId ? doc.objects[selectedObjectId] : null;
+      if (object && drag.initialSize) {
+        const deltaX = rawWorldPos.x - drag.startWorld.x;
+        const deltaY = rawWorldPos.y - drag.startWorld.y;
+        if (object.type === 'rectangle' || object.type === 'ellipse') {
+          drag.currentWorld = rawWorldPos;
+        } else {
+          const scaleX = Math.max(0.01, (drag.initialSize.width + deltaX) / Math.max(1, drag.initialSize.width));
+          const scaleY = Math.max(0.01, (drag.initialSize.height + deltaY) / Math.max(1, drag.initialSize.height));
+          const preview = {
+            [object.id]: {
+              ...object.transform,
+              scale: {
+                x: (object.transform.scale?.x ?? 1) * scaleX,
+                y: (object.transform.scale?.y ?? 1) * scaleY,
+              },
+            },
+          };
+          updateDragPreview(preview);
+        }
+      }
     }
   };
 
@@ -1308,6 +1443,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         });
         if (moved) onExecuteCommand(new TransformObjectsCommand([...transforms.keys()], transforms));
       }
+      updateDragPreview({});
     } else if ((drag.type === 'move-node' || drag.type === 'move-handle') && drag.objectIds?.[0] && drag.nodeIndex !== undefined) {
       const objectId = drag.objectIds[0];
       const nodes = pathPreview[objectId];
@@ -1316,6 +1452,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     } else if (drag.type === 'rotate-object') {
       const transforms = new Map(Object.entries(dragPreview) as [ObjectId, import('@vectoria/core').Transform2D][]);
       if (transforms.size > 0) onExecuteCommand(new TransformObjectsCommand([...transforms.keys()], transforms));
+      updateDragPreview({});
     } else if (drag.type === 'resize-object' && selectedObjectId && drag.initialSize) {
       const object = doc.objects[selectedObjectId];
       if (object?.type === 'rectangle' || object?.type === 'ellipse') {
@@ -1328,11 +1465,30 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         }
         if (object.type === 'rectangle') onExecuteCommand(new SetRectangleGeometryCommand(selectedObjectId, { width, height }));
         else onExecuteCommand(new SetEllipseGeometryCommand(selectedObjectId, { width, height }));
+      } else if (object) {
+        const deltaX = drag.currentWorld.x - drag.startWorld.x;
+        const deltaY = drag.currentWorld.y - drag.startWorld.y;
+        let scaleX = Math.max(0.01, (drag.initialSize.width + deltaX) / Math.max(1, drag.initialSize.width));
+        let scaleY = Math.max(0.01, (drag.initialSize.height + deltaY) / Math.max(1, drag.initialSize.height));
+        if (e.shiftKey) {
+          const uniform = Math.max(scaleX, scaleY);
+          scaleX = uniform;
+          scaleY = uniform;
+        }
+        const newTransform = {
+          ...object.transform,
+          scale: {
+            x: (object.transform.scale?.x ?? 1) * scaleX,
+            y: (object.transform.scale?.y ?? 1) * scaleY,
+          },
+        };
+        onExecuteCommand(new TransformObjectsCommand([object.id], new Map([[object.id, newTransform]])));
       }
-      setDragPreview({});
+      updateDragPreview({});
     }
 
-    if (drag.type === 'move-object') setDragPreview({});
+    if (drag.type === 'move-object') updateDragPreview({});
+    try { (e.target as HTMLElement).releasePointerCapture(e.pointerId); } catch { /* capture may already be released */ }
     dragSessionRef.current = null;
     dragStateRef.current = null;
     renderLoopRef.current?.invalidate();
@@ -1372,8 +1528,8 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       return;
     }
 
-    if (drag.type === 'move-object') {
-      setDragPreview({});
+    if (drag.type === 'move-object' || drag.type === 'rotate-object' || drag.type === 'resize-object') {
+      updateDragPreview({});
     }
     if (drag.type === 'style-sample') {
       eyedropperToolRef.current?.cancel();
