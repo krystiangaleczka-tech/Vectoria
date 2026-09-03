@@ -52,6 +52,7 @@ interface AppMenuBarProps {
   onOpenShortcutConfig?: () => void;
   onSaveLayoutPreset?: () => void;
   onOpenTransform?: () => void;
+  onCreateArtboard?: () => void;
 }
 
 type MenuName = 'Plik' | 'Edycja' | 'Obiekt' | 'Tekst' | 'Widok' | 'Okno' | 'Pomoc';
@@ -105,6 +106,7 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
   onOpenShortcutConfig,
   onSaveLayoutPreset,
   onOpenTransform,
+  onCreateArtboard,
 }) => {
   const [openMenu, setOpenMenu] = useState<MenuName | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -134,6 +136,7 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
     if (menu === 'Plik') {
       return <>
         <MenuItem label="Nowy dokument" shortcut="Ctrl+N" onClick={() => run(onNewDocument)} />
+        <MenuItem label="Nowy artboard" onClick={() => run(() => onCreateArtboard?.())} />
         <MenuItem label="Otwórz / Importuj..." onClick={() => run(onImportSvg)} />
         <MenuItem label="Zapisz jako .vct" onClick={() => run(onExportVct)} />
         <MenuItem label="Eksportuj SVG" shortcut="Ctrl+Shift+E" onClick={() => run(onExportSvg)} />

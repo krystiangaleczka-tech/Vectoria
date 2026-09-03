@@ -121,7 +121,14 @@ export const ContextualControlBar: React.FC<ContextualControlBarProps> = ({
     ? (previewTransforms && selected.id in previewTransforms ? previewTransforms[selected.id]! : selected.transform)
     : null;
 
-  const currentBounds = selected ? getObjectBounds(selected, doc) : null;
+  const baseBounds = selected ? getObjectBounds(selected, doc) : null;
+  const currentBounds = selected && baseBounds
+    ? {
+        ...baseBounds,
+        width: baseBounds.width * Math.abs((currentTransform?.scale?.x ?? 1) / (selected.transform.scale?.x || 1)),
+        height: baseBounds.height * Math.abs((currentTransform?.scale?.y ?? 1) / (selected.transform.scale?.y || 1)),
+      }
+    : null;
   const currentFillColor = selected?.style?.fill?.type === 'solid' ? selected.style.fill.color : null;
   const currentAngleDeg = currentTransform
     ? Math.round(((((currentTransform.rotation * 180) / Math.PI) % 360) + 360) % 360 * 10) / 10

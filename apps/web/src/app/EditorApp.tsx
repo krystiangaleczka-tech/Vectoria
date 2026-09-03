@@ -1709,6 +1709,7 @@ export const EditorApp: React.FC = () => {
         onOpenShortcutConfig={() => setShortcutConfigOpen(true)}
         onSaveLayoutPreset={handleSaveLayoutPreset}
         onOpenTransform={handleOpenTransform}
+        onCreateArtboard={handleCreateArtboard}
       />
 
       {bootstrapState.status === 'recovery-error' && (

@@ -162,6 +162,18 @@ function getObjectHandles(
   return { rotationHandle, resizeHandles, pivotWorld, bounds };
 }
 
+const ROTATE_CURSOR = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 22 22' fill='none'%3E%3Cpath d='M11 3 A 7 7 0 0 1 18 10 M 18 6 L 18 10 L 14 10' stroke='%23ffffff' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M11 3 A 7 7 0 0 1 18 10 M 18 6 L 18 10 L 14 10' stroke='%23000000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M11 19 A 7 7 0 0 1 4 12 M 4 16 L 4 12 L 8 12' stroke='%23ffffff' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M11 19 A 7 7 0 0 1 4 12 M 4 16 L 4 12 L 8 12' stroke='%23000000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") 11 11, crosshair`;
+
+function getResizeCursor(screenPoint: Vec2, centerScreen: Vec2): string {
+  let deg = Math.atan2(screenPoint.y - centerScreen.y, screenPoint.x - centerScreen.x) * (180 / Math.PI);
+  if (deg < 0) deg += 360;
+  deg = deg % 180;
+  if (deg >= 22.5 && deg < 67.5) return 'nwse-resize';
+  if (deg >= 67.5 && deg < 112.5) return 'ns-resize';
+  if (deg >= 112.5 && deg < 157.5) return 'nesw-resize';
+  return 'ew-resize';
+}
+
 interface DragState {
   type: 'pan' | 'create-shape' | 'move-object' | 'move-node' | 'move-handle' | 'resize-object' | 'rotate-object' | 'gradient-handle' | 'style-sample' | 'marquee' | 'lasso' | 'node-lasso' | 'text-create' | 'text-select';
   shape?: BasicShapeTool;
@@ -298,6 +310,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     },
     [onDragPreviewChange]
   );
+  const [hoverHandleCursor, setHoverHandleCursor] = React.useState<string | null>(null);
   const [stylePreview, setStylePreview] = React.useState<Record<string, import('@vectoria/core').ObjectStyle>>({});
   const [pathPreview, setPathPreview] = React.useState<Record<string, readonly import('@vectoria/core').PathNode[]>>({});
   const [cornerPreview, setCornerPreview] = React.useState<import('@vectoria/core').GeometryPreview | null>(null);
@@ -962,6 +975,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         const { rotationHandle, resizeHandles, pivotWorld, bounds } = getObjectHandles(selected, camera, doc);
         if (!e.shiftKey && Math.hypot(screenPos.x - rotationHandle.x, screenPos.y - rotationHandle.y) <= 12) {
           try { (e.target as HTMLElement).setPointerCapture(e.pointerId); } catch { /* capture failed */ }
+          setHoverHandleCursor(ROTATE_CURSOR);
           dragStateRef.current = {
             type: 'rotate-object',
             startScreen: screenPos,
@@ -980,6 +994,8 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         );
         if (hitResize) {
           try { (e.target as HTMLElement).setPointerCapture(e.pointerId); } catch { /* capture failed */ }
+          const centerScreen = camera.worldToScreen(pivotWorld);
+          setHoverHandleCursor(getResizeCursor(hitResize.point, centerScreen));
           dragStateRef.current = {
             type: 'resize-object',
             startScreen: screenPos,
@@ -990,6 +1006,8 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
             initialSize: { width: bounds.width, height: bounds.height },
             initialBounds: bounds,
             handleId: hitResize.id,
+            initialTransform: selected.transform,
+            pivotWorld,
           };
           return;
         }
@@ -1078,6 +1096,31 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
        renderLoopRef.current?.invalidate();
     }
     freehandCursorRef.current = worldPos;
+
+    if (!drag && activeTool === 'select' && selectedObjectId) {
+      const selected = doc.objects[selectedObjectId];
+      if (selected) {
+        const { rotationHandle, resizeHandles, pivotWorld } = getObjectHandles(selected, camera, doc);
+        if (Math.hypot(screenPos.x - rotationHandle.x, screenPos.y - rotationHandle.y) <= 12) {
+          if (hoverHandleCursor !== ROTATE_CURSOR) setHoverHandleCursor(ROTATE_CURSOR);
+        } else {
+          const hitResize = resizeHandles.find(
+            (h) => Math.hypot(screenPos.x - h.point.x, screenPos.y - h.point.y) <= 12
+          );
+          if (hitResize) {
+            const centerScreen = camera.worldToScreen(pivotWorld);
+            const cursor = getResizeCursor(hitResize.point, centerScreen);
+            if (hoverHandleCursor !== cursor) setHoverHandleCursor(cursor);
+          } else if (hoverHandleCursor) {
+            setHoverHandleCursor(null);
+          }
+        }
+      } else if (hoverHandleCursor) {
+        setHoverHandleCursor(null);
+      }
+    } else if (!drag && hoverHandleCursor) {
+      setHoverHandleCursor(null);
+    }
 
     if (drag?.type === 'style-sample') {
       if (drag.styleTool === 'eyedropper') eyedropperToolRef.current?.pointerMove({ screenPoint: screenPos, worldPoint: worldPos });
@@ -1235,30 +1278,112 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
           },
         };
         updateDragPreview(preview);
+        renderLoopRef.current?.invalidate();
         drag.currentWorld = rawWorldPos;
       }
-    } else if (drag.type === 'resize-object') {
+    } else if (drag.type === 'resize-object' && drag.objectIds?.[0]) {
       drag.currentWorld = rawWorldPos;
-      const object = selectedObjectId ? doc.objects[selectedObjectId] : null;
-      if (object && drag.initialSize) {
-        const deltaX = rawWorldPos.x - drag.startWorld.x;
-        const deltaY = rawWorldPos.y - drag.startWorld.y;
-        if (object.type === 'rectangle' || object.type === 'ellipse') {
-          drag.currentWorld = rawWorldPos;
-        } else {
-          const scaleX = Math.max(0.01, (drag.initialSize.width + deltaX) / Math.max(1, drag.initialSize.width));
-          const scaleY = Math.max(0.01, (drag.initialSize.height + deltaY) / Math.max(1, drag.initialSize.height));
-          const preview = {
-            [object.id]: {
-              ...object.transform,
-              scale: {
-                x: (object.transform.scale?.x ?? 1) * scaleX,
-                y: (object.transform.scale?.y ?? 1) * scaleY,
-              },
-            },
-          };
-          updateDragPreview(preview);
+      const object = doc.objects[drag.objectIds[0]];
+      if (object && drag.initialSize && drag.handleId) {
+        const rot = drag.initialTransform?.rotation ?? object.transform.rotation ?? 0;
+        const worldDeltaX = rawWorldPos.x - drag.startWorld.x;
+        const worldDeltaY = rawWorldPos.y - drag.startWorld.y;
+        const cos = Math.cos(-rot);
+        const sin = Math.sin(-rot);
+        const localDeltaX = worldDeltaX * cos - worldDeltaY * sin;
+        const localDeltaY = worldDeltaX * sin + worldDeltaY * cos;
+
+        const initialW = drag.initialSize.width;
+        const initialH = drag.initialSize.height;
+
+        let dW = 0;
+        let dH = 0;
+
+        switch (drag.handleId) {
+          case 'se':
+            dW = localDeltaX;
+            dH = localDeltaY;
+            break;
+          case 'e':
+            dW = localDeltaX;
+            break;
+          case 's':
+            dH = localDeltaY;
+            break;
+          case 'nw':
+            dW = -localDeltaX;
+            dH = -localDeltaY;
+            break;
+          case 'w':
+            dW = -localDeltaX;
+            break;
+          case 'n':
+            dH = -localDeltaY;
+            break;
+          case 'ne':
+            dW = localDeltaX;
+            dH = -localDeltaY;
+            break;
+          case 'sw':
+            dW = -localDeltaX;
+            dH = localDeltaY;
+            break;
         }
+
+        let newWidth = initialW + dW;
+        let newHeight = initialH + dH;
+
+        if (e.shiftKey) {
+          const ratio = initialW / Math.max(1, initialH);
+          if (drag.handleId === 'e' || drag.handleId === 'w') {
+            newHeight = newWidth / ratio;
+          } else if (drag.handleId === 'n' || drag.handleId === 's') {
+            newWidth = newHeight * ratio;
+          } else {
+            if (Math.abs(newWidth - initialW) >= Math.abs(newHeight - initialH) * ratio) {
+              newHeight = newWidth / ratio;
+            } else {
+              newWidth = newHeight * ratio;
+            }
+          }
+        }
+
+        newWidth = Math.max(1, newWidth);
+        newHeight = Math.max(1, newHeight);
+
+        let finalShiftX = 0;
+        let finalShiftY = 0;
+        if (drag.handleId === 'nw' || drag.handleId === 'w' || drag.handleId === 'sw') {
+          finalShiftX = initialW - newWidth;
+        }
+        if (drag.handleId === 'nw' || drag.handleId === 'n' || drag.handleId === 'ne') {
+          finalShiftY = initialH - newHeight;
+        }
+
+        const cosRot = Math.cos(rot);
+        const sinRot = Math.sin(rot);
+        const worldShiftX = finalShiftX * cosRot - finalShiftY * sinRot;
+        const worldShiftY = finalShiftX * sinRot + finalShiftY * cosRot;
+
+        const initPos = drag.initialTransform?.position ?? object.transform.position;
+        const newPosition = {
+          x: initPos.x + worldShiftX,
+          y: initPos.y + worldShiftY,
+        };
+
+        const initScale = drag.initialTransform?.scale ?? { x: 1, y: 1 };
+        const scaleX = initScale.x * (newWidth / Math.max(1, initialW));
+        const scaleY = initScale.y * (newHeight / Math.max(1, initialH));
+
+        const preview: Record<string, import('@vectoria/core').Transform2D> = {
+          [object.id]: {
+            ...(drag.initialTransform ?? object.transform),
+            position: newPosition,
+            scale: { x: scaleX, y: scaleY },
+          },
+        };
+        updateDragPreview(preview);
+        renderLoopRef.current?.invalidate();
       }
     }
   };
@@ -1453,38 +1578,32 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       const transforms = new Map(Object.entries(dragPreview) as [ObjectId, import('@vectoria/core').Transform2D][]);
       if (transforms.size > 0) onExecuteCommand(new TransformObjectsCommand([...transforms.keys()], transforms));
       updateDragPreview({});
-    } else if (drag.type === 'resize-object' && selectedObjectId && drag.initialSize) {
-      const object = doc.objects[selectedObjectId];
-      if (object?.type === 'rectangle' || object?.type === 'ellipse') {
-        let width = Math.max(1, drag.initialSize.width + drag.currentWorld.x - drag.startWorld.x);
-        let height = Math.max(1, drag.initialSize.height + drag.currentWorld.y - drag.startWorld.y);
-        if (e.shiftKey) {
-          const ratio = drag.initialSize.width / drag.initialSize.height;
-          if (Math.abs(width - drag.initialSize.width) >= Math.abs(height - drag.initialSize.height) * ratio) height = Math.max(1, width / ratio);
-          else width = Math.max(1, height * ratio);
+      setHoverHandleCursor(null);
+    } else if (drag.type === 'resize-object' && drag.objectIds?.[0]) {
+      const objectId = drag.objectIds[0];
+      const object = doc.objects[objectId];
+      const preview = dragPreview[objectId];
+      if (object && preview && drag.initialSize) {
+        const initScale = drag.initialTransform?.scale ?? { x: 1, y: 1 };
+        const finalWidth = Math.max(1, Math.round(drag.initialSize.width * Math.abs(preview.scale.x / (initScale.x || 1))));
+        const finalHeight = Math.max(1, Math.round(drag.initialSize.height * Math.abs(preview.scale.y / (initScale.y || 1))));
+
+        if (object.type === 'rectangle') {
+          onExecuteCommand(new SetRectangleGeometryCommand(objectId, { width: finalWidth, height: finalHeight }));
+          if (preview.position.x !== object.transform.position.x || preview.position.y !== object.transform.position.y) {
+            onExecuteCommand(new TransformObjectsCommand([objectId], new Map([[objectId, { ...object.transform, position: preview.position }]])));
+          }
+        } else if (object.type === 'ellipse') {
+          onExecuteCommand(new SetEllipseGeometryCommand(objectId, { width: finalWidth, height: finalHeight }));
+          if (preview.position.x !== object.transform.position.x || preview.position.y !== object.transform.position.y) {
+            onExecuteCommand(new TransformObjectsCommand([objectId], new Map([[objectId, { ...object.transform, position: preview.position }]])));
+          }
+        } else {
+          onExecuteCommand(new TransformObjectsCommand([objectId], new Map([[objectId, preview]])));
         }
-        if (object.type === 'rectangle') onExecuteCommand(new SetRectangleGeometryCommand(selectedObjectId, { width, height }));
-        else onExecuteCommand(new SetEllipseGeometryCommand(selectedObjectId, { width, height }));
-      } else if (object) {
-        const deltaX = drag.currentWorld.x - drag.startWorld.x;
-        const deltaY = drag.currentWorld.y - drag.startWorld.y;
-        let scaleX = Math.max(0.01, (drag.initialSize.width + deltaX) / Math.max(1, drag.initialSize.width));
-        let scaleY = Math.max(0.01, (drag.initialSize.height + deltaY) / Math.max(1, drag.initialSize.height));
-        if (e.shiftKey) {
-          const uniform = Math.max(scaleX, scaleY);
-          scaleX = uniform;
-          scaleY = uniform;
-        }
-        const newTransform = {
-          ...object.transform,
-          scale: {
-            x: (object.transform.scale?.x ?? 1) * scaleX,
-            y: (object.transform.scale?.y ?? 1) * scaleY,
-          },
-        };
-        onExecuteCommand(new TransformObjectsCommand([object.id], new Map([[object.id, newTransform]])));
       }
       updateDragPreview({});
+      setHoverHandleCursor(null);
     }
 
     if (drag.type === 'move-object') updateDragPreview({});
@@ -1530,6 +1649,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
 
     if (drag.type === 'move-object' || drag.type === 'rotate-object' || drag.type === 'resize-object') {
       updateDragPreview({});
+      setHoverHandleCursor(null);
     }
     if (drag.type === 'style-sample') {
       eyedropperToolRef.current?.cancel();
@@ -1873,16 +1993,19 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         flex: 1,
         height: '100%',
         overflow: 'hidden',
-         cursor:
-           isSpacePressed || activeTool === 'hand'
-             ? 'grab'
-             : activeTool === 'eyedropper'
-             ? 'copy'
-             : activeTool === 'bucket'
-             ? 'cell'
-             : isDragShapeTool(activeTool) || activeTool === 'polyline' || activeTool === 'pen' || activeTool === 'pencil' || activeTool === 'brush' || activeTool === 'corner' || activeTool === 'eraser' || activeTool === 'knife' || activeTool === 'scissors' || activeTool === 'lasso' || activeTool === 'node-lasso'
-             ? 'crosshair'
-             : 'default',
+        cursor:
+          hoverHandleCursor ??
+          (dragStateRef.current?.type === 'move-object'
+            ? 'move'
+            : isSpacePressed || activeTool === 'hand'
+            ? 'grab'
+            : activeTool === 'eyedropper'
+            ? 'copy'
+            : activeTool === 'bucket'
+            ? 'cell'
+            : isDragShapeTool(activeTool) || activeTool === 'polyline' || activeTool === 'pen' || activeTool === 'pencil' || activeTool === 'brush' || activeTool === 'corner' || activeTool === 'eraser' || activeTool === 'knife' || activeTool === 'scissors' || activeTool === 'lasso' || activeTool === 'node-lasso'
+            ? 'crosshair'
+            : 'default'),
         touchAction: 'none',
       }}
       onDragOver={(e) => {
