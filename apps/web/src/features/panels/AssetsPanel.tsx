@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { DocumentModel, ObjectStyle, SavedObjectStyle, ColorPalette, SymbolDefinition } from '@vectoria/core';
 import { VectoriaIcon } from '@vectoria/ui';
+import { exportBrandKitToFile, importBrandKitFromFile } from '@vectoria/io';
 
 export interface AssetsPanelProps {
   document: DocumentModel;
@@ -11,6 +12,7 @@ export interface AssetsPanelProps {
   onInsertStockSvg?: (svgData: string, name: string) => void;
   onApplyBrandFont?: (fontFamily: string) => void;
   onAddBrandLogo?: (file: File) => void;
+  onImportBrandKit?: (brandKit: import('@vectoria/core').BrandKit) => void;
 }
 
 type AssetSection = 'all' | 'symbols' | 'components' | 'styles' | 'palettes' | 'icons' | 'stock' | 'brandKit';
@@ -42,6 +44,7 @@ export const AssetsPanel: React.FC<AssetsPanelProps> = ({
   onInsertStockSvg,
   onApplyBrandFont,
   onAddBrandLogo,
+  onImportBrandKit,
 }) => {
   const [activeSection, setActiveSection] = useState<AssetSection>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -157,12 +160,64 @@ export const AssetsPanel: React.FC<AssetsPanelProps> = ({
           </div>
         )}
 
-        {/* Brand Kit Section (ASSET-023, ASSET-024, ASSET-025, ASSET-026) */}
+        {/* Brand Kit Section (ASSET-023, ASSET-024, ASSET-025, ASSET-026, SAAS-021) */}
         {(activeSection === 'all' || activeSection === 'brandKit') && (
           <div className="assets-section brand-kit-section" data-testid="assets-brandkit-section">
-            <div className="assets-section-title">
-              <VectoriaIcon name="brandKit" size={14} />
-              <span>Brand Kit</span>
+            <div className="assets-section-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <VectoriaIcon name="brandKit" size={14} />
+                <span>Brand Kit</span>
+              </div>
+              <div style={{ display: 'flex', gap: '4px' }}>
+                {doc.brandKit && (
+                  <button
+                    type="button"
+                    data-testid="export-brandkit-btn"
+                    title="Eksportuj Brand Kit do pliku .brandkit"
+                    onClick={() => {
+                      if (!doc.brandKit) return;
+                      const json = exportBrandKitToFile(doc.brandKit);
+                      const blob = new Blob([json], { type: 'application/json;charset=utf-8' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `${(doc.name || 'Dokument').replace(/\s+/g, '_')}.brandkit`;
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    }}
+                    className="section-action-btn"
+                    style={{ fontSize: '11px', padding: '2px 6px', cursor: 'pointer' }}
+                  >
+                    Eksportuj
+                  </button>
+                )}
+                {onImportBrandKit && (
+                  <label
+                    className="section-action-btn file-upload-label"
+                    title="Importuj Brand Kit z pliku .brandkit"
+                    style={{ fontSize: '11px', padding: '2px 6px', cursor: 'pointer' }}
+                  >
+                    <span>Importuj</span>
+                    <input
+                      type="file"
+                      data-testid="import-brandkit-input"
+                      accept=".brandkit,.json"
+                      style={{ display: 'none' }}
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        try {
+                          const text = await file.text();
+                          const imported = importBrandKitFromFile(text);
+                          onImportBrandKit(imported);
+                        } catch (err) {
+                          alert(`Błąd importu Brand Kit: ${err instanceof Error ? err.message : String(err)}`);
+                        }
+                      }}
+                    />
+                  </label>
+                )}
+              </div>
             </div>
 
             {/* Brand Logos */}

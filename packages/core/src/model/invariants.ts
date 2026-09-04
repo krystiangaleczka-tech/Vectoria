@@ -567,6 +567,24 @@ export function validateInvariants(doc: DocumentModel): InvariantViolation[] {
     if (!logo.id.trim() || !logo.name.trim()) violations.push({ code: 'INVALID_BRAND_LOGO', message: 'Brand logo has invalid id or name.' });
   }
 
+  if (doc.annotations) {
+    if (doc.annotations.length > 500) {
+      violations.push({ code: 'ANNOTATION_LIMIT_EXCEEDED', message: 'Document exceeds 500 annotations limit.' });
+    }
+    for (const annotation of doc.annotations) {
+      registerId(annotation.id, 'DUPLICATE_ANNOTATION_ID');
+      if (!Number.isFinite(annotation.worldPoint.x) || !Number.isFinite(annotation.worldPoint.y)) {
+        violations.push({ code: 'INVALID_ANNOTATION_POINT', message: `Annotation '${annotation.id}' coordinates must be finite.` });
+      }
+      if (!annotation.body.trim() || annotation.body.length > 4000) {
+        violations.push({ code: 'INVALID_ANNOTATION_BODY', message: `Annotation '${annotation.id}' body must be between 1 and 4000 characters.` });
+      }
+      if (!annotation.authorName.trim() || annotation.authorName.length > 120) {
+        violations.push({ code: 'INVALID_ANNOTATION_AUTHOR', message: `Annotation '${annotation.id}' authorName must be between 1 and 120 characters.` });
+      }
+    }
+  }
+
   return violations;
 }
 

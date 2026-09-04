@@ -672,6 +672,20 @@ export interface SnapSettings {
   readonly sources: Readonly<Record<SnapSource, boolean>>;
 }
 
+// ─── Document Annotations (EPIC-17 SAAS-012..014) ──────────────────────────
+
+export interface CanvasAnnotation {
+  readonly id: string;
+  readonly projectId?: string;
+  readonly worldPoint: Vec2;
+  readonly body: string;
+  readonly authorName: string;
+  readonly resolved: boolean;
+  readonly mentions: readonly string[];
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
 // ─── Document Model ───────────────────────────────────────────────────────────
 
 export interface DocumentModel {
@@ -697,6 +711,7 @@ export interface DocumentModel {
   readonly symbols?: Readonly<Record<SymbolId, SymbolDefinition>>;
   readonly symbolIds?: readonly SymbolId[];
   readonly brandKit?: BrandKit;
+  readonly annotations?: readonly CanvasAnnotation[];
 
   readonly createdAt: string;
   readonly updatedAt: string;

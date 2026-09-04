@@ -2,13 +2,23 @@ import type { DocumentModel } from '@vectoria/core';
 import { createDefaultDocument, validateInvariants } from '@vectoria/core';
 import { parseAndMigrateDocument, PersistedDocumentSchema, type PersistedDocument } from '../schema/document-v1.js';
 import { IndexedDBDocumentRepository } from './indexeddb-repository.js';
-import type { DocumentVersion } from './document-repository.js';
+import type { DocumentRepository, DocumentVersion } from './document-repository.js';
 
 const CURRENT_DOC_KEY = 'current_document';
 const LAST_KNOWN_GOOD_KEY = 'last_known_good_document';
 const VERSIONS_KEY = 'document_versions';
-const repository = new IndexedDBDocumentRepository(CURRENT_DOC_KEY);
+let activeRepository: DocumentRepository = new IndexedDBDocumentRepository(CURRENT_DOC_KEY);
 const SESSION_MARKER = 'vectoria-session-open';
+
+/** Injects a custom DocumentRepository instance for testing or alternative storage providers. */
+export function setDocumentRepository(repo: DocumentRepository): void {
+  activeRepository = repo;
+}
+
+/** Returns the currently active DocumentRepository. */
+export function getDocumentRepository(): DocumentRepository {
+  return activeRepository;
+}
 
 export function markSessionOpen(): void {
   try { sessionStorage.setItem(SESSION_MARKER, '1'); } catch { /* storage may be unavailable */ }
@@ -38,7 +48,7 @@ export type BootstrapState =
  */
 export async function bootstrapDocument(): Promise<BootstrapState> {
   try {
-    const raw = await repository.load(CURRENT_DOC_KEY);
+    const raw = await activeRepository.load(CURRENT_DOC_KEY);
 
     if (!raw) {
       const defaultDoc = createDefaultDocument();
@@ -60,7 +70,7 @@ export async function bootstrapDocument(): Promise<BootstrapState> {
 
     const envelope = persisted as Partial<PersistedDocument> | null;
     const revision = typeof envelope?.revision === 'number' && Number.isInteger(envelope.revision) && envelope.revision >= 0 ? envelope.revision : 0;
-    const knownGood = await repository.loadKnownGood?.(LAST_KNOWN_GOOD_KEY).catch(() => null);
+    const knownGood = await activeRepository.loadKnownGood?.(LAST_KNOWN_GOOD_KEY).catch(() => null);
     if (hadInterruptedSession() && knownGood && knownGood.revision <= revision) {
       const recoveryDocument = parseAndMigrateDocument(knownGood.document);
       if (validateInvariants(recoveryDocument).length === 0) {
@@ -76,7 +86,7 @@ export async function bootstrapDocument(): Promise<BootstrapState> {
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
     console.error('[Vectoria] Document recovery fallback triggered:', errorMsg);
-    const knownGood = await repository.loadKnownGood?.(LAST_KNOWN_GOOD_KEY).catch(() => null);
+    const knownGood = await activeRepository.loadKnownGood?.(LAST_KNOWN_GOOD_KEY).catch(() => null);
     if (knownGood) {
       try {
         const recovered = parseAndMigrateDocument(knownGood.document);
@@ -119,7 +129,7 @@ export async function saveLastKnownGoodSnapshot(document: DocumentModel, revisio
     revision,
     savedAt: new Date().toISOString(),
   };
-  return repository.saveAtomic?.(snapshot, LAST_KNOWN_GOOD_KEY) ?? repository.save(snapshot);
+  return activeRepository.saveAtomic?.(snapshot, LAST_KNOWN_GOOD_KEY) ?? activeRepository.save(snapshot);
 }
 
 /** Persists validated document snapshot with revision metadata for stale-write guards. */
@@ -138,7 +148,7 @@ export async function saveDocumentSnapshot(document: DocumentModel, revision: nu
     revision,
     savedAt: new Date().toISOString(),
   };
-  return repository.save(snapshot);
+  return activeRepository.save(snapshot);
 }
 
 /** Save a bounded named document version without changing the active document. */
@@ -152,12 +162,12 @@ export async function saveDocumentVersion(document: DocumentModel, name: string,
     name: name.trim().slice(0, 120),
     document: { app: 'vectoria', schemaVersion: document.schemaVersion, document, revision, savedAt: new Date().toISOString() },
   };
-  if (!repository.saveVersion) throw new Error('Versioned persistence is not supported');
-  await repository.saveVersion(version, VERSIONS_KEY);
+  if (!activeRepository.saveVersion) throw new Error('Versioned persistence is not supported');
+  await activeRepository.saveVersion(version, VERSIONS_KEY);
   return version;
 }
 
 /** Load version metadata and snapshots ordered newest first. */
 export async function listDocumentVersions(): Promise<readonly DocumentVersion[]> {
-  return repository.loadVersions?.(VERSIONS_KEY) ?? [];
+  return activeRepository.loadVersions?.(VERSIONS_KEY) ?? [];
 }

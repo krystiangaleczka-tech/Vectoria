@@ -11,6 +11,7 @@ export interface EditorContext {
   readonly doc?: unknown;
   readonly execute?: (command: never) => void;
   readonly report?: () => void;
+  readonly readOnly?: boolean;
 }
 
 export interface EditorCommand {
@@ -19,6 +20,7 @@ export interface EditorCommand {
   readonly category?: string;
   readonly shortcut?: string;
   readonly enabledReason?: string;
+  readonly isMutating?: boolean;
   enabled(ctx: EditorContext): boolean;
   execute(ctx: EditorContext): void;
 }
@@ -50,13 +52,18 @@ export class CommandRegistry {
     return this.getAll();
   }
 
+  canExecute(command: EditorCommand, ctx: EditorContext): boolean {
+    if (ctx.readOnly && command.isMutating) return false;
+    return command.enabled(ctx);
+  }
+
   search(query: string, ctx: EditorContext): { command: EditorCommand; enabled: boolean }[] {
     const q = query.trim().toLowerCase();
     return this.getAll()
       .filter((cmd) => !q || cmd.title.toLowerCase().includes(q) || cmd.id.toLowerCase().includes(q))
       .map((cmd) => ({
         command: cmd,
-        enabled: cmd.enabled(ctx),
+        enabled: this.canExecute(cmd, ctx),
       }));
   }
 

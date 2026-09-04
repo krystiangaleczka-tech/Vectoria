@@ -54,6 +54,8 @@ interface AppMenuBarProps {
   onOpenTransform?: () => void;
   onCreateArtboard?: () => void;
   onOpenExportDialog?: () => void;
+  onOpenGallery?: () => void;
+  onToggleComments?: () => void;
 }
 
 type MenuName = 'Plik' | 'Edycja' | 'Obiekt' | 'Tekst' | 'Widok' | 'Okno' | 'Pomoc';
@@ -109,6 +111,8 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
   onOpenTransform,
   onCreateArtboard,
   onOpenExportDialog,
+  onOpenGallery,
+  onToggleComments,
 }) => {
   const [openMenu, setOpenMenu] = useState<MenuName | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -137,6 +141,7 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
   const renderItems = (menu: MenuName) => {
     if (menu === 'Plik') {
       return <>
+        <MenuItem label="Moje projekty (Galeria)..." shortcut="Ctrl+G" onClick={() => run(onOpenGallery)} />
         <MenuItem label="Nowy dokument" shortcut="Ctrl+N" onClick={() => run(onNewDocument)} />
         <MenuItem label="Nowy artboard" onClick={() => run(() => onCreateArtboard?.())} />
         <MenuItem label="Otwórz / Importuj..." onClick={() => run(onImportSvg)} />
@@ -165,6 +170,7 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
         <MenuItem label="Dopasuj do zaznaczenia" disabled={selectedObjectIds.length === 0} onClick={() => run(onFitSelection)} />
         <MenuItem label="Zoom 100%" shortcut="Ctrl+0" onClick={() => run(onZoom100)} />
         <MenuItem label={outlineMode ? 'Wyłącz Outline View' : 'Włącz Outline View'} shortcut="Ctrl+Y" onClick={() => run(onToggleOutlineMode)} />
+        <MenuItem label="Komentarze i uwagi..." onClick={() => run(onToggleComments)} />
         <MenuItem label={`${showGrid ? 'Ukryj' : 'Pokaż'} siatkę`} onClick={() => run(onToggleGrid)} />
         <MenuItem label={`${snapToGrid ? 'Wyłącz' : 'Włącz'} snap do siatki`} onClick={() => run(onToggleSnap)} />
         <MenuItem label={`Motyw: ${theme === 'dark' ? 'jasny' : 'ciemny'}`} onClick={() => run(onToggleTheme)} />

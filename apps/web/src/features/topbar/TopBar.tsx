@@ -56,6 +56,9 @@ export interface TopBarProps {
   onOpenTransform?: () => void;
   onCreateArtboard?: () => void;
   onOpenExportDialog?: () => void;
+  onOpenGallery?: () => void;
+  onToggleComments?: () => void;
+  commentsCount?: number;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -110,6 +113,9 @@ export const TopBar: React.FC<TopBarProps> = ({
   onOpenTransform,
   onCreateArtboard,
   onOpenExportDialog,
+  onOpenGallery,
+  onToggleComments,
+  commentsCount,
 }) => {
   return (
     <header
@@ -175,8 +181,16 @@ export const TopBar: React.FC<TopBarProps> = ({
         onOpenTransform={onOpenTransform}
         onCreateArtboard={onCreateArtboard}
         onOpenExportDialog={onOpenExportDialog}
+        onOpenGallery={onOpenGallery}
+        onToggleComments={onToggleComments}
       />
-      <DocumentTabs documentName={documentName} dirty={saveStatus !== 'saved-locally'} />
+      <DocumentTabs
+        documentName={documentName}
+        dirty={saveStatus !== 'saved-locally'}
+        onOpenGallery={onOpenGallery}
+        onToggleComments={onToggleComments}
+        commentsCount={commentsCount}
+      />
     </header>
   );
 };

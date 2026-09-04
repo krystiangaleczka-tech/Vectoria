@@ -49,12 +49,12 @@ Spec (`EPIC-17:15-17`) + AGENTS §7.3: zmiana `DocumentModel` i backend = ADR pr
 
 | ADR | Zakres | Blokuje |
 |---|---|---|
-| **ADR-012** Annotations domain | `DocumentModel.annotations: readonly CanvasAnnotation[]` (nie SceneObject); typy, invariants, schema v1 (pole opcjonalne = backward-compatible), komendy | SAAS-012..014, 018 |
-| **ADR-013** Workspace storage | Multi-document: per-document klucze IndexedDB, store `workspace` (projects/folders/tags), wstrzykiwanie `DocumentRepository` zamiast singletona `document-store.ts:10` | SAAS-002..005, 020, 021 |
-| **ADR-014** Backend + role | Dostawca (decyzja użytkownika), auth, sync snapshotów (envelope `PersistedDocument`), role server-side (RLS/RPC), negatywne testy autoryzacji `Actor → backend authority` | SAAS-001, 006..011, 019 (Etap 2) |
-| **ADR-015** Konflikt model + realtime | CAS na `revision`, strategia last-writer/merge, transport, presence transient | SAAS-022 projekt, SAAS-023 implementacja |
+| **ADR-017** Annotations domain | `DocumentModel.annotations: readonly CanvasAnnotation[]` (nie SceneObject); typy, invariants, schema v1 (pole opcjonalne = backward-compatible), komendy | SAAS-012..014, 018 |
+| **ADR-018** Workspace storage | Multi-document: per-document klucze IndexedDB, store `workspace` (projects/folders/tags), wstrzykiwanie `DocumentRepository` zamiast singletona `document-store.ts:10` | SAAS-002..005, 020, 021 |
+| **ADR-019** Backend + role | Dostawca (decyzja użytkownika), auth, sync snapshotów (envelope `PersistedDocument`), role server-side (RLS/RPC), negatywne testy autoryzacji `Actor → backend authority` | SAAS-001, 006..011, 019 (Etap 2) |
+| **ADR-020** Konflikt model + realtime | CAS na `revision`, strategia last-writer/merge, transport, presence transient | SAAS-022 projekt, SAAS-023 implementacja |
 
-Etap 1 w tym planie wymaga **ADR-012 i ADR-013**. ADR-014/015 = dokumenty bramkowe Etapu 2/3 (szkify treści w sekcji 12).
+Etap 1 w tym planie wymaga **ADR-017 i ADR-018**. ADR-019/020 = dokumenty bramkowe Etapu 2/3 (szkice treści w sekcji 12).
 
 ## 4. Komendy / Undo-Redo
 
@@ -112,7 +112,7 @@ Restore wersji: istniejąca `ReplaceDocumentCommand` (już undoable). Mutacja do
 | `e2e/workspace.spec.ts` | NEW | workflow: projekt→folder→tag→search→otwórz→komentarz→resolve→eksport |
 
 ### Dokumenty
-`ADR_012_annotations.md`, `ADR_013_workspace_storage.md` (NEW), `BACKLOG.md` (statusy).
+`ADR_017_ANNOTATIONS_DOMAIN_AND_CANVAS_PINS.md`, `ADR_018_WORKSPACE_MULTI_PROJECT_STORAGE.md`, `ADR_019_BACKEND_SYNC_ENVELOPE_AND_ROLES.md`, `ADR_020_CONFLICT_RESOLUTION_AND_REALTIME_STRATEGY.md` (NEW), `BACKLOG.md` (statusy).
 
 ## 6. Invariants (jawna lista)
 

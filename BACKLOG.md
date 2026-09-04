@@ -585,27 +585,27 @@ Wymóg stopniowego rozszerzania artboardu o 10% wynika bezpośrednio z potrzeby 
 ## EPIC-17: Współpraca i SaaS
 
 - [ ] **SAAS-001** Dodać konto użytkownika
-- [ ] **SAAS-002** Dodać workspace/projekty
-- [ ] **SAAS-003** Dodać foldery
-- [ ] **SAAS-004** Dodać tagi
-- [ ] **SAAS-005** Dodać wyszukiwarkę dokumentów
+- [x] **SAAS-002** Dodać workspace/projekty
+- [x] **SAAS-003** Dodać foldery
+- [x] **SAAS-004** Dodać tagi
+- [x] **SAAS-005** Dodać wyszukiwarkę dokumentów
 - [ ] **SAAS-006** Dodać link do projektu
 - [ ] **SAAS-007** Dodać rolę viewer
 - [ ] **SAAS-008** Dodać rolę commenter
 - [ ] **SAAS-009** Dodać rolę editor
 - [ ] **SAAS-010** Dodać rolę owner
 - [ ] **SAAS-011** Dodać publiczny read-only preview
-- [ ] **SAAS-012** Dodać komentarze przypięte do pozycji na canvasie
-- [ ] **SAAS-013** Dodać oznaczenia `@user`
-- [ ] **SAAS-014** Dodać status resolved dla komentarza
-- [ ] **SAAS-015** Dodać historię wersji projektu
-- [ ] **SAAS-016** Dodać przywracanie wersji projektu
-- [ ] **SAAS-017** Dodać wskaźnik synchronizacji
-- [ ] **SAAS-018** Dodać eksport komentarzy
-- [ ] **SAAS-019** Dodać handoff dokumentu
-- [ ] **SAAS-020** Dodać szablony zespołowe
-- [ ] **SAAS-021** Dodać współdzielony brand kit
-- [ ] **SAAS-022** Zaprojektować model konfliktów zmian
+- [x] **SAAS-012** Dodać komentarze przypięte do pozycji na canvasie
+- [x] **SAAS-013** Dodać oznaczenia `@user`
+- [x] **SAAS-014** Dodać status resolved dla komentarza
+- [x] **SAAS-015** Dodać historię wersji projektu
+- [x] **SAAS-016** Dodać przywracanie wersji projektu
+- [x] **SAAS-017** Dodać wskaźnik synchronizacji
+- [x] **SAAS-018** Dodać eksport komentarzy
+- [x] **SAAS-019** Dodać handoff dokumentu
+- [x] **SAAS-020** Dodać szablony zespołowe
+- [x] **SAAS-021** Dodać współdzielony brand kit
+- [x] **SAAS-022** Zaprojektować model konfliktów zmian
 - [ ] **SAAS-023** Zaimplementować współedycję realtime dopiero po ustabilizowaniu single-user editora
 
 

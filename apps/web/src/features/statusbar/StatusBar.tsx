@@ -66,16 +66,29 @@ export const StatusBar: React.FC<StatusBarProps> = ({
         <span>{zoomPercent}%</span>
         <span>Snap: {snapEnabled ? 'Grid' : 'Off'}</span>
         <span
+          data-testid="status-bar-sync"
+          role="status"
+          aria-live="polite"
           style={{
             color:
-          saveStatus === 'saved-locally'
+              saveStatus === 'saved-locally'
                 ? 'var(--color-success)'
                 : saveStatus === 'saving'
+                ? 'var(--color-warning)'
+                : saveStatus === 'offline'
                 ? 'var(--color-warning)'
                 : 'var(--color-danger)',
           }}
         >
-          {saveStatus === 'saved-locally' ? 'Saved locally' : saveStatus === 'saving' ? 'Saving…' : saveStatus === 'offline' ? 'Offline' : saveStatus === 'error' ? 'Sync error' : `Unsaved · ${revision - savedRevision}`}
+          {saveStatus === 'saved-locally'
+            ? 'Saved locally'
+            : saveStatus === 'saving'
+            ? 'Saving…'
+            : saveStatus === 'offline'
+            ? `Offline (IndexedDB)${revision > savedRevision ? ` · ${revision - savedRevision} pending` : ''}`
+            : saveStatus === 'error'
+            ? 'Sync error'
+            : `Unsaved · ${revision - savedRevision}`}
         </span>
       </div>
     </footer>

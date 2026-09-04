@@ -116,6 +116,7 @@ export interface RightDockProps {
   onAddBrandLogo?: (file: File) => void;
   onEmbedImage?: (objectId: string) => void;
   onRelinkImage?: (objectId: string, file: File) => void;
+  onImportBrandKit?: (brandKit: import('@vectoria/core').BrandKit) => void;
 }
 
 const panels: readonly { id: DockPanel; label: string; icon: React.ComponentProps<typeof VectoriaIcon>['name'] }[] = [
@@ -229,6 +230,7 @@ export const RightDock: React.FC<RightDockProps> = ({
   onAddBrandLogo,
   onEmbedImage,
   onRelinkImage,
+  onImportBrandKit,
 }) => {
   const [localActivePanel, setLocalActivePanel] = useState<DockPanel>('properties');
   const activePanel = requestedPanel ?? localActivePanel;
@@ -361,6 +363,7 @@ export const RightDock: React.FC<RightDockProps> = ({
             onInsertStockSvg={onInsertStockSvg}
             onApplyBrandFont={onApplyBrandFont}
             onAddBrandLogo={onAddBrandLogo}
+            onImportBrandKit={onImportBrandKit}
           />
         )}
         {activePanel === 'links' && (

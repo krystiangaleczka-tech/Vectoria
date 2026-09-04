@@ -37,31 +37,31 @@ export interface CanvasComment { id:string; projectId:string; worldPoint:Vec2; b
 
 ### SAAS-002
 
-- [ ] Zdefiniuj backend/domain contract, authorization i audit policy dla SAAS-002.
-- [ ] Dodaj UI, keyboard accessibility, error/retry i status feedback dla SAAS-002.
-- [ ] Dodaj test role/security/conflict oraz E2E workflow dla SAAS-002.
-- [ ] Zachowaj local-first fallback i nie blokuj editor input dla SAAS-002.
+- [x] Zdefiniuj backend/domain contract, authorization i audit policy dla SAAS-002.
+- [x] Dodaj UI, keyboard accessibility, error/retry i status feedback dla SAAS-002.
+- [x] Dodaj test role/security/conflict oraz E2E workflow dla SAAS-002.
+- [x] Zachowaj local-first fallback i nie blokuj editor input dla SAAS-002.
 
 ### SAAS-003
 
-- [ ] Zdefiniuj backend/domain contract, authorization i audit policy dla SAAS-003.
-- [ ] Dodaj UI, keyboard accessibility, error/retry i status feedback dla SAAS-003.
-- [ ] Dodaj test role/security/conflict oraz E2E workflow dla SAAS-003.
-- [ ] Zachowaj local-first fallback i nie blokuj editor input dla SAAS-003.
+- [x] Zdefiniuj backend/domain contract, authorization i audit policy dla SAAS-003.
+- [x] Dodaj UI, keyboard accessibility, error/retry i status feedback dla SAAS-003.
+- [x] Dodaj test role/security/conflict oraz E2E workflow dla SAAS-003.
+- [x] Zachowaj local-first fallback i nie blokuj editor input dla SAAS-003.
 
 ### SAAS-004
 
-- [ ] Zdefiniuj backend/domain contract, authorization i audit policy dla SAAS-004.
-- [ ] Dodaj UI, keyboard accessibility, error/retry i status feedback dla SAAS-004.
-- [ ] Dodaj test role/security/conflict oraz E2E workflow dla SAAS-004.
-- [ ] Zachowaj local-first fallback i nie blokuj editor input dla SAAS-004.
+- [x] Zdefiniuj backend/domain contract, authorization i audit policy dla SAAS-004.
+- [x] Dodaj UI, keyboard accessibility, error/retry i status feedback dla SAAS-004.
+- [x] Dodaj test role/security/conflict oraz E2E workflow dla SAAS-004.
+- [x] Zachowaj local-first fallback i nie blokuj editor input dla SAAS-004.
 
 ### SAAS-005
 
-- [ ] Zdefiniuj backend/domain contract, authorization i audit policy dla SAAS-005.
-- [ ] Dodaj UI, keyboard accessibility, error/retry i status feedback dla SAAS-005.
-- [ ] Dodaj test role/security/conflict oraz E2E workflow dla SAAS-005.
-- [ ] Zachowaj local-first fallback i nie blokuj editor input dla SAAS-005.
+- [x] Zdefiniuj backend/domain contract, authorization i audit policy dla SAAS-005.
+- [x] Dodaj UI, keyboard accessibility, error/retry i status feedback dla SAAS-005.
+- [x] Dodaj test role/security/conflict oraz E2E workflow dla SAAS-005.
+- [x] Zachowaj local-first fallback i nie blokuj editor input dla SAAS-005.
 
 ### SAAS-006
 
@@ -107,80 +107,80 @@ export interface CanvasComment { id:string; projectId:string; worldPoint:Vec2; b
 
 ### SAAS-012
 
-- [ ] Zdefiniuj backend/domain contract, authorization i audit policy dla SAAS-012.
-- [ ] Dodaj UI, keyboard accessibility, error/retry i status feedback dla SAAS-012.
-- [ ] Dodaj test role/security/conflict oraz E2E workflow dla SAAS-012.
-- [ ] Zachowaj local-first fallback i nie blokuj editor input dla SAAS-012.
+- [x] Zdefiniuj backend/domain contract, authorization i audit policy dla SAAS-012.
+- [x] Dodaj UI, keyboard accessibility, error/retry i status feedback dla SAAS-012.
+- [x] Dodaj test role/security/conflict oraz E2E workflow dla SAAS-012.
+- [x] Zachowaj local-first fallback i nie blokuj editor input dla SAAS-012.
 
 ### SAAS-013
 
-- [ ] Zdefiniuj backend/domain contract, authorization i audit policy dla SAAS-013.
-- [ ] Dodaj UI, keyboard accessibility, error/retry i status feedback dla SAAS-013.
-- [ ] Dodaj test role/security/conflict oraz E2E workflow dla SAAS-013.
-- [ ] Zachowaj local-first fallback i nie blokuj editor input dla SAAS-013.
+- [x] Zdefiniuj backend/domain contract, authorization i audit policy dla SAAS-013.
+- [x] Dodaj UI, keyboard accessibility, error/retry i status feedback dla SAAS-013.
+- [x] Dodaj test role/security/conflict oraz E2E workflow dla SAAS-013.
+- [x] Zachowaj local-first fallback i nie blokuj editor input dla SAAS-013.
 
 ### SAAS-014
 
-- [ ] Zdefiniuj backend/domain contract, authorization i audit policy dla SAAS-014.
-- [ ] Dodaj UI, keyboard accessibility, error/retry i status feedback dla SAAS-014.
-- [ ] Dodaj test role/security/conflict oraz E2E workflow dla SAAS-014.
-- [ ] Zachowaj local-first fallback i nie blokuj editor input dla SAAS-014.
+- [x] Zdefiniuj backend/domain contract, authorization i audit policy dla SAAS-014.
+- [x] Dodaj UI, keyboard accessibility, error/retry i status feedback dla SAAS-014.
+- [x] Dodaj test role/security/conflict oraz E2E workflow dla SAAS-014.
+- [x] Zachowaj local-first fallback i nie blokuj editor input dla SAAS-014.
 
 ### SAAS-015
 
-- [ ] Zdefiniuj backend/domain contract, authorization i audit policy dla SAAS-015.
-- [ ] Dodaj UI, keyboard accessibility, error/retry i status feedback dla SAAS-015.
-- [ ] Dodaj test role/security/conflict oraz E2E workflow dla SAAS-015.
-- [ ] Zachowaj local-first fallback i nie blokuj editor input dla SAAS-015.
+- [x] Zdefiniuj backend/domain contract, authorization i audit policy dla SAAS-015.
+- [x] Dodaj UI, keyboard accessibility, error/retry i status feedback dla SAAS-015.
+- [x] Dodaj test role/security/conflict oraz E2E workflow dla SAAS-015.
+- [x] Zachowaj local-first fallback i nie blokuj editor input dla SAAS-015.
 
 ### SAAS-016
 
-- [ ] Zdefiniuj backend/domain contract, authorization i audit policy dla SAAS-016.
-- [ ] Dodaj UI, keyboard accessibility, error/retry i status feedback dla SAAS-016.
-- [ ] Dodaj test role/security/conflict oraz E2E workflow dla SAAS-016.
-- [ ] Zachowaj local-first fallback i nie blokuj editor input dla SAAS-016.
+- [x] Zdefiniuj backend/domain contract, authorization i audit policy dla SAAS-016.
+- [x] Dodaj UI, keyboard accessibility, error/retry i status feedback dla SAAS-016.
+- [x] Dodaj test role/security/conflict oraz E2E workflow dla SAAS-016.
+- [x] Zachowaj local-first fallback i nie blokuj editor input dla SAAS-016.
 
 ### SAAS-017
 
-- [ ] Zdefiniuj backend/domain contract, authorization i audit policy dla SAAS-017.
-- [ ] Dodaj UI, keyboard accessibility, error/retry i status feedback dla SAAS-017.
-- [ ] Dodaj test role/security/conflict oraz E2E workflow dla SAAS-017.
-- [ ] Zachowaj local-first fallback i nie blokuj editor input dla SAAS-017.
+- [x] Zdefiniuj backend/domain contract, authorization i audit policy dla SAAS-017.
+- [x] Dodaj UI, keyboard accessibility, error/retry i status feedback dla SAAS-017.
+- [x] Dodaj test role/security/conflict oraz E2E workflow dla SAAS-017.
+- [x] Zachowaj local-first fallback i nie blokuj editor input dla SAAS-017.
 
 ### SAAS-018
 
-- [ ] Zdefiniuj backend/domain contract, authorization i audit policy dla SAAS-018.
-- [ ] Dodaj UI, keyboard accessibility, error/retry i status feedback dla SAAS-018.
-- [ ] Dodaj test role/security/conflict oraz E2E workflow dla SAAS-018.
-- [ ] Zachowaj local-first fallback i nie blokuj editor input dla SAAS-018.
+- [x] Zdefiniuj backend/domain contract, authorization i audit policy dla SAAS-018.
+- [x] Dodaj UI, keyboard accessibility, error/retry i status feedback dla SAAS-018.
+- [x] Dodaj test role/security/conflict oraz E2E workflow dla SAAS-018.
+- [x] Zachowaj local-first fallback i nie blokuj editor input dla SAAS-018.
 
 ### SAAS-019
 
-- [ ] Zdefiniuj backend/domain contract, authorization i audit policy dla SAAS-019.
-- [ ] Dodaj UI, keyboard accessibility, error/retry i status feedback dla SAAS-019.
-- [ ] Dodaj test role/security/conflict oraz E2E workflow dla SAAS-019.
-- [ ] Zachowaj local-first fallback i nie blokuj editor input dla SAAS-019.
+- [x] Zdefiniuj backend/domain contract, authorization i audit policy dla SAAS-019.
+- [x] Dodaj UI, keyboard accessibility, error/retry i status feedback dla SAAS-019.
+- [x] Dodaj test role/security/conflict oraz E2E workflow dla SAAS-019.
+- [x] Zachowaj local-first fallback i nie blokuj editor input dla SAAS-019.
 
 ### SAAS-020
 
-- [ ] Zdefiniuj backend/domain contract, authorization i audit policy dla SAAS-020.
-- [ ] Dodaj UI, keyboard accessibility, error/retry i status feedback dla SAAS-020.
-- [ ] Dodaj test role/security/conflict oraz E2E workflow dla SAAS-020.
-- [ ] Zachowaj local-first fallback i nie blokuj editor input dla SAAS-020.
+- [x] Zdefiniuj backend/domain contract, authorization i audit policy dla SAAS-020.
+- [x] Dodaj UI, keyboard accessibility, error/retry i status feedback dla SAAS-020.
+- [x] Dodaj test role/security/conflict oraz E2E workflow dla SAAS-020.
+- [x] Zachowaj local-first fallback i nie blokuj editor input dla SAAS-020.
 
 ### SAAS-021
 
-- [ ] Zdefiniuj backend/domain contract, authorization i audit policy dla SAAS-021.
-- [ ] Dodaj UI, keyboard accessibility, error/retry i status feedback dla SAAS-021.
-- [ ] Dodaj test role/security/conflict oraz E2E workflow dla SAAS-021.
-- [ ] Zachowaj local-first fallback i nie blokuj editor input dla SAAS-021.
+- [x] Zdefiniuj backend/domain contract, authorization i audit policy dla SAAS-021.
+- [x] Dodaj UI, keyboard accessibility, error/retry i status feedback dla SAAS-021.
+- [x] Dodaj test role/security/conflict oraz E2E workflow dla SAAS-021.
+- [x] Zachowaj local-first fallback i nie blokuj editor input dla SAAS-021.
 
 ### SAAS-022
 
-- [ ] Zdefiniuj backend/domain contract, authorization i audit policy dla SAAS-022.
-- [ ] Dodaj UI, keyboard accessibility, error/retry i status feedback dla SAAS-022.
-- [ ] Dodaj test role/security/conflict oraz E2E workflow dla SAAS-022.
-- [ ] Zachowaj local-first fallback i nie blokuj editor input dla SAAS-022.
+- [x] Zdefiniuj backend/domain contract, authorization i audit policy dla SAAS-022.
+- [x] Dodaj UI, keyboard accessibility, error/retry i status feedback dla SAAS-022.
+- [x] Dodaj test role/security/conflict oraz E2E workflow dla SAAS-022.
+- [x] Zachowaj local-first fallback i nie blokuj editor input dla SAAS-022.
 
 ### SAAS-023
 

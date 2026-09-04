@@ -143,4 +143,10 @@ export {
 export { PasteObjectsCommand, type PasteMode } from './paste-commands.js';
 export { DuplicateTransformCommand } from './duplicate-transform-command.js';
 export { ReplaceStylesBatchCommand } from './replace-styles-command.js';
+export {
+  AddAnnotationCommand,
+  UpdateAnnotationCommand,
+  DeleteAnnotationCommand,
+  MoveAnnotationPinCommand,
+} from './comment-commands.js';
 

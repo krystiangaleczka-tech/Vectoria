@@ -13,4 +13,6 @@ export interface DocumentRepository {
   loadKnownGood?(knownGoodKey: string): Promise<PersistedDocument | null>;
   saveVersion?(version: DocumentVersion, key: string): Promise<void>;
   loadVersions?(key: string): Promise<readonly DocumentVersion[]>;
+  listDocuments?(): Promise<readonly string[]>;
+  deleteDocument?(documentId: string): Promise<void>;
 }

@@ -2,6 +2,8 @@ export * from './schema/document-v1.js';
 export * from './storage/document-store.js';
 export * from './storage/document-repository.js';
 export * from './storage/indexeddb-repository.js';
+export * from './storage/workspace-repository.js';
+export * from './storage/workspace-export.js';
 export * from './svg/export.js';
 export * from './svg/import.js';
 export * from './clipboard/clipboard-schema.js';

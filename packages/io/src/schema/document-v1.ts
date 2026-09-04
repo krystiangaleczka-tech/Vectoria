@@ -10,6 +10,7 @@ export const DOCUMENT_LIMITS = {
   maxPathNodes: 1_000_000,
   maxPalettes: 256,
   maxPaletteEntries: 2048,
+  maxAnnotations: 500,
 } as const;
 
 const ColorSchema = z.string().refine((value) => normalizeColor(value) !== null, { message: 'color must be a supported finite color value' });
@@ -478,6 +479,18 @@ export const ArtboardSchema = z.object({
   frame: z.object({ x: z.number().finite(), y: z.number().finite(), width: z.number().positive().finite(), height: z.number().positive().finite() }).optional(),
 });
 
+export const CanvasAnnotationSchema = z.object({
+  id: z.string().min(1),
+  projectId: z.string().optional(),
+  worldPoint: z.object({ x: z.number().finite(), y: z.number().finite() }),
+  body: z.string().min(1).max(4000),
+  authorName: z.string().min(1).max(120),
+  resolved: z.boolean(),
+  mentions: z.array(z.string()).default([]),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
 export const DocumentV1Schema = z.object({
   schemaVersion: z.literal(1),
   id: z.string().min(1),
@@ -499,6 +512,7 @@ export const DocumentV1Schema = z.object({
   symbols: z.record(SymbolDefinitionSchema).optional(),
   symbolIds: z.array(z.string()).optional(),
   brandKit: BrandKitSchema.optional(),
+  annotations: z.array(CanvasAnnotationSchema).max(DOCUMENT_LIMITS.maxAnnotations).optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

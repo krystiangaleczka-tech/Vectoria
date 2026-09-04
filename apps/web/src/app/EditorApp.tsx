@@ -139,6 +139,9 @@ import {
   type BootstrapState,
   processDroppedFile,
   exportVctFile,
+  type ProjectRecord,
+  getDocumentRepository,
+  parseAndMigrateDocument,
 } from '@vectoria/io';
 import { selectSame, type SelectSameTarget } from '@vectoria/core';
 
@@ -165,6 +168,10 @@ import { importRegistry } from '../features/import/import-registry.js';
 import { ImportDialog } from '../features/import/ImportDialog.js';
 import { ExportDialog } from '../features/dialogs/ExportDialog.js';
 import { useExportController } from '../features/export/useExportController.js';
+import { useWorkspace } from '../features/workspace/useWorkspace.js';
+import { ProjectGallery } from '../features/workspace/ProjectGallery.js';
+import { useComments } from '../features/comments/useComments.js';
+import { CommentsPanel } from '../features/comments/CommentsPanel.js';
 
 import type { DockPanel } from '../features/panels/RightDock.js';
 import type { PathAction } from '../features/panels/PropertiesPanel.js';
@@ -229,6 +236,10 @@ export const EditorApp: React.FC = () => {
   const [shortcutConfigOpen, setShortcutConfigOpen] = useState(false);
   const [soloLayerId, setSoloLayerId] = useState<string | null>(null);
   const [previewTransforms, setPreviewTransforms] = useState<Record<string, import('@vectoria/core').Transform2D>>({});
+  const [workspaceMode, setWorkspaceMode] = useState<'editor' | 'gallery'>('editor');
+  const [isCommentsPanelOpen, setIsCommentsPanelOpen] = useState(false);
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  const workspace = useWorkspace();
 
   const importController = useImportController(importRegistry);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
@@ -314,6 +325,24 @@ export const EditorApp: React.FC = () => {
     return () => clearTimeout(timeout);
   }, [doc]);
 
+  useEffect(() => {
+    const handleOnline = () => {
+      setSaveStatus((prev) => (prev === 'offline' ? 'saved-locally' : prev));
+    };
+    const handleOffline = () => {
+      setSaveStatus('offline');
+    };
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setSaveStatus('offline');
+    }
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
   const processSaveQueue = useCallback(async () => {
     const queue = saveQueueRef.current;
     if (queue.inFlight) return;
@@ -327,7 +356,7 @@ export const EditorApp: React.FC = () => {
           if (latestRevisionRef.current === request.revision) {
             savedRevisionRef.current = request.revision;
             setSavedRevision(request.revision);
-            setSaveStatus('saved-locally');
+            setSaveStatus(typeof navigator !== 'undefined' && !navigator.onLine ? 'offline' : 'saved-locally');
           }
         } catch (error) {
           console.error('[Vectoria] Save error:', error);
@@ -449,6 +478,81 @@ export const EditorApp: React.FC = () => {
     },
     [commitDocument, doc, history]
   );
+
+  const comments = useComments(doc, handleExecuteCommand);
+
+  const handleImportBrandKit = useCallback(
+    (brandKit: import('@vectoria/core').BrandKit) => {
+      handleExecuteCommand(new UpdateBrandKitCommand(brandKit));
+    },
+    [handleExecuteCommand],
+  );
+
+  const handleOpenProject = useCallback(
+    async (project: ProjectRecord) => {
+      flushAutosave();
+      const repo = getDocumentRepository();
+      try {
+        const raw = await repo.load(project.documentId);
+        if (raw) {
+          const rawDoc = typeof raw === 'object' && raw !== null && 'document' in raw ? (raw as unknown as { document: unknown }).document : raw;
+          const parsed = parseAndMigrateDocument(rawDoc);
+          setDoc(parsed);
+          latestDocRef.current = parsed;
+          history.clear(0);
+          setRevision(0);
+          latestRevisionRef.current = 0;
+          savedRevisionRef.current = 0;
+          setSavedRevision(0);
+          setActiveProjectId(project.id);
+          setWorkspaceMode('editor');
+        } else {
+          const newDoc: DocumentModel = { ...createDefaultDocument(), name: project.name };
+          await repo.save({ app: 'vectoria', schemaVersion: newDoc.schemaVersion, document: newDoc, revision: 0, savedAt: new Date().toISOString() });
+          setDoc(newDoc);
+          latestDocRef.current = newDoc;
+          history.clear(0);
+          setRevision(0);
+          latestRevisionRef.current = 0;
+          savedRevisionRef.current = 0;
+          setSavedRevision(0);
+          setActiveProjectId(project.id);
+          setWorkspaceMode('editor');
+        }
+      } catch (err) {
+        console.error('[Vectoria] Failed to open project:', err);
+      }
+    },
+    [flushAutosave, history],
+  );
+
+  const handleCreateProjectInGallery = useCallback(
+    async (name: string, folderId?: string, tags?: readonly string[], isTemplate?: boolean) => {
+      const newDoc: DocumentModel = { ...createDefaultDocument(), name };
+      const repo = getDocumentRepository();
+      await repo.save({ app: 'vectoria', schemaVersion: newDoc.schemaVersion, document: newDoc, revision: 0, savedAt: new Date().toISOString() });
+      await workspace.createProject({
+        name,
+        folderId,
+        tags,
+        documentId: newDoc.id,
+        isTemplate,
+      });
+    },
+    [workspace],
+  );
+
+  useEffect(() => {
+    if (!workspace.loading && workspace.meta.projects.length === 0 && doc) {
+      void workspace
+        .createProject({
+          name: doc.name || 'Mój pierwszy projekt',
+          documentId: doc.id,
+        })
+        .then((p) => setActiveProjectId(p.id))
+        .catch(() => {});
+    }
+  }, [workspace.loading, workspace.meta.projects.length, doc, workspace]);
 
   const handleSaveVersion = useCallback((name: string) => {
     if (!doc) return;
@@ -1490,6 +1594,16 @@ export const EditorApp: React.FC = () => {
       enabled: () => true,
       execute: () => handleZoom100()
     });
+    r.register({
+      id: 'view.gallery', title: 'Moje projekty (Galeria)',
+      enabled: () => true,
+      execute: () => setWorkspaceMode('gallery')
+    });
+    r.register({
+      id: 'view.comments', title: 'Komentarze i uwagi',
+      enabled: () => true,
+      execute: () => setIsCommentsPanelOpen((prev) => !prev)
+    });
     return r;
   }, [handlePaste, handleSelectSame, handleFitArtboard, handleZoom100, selectedObjectIds.length]);
 
@@ -1519,6 +1633,8 @@ export const EditorApp: React.FC = () => {
       case 'view.command-palette': setCommandPaletteOpen(true); break;
       case 'view.zoom-100': handleZoom100(); break;
       case 'view.fit-artboard': handleFitArtboard(); break;
+      case 'view.gallery': setWorkspaceMode('gallery'); break;
+      case 'view.comments': setIsCommentsPanelOpen((prev) => !prev); break;
       case 'object.transform': handleOpenTransform(); break;
       default:
         if (actionId.startsWith('tool.')) {
@@ -1715,6 +1831,9 @@ export const EditorApp: React.FC = () => {
         onSaveLayoutPreset={handleSaveLayoutPreset}
         onOpenTransform={handleOpenTransform}
         onCreateArtboard={handleCreateArtboard}
+        onOpenGallery={() => setWorkspaceMode('gallery')}
+        onToggleComments={() => setIsCommentsPanelOpen((prev) => !prev)}
+        commentsCount={comments.annotations.length}
       />
 
       {bootstrapState.status === 'recovery-error' && (
@@ -1794,8 +1913,30 @@ export const EditorApp: React.FC = () => {
             soloLayerId={soloLayerId}
             onDropFiles={handleDropFiles}
             onDragPreviewChange={setPreviewTransforms}
+            activeAnnotationId={comments.activeAnnotationId}
+            onSelectAnnotation={comments.setActiveAnnotationId}
+            onMoveAnnotationPin={comments.moveAnnotationPin}
            />
         </div>
+
+        {isCommentsPanelOpen && (
+          <CommentsPanel
+            annotations={comments.annotations}
+            activeAnnotationId={comments.activeAnnotationId}
+            documentName={doc.name}
+            onSelectAnnotation={comments.setActiveAnnotationId}
+            onToggleResolve={comments.toggleResolve}
+            onDeleteAnnotation={comments.deleteAnnotation}
+            onAddComment={(body) => {
+              const centerWorld = camera.screenToWorld({
+                x: window.innerWidth / 2,
+                y: window.innerHeight / 2,
+              });
+              comments.addAnnotation(centerWorld, body);
+            }}
+            onClose={() => setIsCommentsPanelOpen(false)}
+          />
+        )}
 
         <RightDock
           document={doc}
@@ -1891,6 +2032,7 @@ export const EditorApp: React.FC = () => {
           onAddBrandLogo={handleAddBrandLogo}
           onEmbedImage={handleEmbedImage}
           onRelinkImage={handleRelinkImage}
+          onImportBrandKit={handleImportBrandKit}
           activePanel={activeDockPanel}
           onPanelChange={setActiveDockPanel}
           open={rightDockOpen}
@@ -1985,13 +2127,31 @@ export const EditorApp: React.FC = () => {
        />
         <ImportDialog
           isOpen={importController.stage !== 'idle' || !!importController.error}
-         stage={importController.stage}
-         fileName={null} // We'd need to store file name in controller to pass it here
-         report={importController.report}
-         error={importController.error}
-         onCommit={handleImportCommit}
-         onCancel={importController.cancel}
-       />
+          stage={importController.stage}
+          fileName={null} // We'd need to store file name in controller to pass it here
+          report={importController.report}
+          error={importController.error}
+          onCommit={handleImportCommit}
+          onCancel={importController.cancel}
+        />
+
+        {workspaceMode === 'gallery' && (
+          <ProjectGallery
+            meta={workspace.meta}
+            activeProjectId={activeProjectId ?? undefined}
+            onOpenProject={handleOpenProject}
+            onCreateProject={handleCreateProjectInGallery}
+            onUpdateProject={async (id, patch) => {
+              await workspace.updateProject(id, patch);
+            }}
+            onDeleteProject={workspace.deleteProject}
+            onCreateFolder={workspace.createFolder}
+            onDeleteFolder={workspace.deleteFolder}
+            onCreateTag={workspace.createTag}
+            onDeleteTag={workspace.deleteTag}
+            onClose={() => setWorkspaceMode('editor')}
+          />
+        )}
     </div>
   );
 };

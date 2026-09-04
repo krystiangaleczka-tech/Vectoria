@@ -100,6 +100,9 @@ export interface CanvasViewportProps {
   soloLayerId?: string | null;
   onDropFiles?: (files: FileList, worldPos: Vec2) => void;
   onDragPreviewChange?: (preview: Record<string, import('@vectoria/core').Transform2D>) => void;
+  activeAnnotationId?: string | null;
+  onSelectAnnotation?: (id: string) => void;
+  onMoveAnnotationPin?: (id: string, newWorldPoint: Vec2) => void;
 }
 
 const DRAG_THRESHOLD_PX = 3;
@@ -284,6 +287,9 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   soloLayerId = null,
   onDropFiles,
   onDragPreviewChange,
+  activeAnnotationId,
+  onSelectAnnotation,
+  onMoveAnnotationPin,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const bgCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -314,6 +320,8 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   const [stylePreview, setStylePreview] = React.useState<Record<string, import('@vectoria/core').ObjectStyle>>({});
   const [pathPreview, setPathPreview] = React.useState<Record<string, readonly import('@vectoria/core').PathNode[]>>({});
   const [cornerPreview, setCornerPreview] = React.useState<import('@vectoria/core').GeometryPreview | null>(null);
+  const [draggingPinId, setDraggingPinId] = useState<string | null>(null);
+  const [pinDragScreenPos, setPinDragScreenPos] = useState<Vec2 | null>(null);
   const penToolRef = useRef<PenTool | null>(null);
   if (!penToolRef.current) penToolRef.current = new PenTool();
   const [penVersion, setPenVersion] = React.useState(0);
@@ -2063,6 +2071,125 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
           pointerEvents: 'none',
         }}
       />
+      {/* Canvas Annotations DOM Overlay (EPIC-17 SAAS-012..014) */}
+      {doc.annotations && doc.annotations.length > 0 && (
+        <div
+          data-testid="canvas-annotations-overlay"
+          style={{
+            position: 'absolute',
+            inset: 0,
+            pointerEvents: 'none',
+            overflow: 'hidden',
+          }}
+        >
+          {doc.annotations.map((ann, index) => {
+            const screenPt = camera.worldToScreen(ann.worldPoint);
+            const isSelected = ann.id === activeAnnotationId;
+            const isDragging = draggingPinId === ann.id;
+            const displayX = isDragging && pinDragScreenPos ? pinDragScreenPos.x : screenPt.x;
+            const displayY = isDragging && pinDragScreenPos ? pinDragScreenPos.y : screenPt.y;
+
+            return (
+              <div
+                key={ann.id}
+                data-testid={`annotation-pin-${ann.id}`}
+                role="button"
+                tabIndex={0}
+                aria-label={`Komentarz ${index + 1}: ${ann.authorName} (${ann.resolved ? 'Rozwiązany' : 'Otwarty'})`}
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                  (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                  setDraggingPinId(ann.id);
+                  onSelectAnnotation?.(ann.id);
+                  if (containerRef.current) {
+                    const rect = containerRef.current.getBoundingClientRect();
+                    setPinDragScreenPos({
+                      x: e.clientX - rect.left,
+                      y: e.clientY - rect.top,
+                    });
+                  }
+                }}
+                onPointerMove={(e) => {
+                  if (draggingPinId !== ann.id || !containerRef.current) return;
+                  const rect = containerRef.current.getBoundingClientRect();
+                  setPinDragScreenPos({
+                    x: e.clientX - rect.left,
+                    y: e.clientY - rect.top,
+                  });
+                }}
+                onPointerUp={(e) => {
+                  if (draggingPinId !== ann.id) return;
+                  try {
+                    (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+                  } catch {
+                    /* ignore */
+                  }
+                  if (pinDragScreenPos) {
+                    const finalWorld = camera.screenToWorld(pinDragScreenPos);
+                    if (Number.isFinite(finalWorld.x) && Number.isFinite(finalWorld.y)) {
+                      onMoveAnnotationPin?.(ann.id, finalWorld);
+                    }
+                  }
+                  setDraggingPinId(null);
+                  setPinDragScreenPos(null);
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelectAnnotation?.(ann.id);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onSelectAnnotation?.(ann.id);
+                  }
+                }}
+                style={{
+                  position: 'absolute',
+                  left: `${displayX}px`,
+                  top: `${displayY}px`,
+                  transform: 'translate(-50%, -100%)',
+                  pointerEvents: 'auto',
+                  cursor: isDragging ? 'grabbing' : 'grab',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  zIndex: isSelected ? 40 : 30,
+                  userSelect: 'none',
+                }}
+              >
+                <div
+                  style={{
+                    width: '26px',
+                    height: '26px',
+                    borderRadius: '50%',
+                    backgroundColor: ann.resolved ? '#6b7280' : isSelected ? '#4f46e5' : '#6366f1',
+                    color: '#ffffff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    boxShadow: isSelected ? '0 0 0 3px #ffffff, 0 4px 8px rgba(0,0,0,0.3)' : '0 2px 4px rgba(0,0,0,0.25)',
+                    border: '1.5px solid rgba(255,255,255,0.6)',
+                  }}
+                  title={`${ann.authorName}: ${ann.body}`}
+                >
+                  {ann.resolved ? '✓' : index + 1}
+                </div>
+                <div
+                  style={{
+                    width: 0,
+                    height: 0,
+                    borderLeft: '4px solid transparent',
+                    borderRight: '4px solid transparent',
+                    borderTop: `6px solid ${ann.resolved ? '#6b7280' : isSelected ? '#4f46e5' : '#6366f1'}`,
+                  }}
+                />
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 };
