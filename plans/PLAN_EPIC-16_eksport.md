@@ -2,7 +2,7 @@
 
 > Wersja: 1.0 — 2026-09-02
 > Wzorzec: `plans/PLAN_EPIC-14_precyzja_i_produktywnosc.md`, `plans/PLAN_EPIC-15_import_format_i_zapis.md`.
-> Status: **gotowy do akceptacji**. Checklist §3.1/§3.2 AGENTS.md odhaczona na końcu.
+> Status: **wdrożone (DONE)** — 2026-09-04 — pełna realizacja EXPORT-001…024, testy i quality gates zweryfikowane. Checklist §3.1/§3.2 AGENTS.md odhaczona na końcu.
 
 > **Niezgodność źródeł (zgłoszona, nie rozstrzygana po cichu):** plik epika listuje EXPORT-001…019, ale `BACKLOG.md:560-584` definiuje EXPORT-001…024. BACKLOG jest dokumentem referencyjnym scope (AGENTS.md §0), więc plan obejmuje **001…024**. Plik epika wymaga uzupełnienia sekcji Backlog o EXPORT-020…024 (fix dokumentacyjny, 1 commit).
 
@@ -76,7 +76,7 @@ Wniosek: SVG editable + PNG 1x DONE na zdrowym fundamencie (temp canvas, viewBox
 
 ### Wymagane ADR (przed implementacją Etapu 0.1)
 
-- **`ADR_013_Export_Pipeline_Targets_Jobs_i_PDF.md`** — kontrakty export, target geometry (world-space), job model + memory guard, polityka tła per format, PDF przez pdf-lib (flattened 0.2 / vector P2), SVG optimized pass.
+- **`docs/adr/ADR_016_EXPORT_PIPELINE_TARGETS_JOBS_AND_PDF.md`** — formalny rekord decyzji architektonicznych: kontrakty export, target geometry (world-space), job model + memory guard, polityka tła per format, PDF przez pdf-lib (flattened 0.2 / vector P2), SVG optimized pass.
 
 ---
 

@@ -1,5 +1,6 @@
 import type { DocumentModel, SceneObject, ObjectId, RectangleObject, EllipseObject, LineObject, PathObject, PathNode, StrokeStyle, FillStyle, LinearGradientFill, RadialGradientFill, PatternFill, TextureFill, MeshGradientFill, PolygonObject, StarObject, ArcObject, PieObject, RingObject, SpiralObject, CalloutObject, PolylineObject, ArrowheadStyle, TextObject, TextFrameObject, ImageObject, SymbolInstanceObject, LiveEffect, Transform2D } from '@vectoria/core';
 import { getTransformMatrix, normalizeCornerRadii, getPolygonVertices, getStarVertices, getSpiralVertices, getCalloutVertices, expandObject, getCubicSegment, evaluateCubic, computeTextFrameLayout, effectiveGeometry, hasGeometryEffects, buildCaligraphicOutline, radialRepeatTransforms, mirrorRepeatTransforms, gridRepeatTransforms, generateBrushGeometry, triangulateMeshPatch } from '@vectoria/core';
+import type { Rect } from '@vectoria/shared';
 
 export function escapeXml(unsafe: string): string {
   return unsafe
@@ -10,16 +11,27 @@ export function escapeXml(unsafe: string): string {
     .replace(/'/g, '&apos;');
 }
 
-export function exportArtboardToSvg(doc: DocumentModel, artboardId?: string): string {
-  const targetArtboardId = artboardId ?? doc.activeArtboardId;
-  const artboard = doc.artboards[targetArtboardId];
+export interface RegionExportOptions {
+  /** Custom background color (e.g. '#ffffff'). If undefined or 'transparent'/'none', no background rect is emitted. */
+  readonly background?: string | 'transparent' | 'none';
+  /** Optional custom ID for the clipPath in <defs>. Defaults to 'export-clip' or artboard clip id. */
+  readonly clipId?: string;
+  /** Whether to clip contents to the specified rect. Default: true. */
+  readonly clipToRect?: boolean;
+}
 
-  if (!artboard) {
-    throw new Error(`Artboard with ID "${targetArtboardId}" not found`);
-  }
-
-  const { width, height } = artboard;
-  const clipId = `artboard-clip-${escapeXml(targetArtboardId)}`;
+/**
+ * Core SVG export: renders visible objects intersecting world-space `rect` into an SVG document.
+ * Decoupled from editor camera coordinates and supports custom backgrounds and clip rects.
+ */
+export function exportRegionToSvg(
+  doc: DocumentModel,
+  rect: Rect,
+  options: RegionExportOptions = {},
+): string {
+  const { width, height } = rect;
+  const clipId = options.clipId ?? 'export-clip';
+  const clipToRect = options.clipToRect ?? true;
 
   // Collect all gradient fills for <defs>
   const gradientDefs: string[] = [];
@@ -118,6 +130,11 @@ export function exportArtboardToSvg(doc: DocumentModel, artboardId?: string): st
     ...Array.from(symbolDefs.values()).map((d) => `    ${d}`),
   ].join('\n');
 
+  const bgElement = options.background && options.background !== 'transparent' && options.background !== 'none'
+    ? `  <rect width="${width}" height="${height}" fill="${escapeXml(options.background)}" />\n`
+    : '';
+
+  const clipAttr = clipToRect ? ` clip-path="url(#${clipId})"` : '';
   const svgContent = `<?xml version="1.0" encoding="UTF-8"?>
 <svg
   xmlns="http://www.w3.org/2000/svg"
@@ -129,12 +146,35 @@ export function exportArtboardToSvg(doc: DocumentModel, artboardId?: string): st
   <defs>
 ${defsContent}
   </defs>
-  <g clip-path="url(#${clipId})" transform="translate(${-artboard.x} ${-artboard.y})">
+${bgElement}  <g${clipAttr} transform="translate(${-rect.x} ${-rect.y})">
 ${elements.map((el) => `    ${el}`).join('\n')}
   </g>
 </svg>`;
 
   return svgContent;
+}
+
+/**
+ * Back-compatible wrapper for artboard export.
+ * Preserves exact legacy output.
+ */
+export function exportArtboardToSvg(doc: DocumentModel, artboardId?: string): string {
+  const targetArtboardId = artboardId ?? doc.activeArtboardId;
+  const artboard = doc.artboards[targetArtboardId];
+
+  if (!artboard) {
+    throw new Error(`Artboard with ID "${targetArtboardId}" not found`);
+  }
+
+  return exportRegionToSvg(
+    doc,
+    { x: artboard.x, y: artboard.y, width: artboard.width, height: artboard.height },
+    {
+      clipId: `artboard-clip-${escapeXml(targetArtboardId)}`,
+      background: 'none',
+      clipToRect: true,
+    },
+  );
 }
 
 /**

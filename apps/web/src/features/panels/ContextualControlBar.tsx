@@ -113,7 +113,10 @@ export const ContextualControlBar: React.FC<ContextualControlBarProps> = ({
   const drawing = freehandSettings;
   const updateDrawing = (patch: Partial<FreehandSettings>) => drawing && onFreehandSettingsChange?.({ ...drawing, ...patch });
 
-  const labelText = selected
+  const isDrawingTool = activeTool === 'pencil' || activeTool === 'brush' || activeTool === 'smooth' || activeTool === 'eraser';
+  const labelText = isDrawingTool || activeTool === 'eyedropper' || activeTool === 'bucket'
+    ? (TOOL_LABELS[activeTool] ?? 'Rysowanie')
+    : selected
     ? (OBJECT_TYPE_LABELS[selected.type] ?? TOOL_LABELS[activeTool] ?? 'Obiekt')
     : (TOOL_LABELS[activeTool] ?? 'Nawigacja');
 
@@ -165,6 +168,80 @@ export const ContextualControlBar: React.FC<ContextualControlBarProps> = ({
             />
           )}
           <span className="contextual-hint">Click source object, then apply to selection</span>
+        </div>
+      ) : drawing && isDrawingTool ? (
+        <div className="contextual-field-group" aria-label="Ustawienia rysowania">
+          {(activeTool === 'pencil' || activeTool === 'brush' || activeTool === 'smooth') && (
+            <NumberInput
+              data-testid="drawing-smoothing"
+              label="Smooth"
+              min={0}
+              max={100}
+              value={drawing.smoothing}
+              unit="%"
+              onChange={(value) => updateDrawing({ smoothing: value })}
+            />
+          )}
+          {(activeTool === 'pencil' || activeTool === 'brush') && (
+            <NumberInput
+              data-testid="drawing-width"
+              label="Width"
+              min={0.1}
+              value={drawing.width}
+              unit="px"
+              decimals={1}
+              onChange={(value) => updateDrawing({ width: value })}
+            />
+          )}
+          {activeTool === 'eraser' && (
+            <NumberInput
+              data-testid="eraser-radius"
+              label="Radius"
+              min={1}
+              value={drawing.eraserRadius}
+              unit="px"
+              decimals={0}
+              onChange={(value) => updateDrawing({ eraserRadius: value })}
+            />
+          )}
+          {activeTool === 'brush' && (
+            <>
+              <label className="contextual-toggle">
+                <input
+                  type="checkbox"
+                  checked={drawing.pressure}
+                  onChange={(event) => updateDrawing({ pressure: event.target.checked })}
+                />
+                Pressure
+              </label>
+              <label className="contextual-select-label">
+                Cap
+                <select
+                  className="contextual-select"
+                  aria-label="Brush cap"
+                  value={drawing.cap}
+                  onChange={(event) => updateDrawing({ cap: event.target.value as FreehandSettings['cap'] })}
+                >
+                  <option value="round">Round</option>
+                  <option value="square">Square</option>
+                  <option value="butt">Butt</option>
+                </select>
+              </label>
+              <label className="contextual-select-label">
+                Join
+                <select
+                  className="contextual-select"
+                  aria-label="Brush join"
+                  value={drawing.join}
+                  onChange={(event) => updateDrawing({ join: event.target.value as FreehandSettings['join'] })}
+                >
+                  <option value="round">Round</option>
+                  <option value="bevel">Bevel</option>
+                  <option value="miter">Miter</option>
+                </select>
+              </label>
+            </>
+          )}
         </div>
       ) : selected && currentTransform && currentBounds ? (
         <>
@@ -246,82 +323,6 @@ export const ContextualControlBar: React.FC<ContextualControlBarProps> = ({
             />
           ) : null}
         </>
-      ) : drawing && (activeTool === 'pencil' || activeTool === 'brush' || activeTool === 'smooth' || activeTool === 'eraser') ? (
-        <div className="contextual-field-group" aria-label="Ustawienia rysowania">
-          {(activeTool === 'pencil' || activeTool === 'brush' || activeTool === 'smooth') && (
-            <NumberInput
-              data-testid="drawing-smoothing"
-              label="Smooth"
-              min={0}
-              max={100}
-              value={drawing.smoothing}
-              unit="%"
-              onChange={(value) => updateDrawing({ smoothing: value })}
-            />
-          )}
-          {(activeTool === 'pencil' || activeTool === 'brush') && (
-            <NumberInput
-              data-testid="drawing-width"
-              label="Width"
-              min={0.1}
-              value={drawing.width}
-              unit="px"
-              decimals={1}
-              onChange={(value) => updateDrawing({ width: value })}
-            />
-          )}
-          {activeTool === 'eraser' && (
-            <NumberInput
-              data-testid="eraser-radius"
-              label="Radius"
-              min={1}
-              value={drawing.eraserRadius}
-              unit="px"
-              decimals={0}
-              onChange={(value) => updateDrawing({ eraserRadius: value })}
-            />
-          )}
-          {activeTool === 'brush' && (
-            <label className="contextual-toggle">
-              <input
-                type="checkbox"
-                checked={drawing.pressure}
-                onChange={(event) => updateDrawing({ pressure: event.target.checked })}
-              />{' '}
-              Pressure
-            </label>
-          )}
-          {activeTool === 'brush' && (
-            <label className="contextual-select-label">
-              Cap
-              <select
-                className="contextual-select"
-                aria-label="Brush cap"
-                value={drawing.cap}
-                onChange={(event) => updateDrawing({ cap: event.target.value as FreehandSettings['cap'] })}
-              >
-                <option value="butt">Butt</option>
-                <option value="round">Round</option>
-                <option value="square">Square</option>
-              </select>
-            </label>
-          )}
-          {activeTool === 'brush' && (
-            <label className="contextual-select-label">
-              Join
-              <select
-                className="contextual-select"
-                aria-label="Brush join"
-                value={drawing.join}
-                onChange={(event) => updateDrawing({ join: event.target.value as FreehandSettings['join'] })}
-              >
-                <option value="miter">Miter</option>
-                <option value="round">Round</option>
-                <option value="bevel">Bevel</option>
-              </select>
-            </label>
-          )}
-        </div>
       ) : (
         <span className="contextual-hint">
           {activeTool === 'select'

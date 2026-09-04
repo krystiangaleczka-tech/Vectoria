@@ -4,6 +4,7 @@ import type { ImportReport, ImportReportEntry, Transform2D } from '@vectoria/cor
 import { countReport } from '@vectoria/core';
 import { sanitizeSvg } from './sanitizer.js';
 import { generateId } from '@vectoria/shared';
+import { rasterizeSvgToBlob } from '../export/raster-export.js';
 
 const number = (element: Element, name: string, fallback = 0) => {
   const value = Number(element.getAttribute(name));
@@ -403,17 +404,11 @@ function parseDefShapeGeometry(element: Element): { x: number; y: number }[] | n
   return null;
 }
 
+/**
+ * Legacy wrapper for rasterizing SVG to PNG. Kept for backward compatibility.
+ */
 export async function rasterizeSvgToPng(svg: string, width: number, height: number): Promise<Blob> {
-  if (typeof Image === 'undefined' || typeof document === 'undefined') throw new Error('PNG export requires browser canvas');
-  const image = new Image();
-  const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
-  try {
-    await new Promise<void>((resolve, reject) => { image.onload = () => resolve(); image.onerror = () => reject(new Error('Unable to rasterize SVG')); image.src = url; });
-    const canvas = document.createElement('canvas'); canvas.width = Math.max(1, Math.ceil(width)); canvas.height = Math.max(1, Math.ceil(height));
-    const context = canvas.getContext('2d'); if (!context) throw new Error('Canvas 2D context unavailable');
-    context.drawImage(image, 0, 0, canvas.width, canvas.height);
-    return await new Promise<Blob>((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('PNG encoding failed')), 'image/png'));
-  } finally { URL.revokeObjectURL(url); }
+  return rasterizeSvgToBlob(svg, width, height, { format: 'png' });
 }
 
 export function downloadBlob(blob: Blob, filename: string): void {

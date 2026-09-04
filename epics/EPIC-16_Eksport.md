@@ -29,136 +29,171 @@ export interface ExportJob { id:string; status:"queued"|"running"|"done"|"error"
 
 ### EXPORT-001
 
-- [ ] Zdefiniuj options, validation, job status i output policy dla EXPORT-001.
-- [ ] Dodaj Export Dialog/Menu, preview, progress, cancel i error UI dla EXPORT-001.
-- [ ] Dodaj regression tests dimensions/color/output dla EXPORT-001.
-- [ ] Zachowaj target geometry, safe memory limit i async input priority dla EXPORT-001.
+- [x] Zdefiniuj options, validation, job status i output policy dla EXPORT-001.
+- [x] Dodaj Export Dialog/Menu, preview, progress, cancel i error UI dla EXPORT-001.
+- [x] Dodaj regression tests dimensions/color/output dla EXPORT-001.
+- [x] Zachowaj target geometry, safe memory limit i async input priority dla EXPORT-001.
 
 ### EXPORT-002
 
-- [ ] Zdefiniuj options, validation, job status i output policy dla EXPORT-002.
-- [ ] Dodaj Export Dialog/Menu, preview, progress, cancel i error UI dla EXPORT-002.
-- [ ] Dodaj regression tests dimensions/color/output dla EXPORT-002.
-- [ ] Zachowaj target geometry, safe memory limit i async input priority dla EXPORT-002.
+- [x] Zdefiniuj options, validation, job status i output policy dla EXPORT-002.
+- [x] Dodaj Export Dialog/Menu, preview, progress, cancel i error UI dla EXPORT-002.
+- [x] Dodaj regression tests dimensions/color/output dla EXPORT-002.
+- [x] Zachowaj target geometry, safe memory limit i async input priority dla EXPORT-002.
 
 ### EXPORT-003
 
-- [ ] Zdefiniuj options, validation, job status i output policy dla EXPORT-003.
-- [ ] Dodaj Export Dialog/Menu, preview, progress, cancel i error UI dla EXPORT-003.
-- [ ] Dodaj regression tests dimensions/color/output dla EXPORT-003.
-- [ ] Zachowaj target geometry, safe memory limit i async input priority dla EXPORT-003.
+- [x] Zdefiniuj options, validation, job status i output policy dla EXPORT-003.
+- [x] Dodaj Export Dialog/Menu, preview, progress, cancel i error UI dla EXPORT-003.
+- [x] Dodaj regression tests dimensions/color/output dla EXPORT-003.
+- [x] Zachowaj target geometry, safe memory limit i async input priority dla EXPORT-003.
 
 ### EXPORT-004
 
-- [ ] Zdefiniuj options, validation, job status i output policy dla EXPORT-004.
-- [ ] Dodaj Export Dialog/Menu, preview, progress, cancel i error UI dla EXPORT-004.
-- [ ] Dodaj regression tests dimensions/color/output dla EXPORT-004.
-- [ ] Zachowaj target geometry, safe memory limit i async input priority dla EXPORT-004.
+- [x] Zdefiniuj options, validation, job status i output policy dla EXPORT-004.
+- [x] Dodaj Export Dialog/Menu, preview, progress, cancel i error UI dla EXPORT-004.
+- [x] Dodaj regression tests dimensions/color/output dla EXPORT-004.
+- [x] Zachowaj target geometry, safe memory limit i async input priority dla EXPORT-004.
 
 ### EXPORT-005
 
-- [ ] Zdefiniuj options, validation, job status i output policy dla EXPORT-005.
-- [ ] Dodaj Export Dialog/Menu, preview, progress, cancel i error UI dla EXPORT-005.
-- [ ] Dodaj regression tests dimensions/color/output dla EXPORT-005.
-- [ ] Zachowaj target geometry, safe memory limit i async input priority dla EXPORT-005.
+- [x] Zdefiniuj options, validation, job status i output policy dla EXPORT-005.
+- [x] Dodaj Export Dialog/Menu, preview, progress, cancel i error UI dla EXPORT-005.
+- [x] Dodaj regression tests dimensions/color/output dla EXPORT-005.
+- [x] Zachowaj target geometry, safe memory limit i async input priority dla EXPORT-005.
 
 ### EXPORT-006
 
-- [ ] Zdefiniuj options, validation, job status i output policy dla EXPORT-006.
-- [ ] Dodaj Export Dialog/Menu, preview, progress, cancel i error UI dla EXPORT-006.
-- [ ] Dodaj regression tests dimensions/color/output dla EXPORT-006.
-- [ ] Zachowaj target geometry, safe memory limit i async input priority dla EXPORT-006.
+- [x] Zdefiniuj options, validation, job status i output policy dla EXPORT-006.
+- [x] Dodaj Export Dialog/Menu, preview, progress, cancel i error UI dla EXPORT-006.
+- [x] Dodaj regression tests dimensions/color/output dla EXPORT-006.
+- [x] Zachowaj target geometry, safe memory limit i async input priority dla EXPORT-006.
 
 ### EXPORT-007
 
-- [ ] Zdefiniuj options, validation, job status i output policy dla EXPORT-007.
-- [ ] Dodaj Export Dialog/Menu, preview, progress, cancel i error UI dla EXPORT-007.
-- [ ] Dodaj regression tests dimensions/color/output dla EXPORT-007.
-- [ ] Zachowaj target geometry, safe memory limit i async input priority dla EXPORT-007.
+- [x] Zdefiniuj options, validation, job status i output policy dla EXPORT-007.
+- [x] Dodaj Export Dialog/Menu, preview, progress, cancel i error UI dla EXPORT-007.
+- [x] Dodaj regression tests dimensions/color/output dla EXPORT-007.
+- [x] Zachowaj target geometry, safe memory limit i async input priority dla EXPORT-007.
 
 ### EXPORT-008
 
-- [ ] Zdefiniuj options, validation, job status i output policy dla EXPORT-008.
-- [ ] Dodaj Export Dialog/Menu, preview, progress, cancel i error UI dla EXPORT-008.
-- [ ] Dodaj regression tests dimensions/color/output dla EXPORT-008.
-- [ ] Zachowaj target geometry, safe memory limit i async input priority dla EXPORT-008.
+- [x] Zdefiniuj options, validation, job status i output policy dla EXPORT-008.
+- [x] Dodaj Export Dialog/Menu, preview, progress, cancel i error UI dla EXPORT-008.
+- [x] Dodaj regression tests dimensions/color/output dla EXPORT-008.
+- [x] Zachowaj target geometry, safe memory limit i async input priority dla EXPORT-008.
 
 ### EXPORT-009
 
-- [ ] Zdefiniuj options, validation, job status i output policy dla EXPORT-009.
-- [ ] Dodaj Export Dialog/Menu, preview, progress, cancel i error UI dla EXPORT-009.
-- [ ] Dodaj regression tests dimensions/color/output dla EXPORT-009.
-- [ ] Zachowaj target geometry, safe memory limit i async input priority dla EXPORT-009.
+- [x] Zdefiniuj options, validation, job status i output policy dla EXPORT-009.
+- [x] Dodaj Export Dialog/Menu, preview, progress, cancel i error UI dla EXPORT-009.
+- [x] Dodaj regression tests dimensions/color/output dla EXPORT-009.
+- [x] Zachowaj target geometry, safe memory limit i async input priority dla EXPORT-009.
 
 ### EXPORT-010
 
-- [ ] Zdefiniuj options, validation, job status i output policy dla EXPORT-010.
-- [ ] Dodaj Export Dialog/Menu, preview, progress, cancel i error UI dla EXPORT-010.
-- [ ] Dodaj regression tests dimensions/color/output dla EXPORT-010.
-- [ ] Zachowaj target geometry, safe memory limit i async input priority dla EXPORT-010.
+- [x] Zdefiniuj options, validation, job status i output policy dla EXPORT-010.
+- [x] Dodaj Export Dialog/Menu, preview, progress, cancel i error UI dla EXPORT-010.
+- [x] Dodaj regression tests dimensions/color/output dla EXPORT-010.
+- [x] Zachowaj target geometry, safe memory limit i async input priority dla EXPORT-010.
 
 ### EXPORT-011
 
-- [ ] Zdefiniuj options, validation, job status i output policy dla EXPORT-011.
-- [ ] Dodaj Export Dialog/Menu, preview, progress, cancel i error UI dla EXPORT-011.
-- [ ] Dodaj regression tests dimensions/color/output dla EXPORT-011.
-- [ ] Zachowaj target geometry, safe memory limit i async input priority dla EXPORT-011.
+- [x] Zdefiniuj options, validation, job status i output policy dla EXPORT-011.
+- [x] Dodaj Export Dialog/Menu, preview, progress, cancel i error UI dla EXPORT-011.
+- [x] Dodaj regression tests dimensions/color/output dla EXPORT-011.
+- [x] Zachowaj target geometry, safe memory limit i async input priority dla EXPORT-011.
 
 ### EXPORT-012
 
-- [ ] Zdefiniuj options, validation, job status i output policy dla EXPORT-012.
-- [ ] Dodaj Export Dialog/Menu, preview, progress, cancel i error UI dla EXPORT-012.
-- [ ] Dodaj regression tests dimensions/color/output dla EXPORT-012.
-- [ ] Zachowaj target geometry, safe memory limit i async input priority dla EXPORT-012.
+- [x] Zdefiniuj options, validation, job status i output policy dla EXPORT-012.
+- [x] Dodaj Export Dialog/Menu, preview, progress, cancel i error UI dla EXPORT-012.
+- [x] Dodaj regression tests dimensions/color/output dla EXPORT-012.
+- [x] Zachowaj target geometry, safe memory limit i async input priority dla EXPORT-012.
 
 ### EXPORT-013
 
-- [ ] Zdefiniuj options, validation, job status i output policy dla EXPORT-013.
-- [ ] Dodaj Export Dialog/Menu, preview, progress, cancel i error UI dla EXPORT-013.
-- [ ] Dodaj regression tests dimensions/color/output dla EXPORT-013.
-- [ ] Zachowaj target geometry, safe memory limit i async input priority dla EXPORT-013.
+- [x] Zdefiniuj options, validation, job status i output policy dla EXPORT-013.
+- [x] Dodaj Export Dialog/Menu, preview, progress, cancel i error UI dla EXPORT-013.
+- [x] Dodaj regression tests dimensions/color/output dla EXPORT-013.
+- [x] Zachowaj target geometry, safe memory limit i async input priority dla EXPORT-013.
 
 ### EXPORT-014
 
-- [ ] Zdefiniuj options, validation, job status i output policy dla EXPORT-014.
-- [ ] Dodaj Export Dialog/Menu, preview, progress, cancel i error UI dla EXPORT-014.
-- [ ] Dodaj regression tests dimensions/color/output dla EXPORT-014.
-- [ ] Zachowaj target geometry, safe memory limit i async input priority dla EXPORT-014.
+- [x] Zdefiniuj options, validation, job status i output policy dla EXPORT-014.
+- [x] Dodaj Export Dialog/Menu, preview, progress, cancel i error UI dla EXPORT-014.
+- [x] Dodaj regression tests dimensions/color/output dla EXPORT-014.
+- [x] Zachowaj target geometry, safe memory limit i async input priority dla EXPORT-014.
 
 ### EXPORT-015
 
-- [ ] Zdefiniuj options, validation, job status i output policy dla EXPORT-015.
-- [ ] Dodaj Export Dialog/Menu, preview, progress, cancel i error UI dla EXPORT-015.
-- [ ] Dodaj regression tests dimensions/color/output dla EXPORT-015.
-- [ ] Zachowaj target geometry, safe memory limit i async input priority dla EXPORT-015.
+- [x] Zdefiniuj options, validation, job status i output policy dla EXPORT-015.
+- [x] Dodaj Export Dialog/Menu, preview, progress, cancel i error UI dla EXPORT-015.
+- [x] Dodaj regression tests dimensions/color/output dla EXPORT-015.
+- [x] Zachowaj target geometry, safe memory limit i async input priority dla EXPORT-015.
 
 ### EXPORT-016
 
-- [ ] Zdefiniuj options, validation, job status i output policy dla EXPORT-016.
-- [ ] Dodaj Export Dialog/Menu, preview, progress, cancel i error UI dla EXPORT-016.
-- [ ] Dodaj regression tests dimensions/color/output dla EXPORT-016.
-- [ ] Zachowaj target geometry, safe memory limit i async input priority dla EXPORT-016.
+- [x] Zdefiniuj options, validation, job status i output policy dla EXPORT-016.
+- [x] Dodaj Export Dialog/Menu, preview, progress, cancel i error UI dla EXPORT-016.
+- [x] Dodaj regression tests dimensions/color/output dla EXPORT-016.
+- [x] Zachowaj target geometry, safe memory limit i async input priority dla EXPORT-016.
 
 ### EXPORT-017
 
-- [ ] Zdefiniuj options, validation, job status i output policy dla EXPORT-017.
-- [ ] Dodaj Export Dialog/Menu, preview, progress, cancel i error UI dla EXPORT-017.
-- [ ] Dodaj regression tests dimensions/color/output dla EXPORT-017.
-- [ ] Zachowaj target geometry, safe memory limit i async input priority dla EXPORT-017.
+- [x] Zdefiniuj options, validation, job status i output policy dla EXPORT-017.
+- [x] Dodaj Export Dialog/Menu, preview, progress, cancel i error UI dla EXPORT-017.
+- [x] Dodaj regression tests dimensions/color/output dla EXPORT-017.
+- [x] Zachowaj target geometry, safe memory limit i async input priority dla EXPORT-017.
 
 ### EXPORT-018
 
-- [ ] Zdefiniuj options, validation, job status i output policy dla EXPORT-018.
-- [ ] Dodaj Export Dialog/Menu, preview, progress, cancel i error UI dla EXPORT-018.
-- [ ] Dodaj regression tests dimensions/color/output dla EXPORT-018.
-- [ ] Zachowaj target geometry, safe memory limit i async input priority dla EXPORT-018.
+- [x] Zdefiniuj options, validation, job status i output policy dla EXPORT-018.
+- [x] Dodaj Export Dialog/Menu, preview, progress, cancel i error UI dla EXPORT-018.
+- [x] Dodaj regression tests dimensions/color/output dla EXPORT-018.
+- [x] Zachowaj target geometry, safe memory limit i async input priority dla EXPORT-018.
 
 ### EXPORT-019
 
-- [ ] Zdefiniuj options, validation, job status i output policy dla EXPORT-019.
-- [ ] Dodaj Export Dialog/Menu, preview, progress, cancel i error UI dla EXPORT-019.
-- [ ] Dodaj regression tests dimensions/color/output dla EXPORT-019.
-- [ ] Zachowaj target geometry, safe memory limit i async input priority dla EXPORT-019.
+- [x] Zdefiniuj options, validation, job status i output policy dla EXPORT-019.
+- [x] Dodaj Export Dialog/Menu, preview, progress, cancel i error UI dla EXPORT-019.
+- [x] Dodaj regression tests dimensions/color/output dla EXPORT-019.
+- [x] Zachowaj target geometry, safe memory limit i async input priority dla EXPORT-019.
+
+### EXPORT-020
+
+- [x] Zdefiniuj options, validation, job status i output policy dla EXPORT-020.
+- [x] Dodaj Export Dialog/Menu, preview, progress, cancel i error UI dla EXPORT-020.
+- [x] Dodaj regression tests dimensions/color/output dla EXPORT-020.
+- [x] Zachowaj target geometry, safe memory limit i async input priority dla EXPORT-020.
+
+### EXPORT-021
+
+- [x] Zdefiniuj options, validation, job status i output policy dla EXPORT-021.
+- [x] Dodaj Export Dialog/Menu, preview, progress, cancel i error UI dla EXPORT-021.
+- [x] Dodaj regression tests dimensions/color/output dla EXPORT-021.
+- [x] Zachowaj target geometry, safe memory limit i async input priority dla EXPORT-021.
+
+### EXPORT-022
+
+- [x] Zdefiniuj options, validation, job status i output policy dla EXPORT-022.
+- [x] Dodaj Export Dialog/Menu, preview, progress, cancel i error UI dla EXPORT-022.
+- [x] Dodaj regression tests dimensions/color/output dla EXPORT-022.
+- [x] Zachowaj target geometry, safe memory limit i async input priority dla EXPORT-022.
+
+### EXPORT-023
+
+- [x] Zdefiniuj options, validation, job status i output policy dla EXPORT-023.
+- [x] Dodaj Export Dialog/Menu, preview, progress, cancel i error UI dla EXPORT-023.
+- [x] Dodaj regression tests dimensions/color/output dla EXPORT-023.
+- [x] Zachowaj target geometry, safe memory limit i async input priority dla EXPORT-023.
+
+### EXPORT-024
+
+- [x] Zdefiniuj options, validation, job status i output policy dla EXPORT-024.
+- [x] Dodaj Export Dialog/Menu, preview, progress, cancel i error UI dla EXPORT-024.
+- [x] Dodaj regression tests dimensions/color/output dla EXPORT-024.
+- [x] Zachowaj target geometry, safe memory limit i async input priority dla EXPORT-024.
 
 ## Reguły
 
@@ -304,10 +339,10 @@ export interface ExportJob { id:string; status:"queued"|"running"|"done"|"error"
 
 ## Definition of Done
 
-- [ ] EXPORT-001…019 jest dostarczone albo etapowane.
-- [ ] Eksport jest async, memory-safe i nie blokuje inputu.
-- [ ] UI ma progress/cancel/error/success i accessibility coverage.
-- [ ] Output regression/E2E tests przechodzą w CI.
+- [x] EXPORT-001…024 jest dostarczone albo etapowane.
+- [x] Eksport jest async, memory-safe i nie blokuje inputu.
+- [x] UI ma progress/cancel/error/success i accessibility coverage.
+- [x] Output regression/E2E tests przechodzą w CI.
 
 ## Źródła
 

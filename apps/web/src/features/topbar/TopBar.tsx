@@ -55,6 +55,7 @@ export interface TopBarProps {
   onSaveLayoutPreset?: () => void;
   onOpenTransform?: () => void;
   onCreateArtboard?: () => void;
+  onOpenExportDialog?: () => void;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -108,6 +109,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   onSaveLayoutPreset,
   onOpenTransform,
   onCreateArtboard,
+  onOpenExportDialog,
 }) => {
   return (
     <header
@@ -172,6 +174,7 @@ export const TopBar: React.FC<TopBarProps> = ({
         onSaveLayoutPreset={onSaveLayoutPreset}
         onOpenTransform={onOpenTransform}
         onCreateArtboard={onCreateArtboard}
+        onOpenExportDialog={onOpenExportDialog}
       />
       <DocumentTabs documentName={documentName} dirty={saveStatus !== 'saved-locally'} />
     </header>

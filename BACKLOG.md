@@ -557,30 +557,30 @@ Wymóg stopniowego rozszerzania artboardu o 10% wynika bezpośrednio z potrzeby 
 
 ## EPIC-16: Eksport
 
-- [ ] **EXPORT-001** Dodać SVG editable export
-- [ ] **EXPORT-002** Dodać SVG optimized export
-- [ ] **EXPORT-003** Dodać PNG export 1x
-- [ ] **EXPORT-004** Dodać PNG export 2x
-- [ ] **EXPORT-005** Dodać PNG export 3x
-- [ ] **EXPORT-006** Dodać PNG export z własną rozdzielczością
-- [ ] **EXPORT-007** Dodać JPG export
-- [ ] **EXPORT-008** Dodać WebP export
-- [ ] **EXPORT-009** Dodać ustawienie jakości JPG/WebP
-- [ ] **EXPORT-010** Dodać ustawienie tła eksportu
-- [ ] **EXPORT-011** Dodać transparent background
-- [ ] **EXPORT-012** Dodać PDF export pojedynczego artboardu
-- [ ] **EXPORT-013** Dodać PDF export wszystkich artboardów
-- [ ] **EXPORT-014** Dodać spady i crop marks dla PDF jako P1
-- [ ] **EXPORT-015** Dodać eksport zaznaczenia
-- [ ] **EXPORT-016** Dodać eksport obszaru
-- [ ] **EXPORT-017** Dodać eksport artboardu
-- [ ] **EXPORT-018** Zaimplementować Export for Screens
-- [ ] **EXPORT-019** Obsłużyć seryjny eksport wielu ikon i formatów
-- [ ] **EXPORT-020** Dodać batch naming na podstawie nazwy artboardu
-- [ ] **EXPORT-021** Dodać batch naming na podstawie nazwy warstwy
-- [ ] **EXPORT-022** Pokazywać podgląd docelowego rozmiaru pliku
-- [ ] **EXPORT-023** Dodać kolejkę eksportów
-- [ ] **EXPORT-024** Dodać progres i anulowanie eksportu
+- [x] **EXPORT-001** Dodać SVG editable export
+- [x] **EXPORT-002** Dodać SVG optimized export
+- [x] **EXPORT-003** Dodać PNG export 1x
+- [x] **EXPORT-004** Dodać PNG export 2x
+- [x] **EXPORT-005** Dodać PNG export 3x
+- [x] **EXPORT-006** Dodać PNG export z własną rozdzielczością
+- [x] **EXPORT-007** Dodać JPG export
+- [x] **EXPORT-008** Dodać WebP export
+- [x] **EXPORT-009** Dodać ustawienie jakości JPG/WebP
+- [x] **EXPORT-010** Dodać ustawienie tła eksportu
+- [x] **EXPORT-011** Dodać transparent background
+- [x] **EXPORT-012** Dodać PDF export pojedynczego artboardu
+- [x] **EXPORT-013** Dodać PDF export wszystkich artboardów
+- [x] **EXPORT-014** Dodać spady i crop marks dla PDF jako P1
+- [x] **EXPORT-015** Dodać eksport zaznaczenia
+- [x] **EXPORT-016** Dodać eksport obszaru
+- [x] **EXPORT-017** Dodać eksport artboardu
+- [x] **EXPORT-018** Zaimplementować Export for Screens
+- [x] **EXPORT-019** Obsłużyć seryjny eksport wielu ikon i formatów
+- [x] **EXPORT-020** Dodać batch naming na podstawie nazwy artboardu
+- [x] **EXPORT-021** Dodać batch naming na podstawie nazwy warstwy
+- [x] **EXPORT-022** Pokazywać podgląd docelowego rozmiaru pliku
+- [x] **EXPORT-023** Dodać kolejkę eksportów
+- [x] **EXPORT-024** Dodać progres i anulowanie eksportu
 
 ## EPIC-17: Współpraca i SaaS
 

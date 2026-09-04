@@ -163,6 +163,8 @@ import { useLayoutPresets } from '../hooks/useLayoutPresets.js';
 import { useImportController } from '../features/import/useImportController.js';
 import { importRegistry } from '../features/import/import-registry.js';
 import { ImportDialog } from '../features/import/ImportDialog.js';
+import { ExportDialog } from '../features/dialogs/ExportDialog.js';
+import { useExportController } from '../features/export/useExportController.js';
 
 import type { DockPanel } from '../features/panels/RightDock.js';
 import type { PathAction } from '../features/panels/PropertiesPanel.js';
@@ -229,6 +231,8 @@ export const EditorApp: React.FC = () => {
   const [previewTransforms, setPreviewTransforms] = useState<Record<string, import('@vectoria/core').Transform2D>>({});
 
   const importController = useImportController(importRegistry);
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const exportController = useExportController(doc, selection);
 
   const history = useMemo(() => new CommandHistory(), []);
   const camera = useMemo(() => new Camera(), []);
@@ -1670,6 +1674,7 @@ export const EditorApp: React.FC = () => {
         onFitArtboard={handleFitArtboard}
         onZoom100={handleZoom100}
         onExportSvg={handleExportSvg}
+        onOpenExportDialog={() => setExportDialogOpen(true)}
         rightDockOpen={rightDockOpen}
          onToggleRightDock={() => setRightDockOpen((open) => !open)}
          onNewDocument={() => setNewDocumentOpen(true)}
@@ -1909,6 +1914,17 @@ export const EditorApp: React.FC = () => {
          snapEnabled={doc.snap.enabled}
        />
        {newDocumentOpen && <NewDocumentDialog onClose={() => setNewDocumentOpen(false)} onCreate={handleCreateDocument} />}
+       {exportDialogOpen && doc && (
+         <ExportDialog
+           doc={doc}
+           selection={selection}
+           activeJob={exportController.activeJob}
+           onClose={() => setExportDialogOpen(false)}
+           onExport={(req) => exportController.startExport(req)}
+           onBatchExport={(requests) => exportController.startBatchExport(requests)}
+           onCancelJob={(jobId) => exportController.cancelExport(jobId)}
+         />
+       )}
        {destructiveGeometryConfirmOpen && geometryPreview && <div className="dialog-backdrop" role="presentation"><section ref={geometryConfirmDialogRef} className="geometry-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="geometry-confirm-title"><div className="dialog-eyebrow">Destructive geometry edit</div><h2 id="geometry-confirm-title">Convert to curves?</h2><p className="dialog-description">Selected parametric objects will become paths. Visual geometry, style and transform stay unchanged, but shape parameters will no longer be editable.</p><div className="geometry-confirm-summary" role="status">{geometryPreview.proposed.length} object(s) ready. Undo remains available.</div><div className="dialog-actions"><Button size="sm" variant="ghost" onClick={handleCancelGeometryPreview}>Cancel</Button><Button size="sm" variant="danger" autoFocus onClick={() => handleApplyGeometryPreview(true)}>Convert to curves</Button></div></section></div>}
        <UsedFontsPanel
          document={doc}

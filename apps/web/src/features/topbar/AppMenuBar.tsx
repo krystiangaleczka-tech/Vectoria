@@ -53,6 +53,7 @@ interface AppMenuBarProps {
   onSaveLayoutPreset?: () => void;
   onOpenTransform?: () => void;
   onCreateArtboard?: () => void;
+  onOpenExportDialog?: () => void;
 }
 
 type MenuName = 'Plik' | 'Edycja' | 'Obiekt' | 'Tekst' | 'Widok' | 'Okno' | 'Pomoc';
@@ -107,6 +108,7 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
   onSaveLayoutPreset,
   onOpenTransform,
   onCreateArtboard,
+  onOpenExportDialog,
 }) => {
   const [openMenu, setOpenMenu] = useState<MenuName | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -139,7 +141,8 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
         <MenuItem label="Nowy artboard" onClick={() => run(() => onCreateArtboard?.())} />
         <MenuItem label="Otwórz / Importuj..." onClick={() => run(onImportSvg)} />
         <MenuItem label="Zapisz jako .vct" onClick={() => run(onExportVct)} />
-        <MenuItem label="Eksportuj SVG" shortcut="Ctrl+Shift+E" onClick={() => run(onExportSvg)} />
+        <MenuItem label="Eksportuj..." shortcut="Ctrl+Shift+E" onClick={() => run(() => (onOpenExportDialog ? onOpenExportDialog() : onExportSvg()))} />
+        <MenuItem label="Eksportuj SVG" onClick={() => run(onExportSvg)} />
         <MenuItem label="Eksportuj PNG" onClick={() => run(onExportPng)} />
       </>;
     }
@@ -242,7 +245,8 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
         <button type="button" className="zoom-readout" onClick={onZoom100} title="Zoom 100% (Cmd+0)">{zoomPercent}%</button>
         <Button size="sm" variant="ghost" onClick={onFitArtboard} title="Dopasuj obszar roboczy">Dopasuj</Button>
         <IconButton className="dock-toggle" size="sm" icon={<VectoriaIcon name="sliders" size={15} />} label={rightDockOpen ? 'Ukryj panele' : 'Pokaż panele'} active={rightDockOpen} onClick={onToggleRightDock} />
-        <Button data-testid="export-svg-button" size="sm" variant="primary" icon={<VectoriaIcon name="fileExport" size={14} />} onClick={onExportSvg}>Eksportuj</Button>
+        <Button data-testid="export-svg-button" size="sm" variant="ghost" onClick={onExportSvg} title="Szybki eksport SVG">SVG</Button>
+        <Button data-testid="export-dialog-button" size="sm" variant="primary" icon={<VectoriaIcon name="fileExport" size={14} />} onClick={onOpenExportDialog} title="Eksportuj... (Ctrl+Shift+E)">Eksportuj…</Button>
       </div>
     </div>
   );
