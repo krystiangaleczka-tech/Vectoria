@@ -4,6 +4,8 @@ import { DocumentTabs } from './DocumentTabs.js';
 import type { DockPanel } from '../panels/RightDock.js';
 import type { ObjectId } from '@vectoria/core';
 
+import type { UiScale } from '../../hooks/useUiPreferences.js';
+
 export interface TopBarProps {
   documentName: string;
   saveStatus: 'idle' | 'dirty' | 'saving' | 'saved-locally' | 'error' | 'offline';
@@ -19,6 +21,8 @@ export interface TopBarProps {
   onExportSvg: () => void;
   onExportPng: () => void;
   onExportVct: () => void;
+  onExportAi?: () => void;
+  onExportCdr?: () => void;
   onImportSvg: () => void;
   rightDockOpen: boolean;
   onToggleRightDock: () => void;
@@ -59,6 +63,13 @@ export interface TopBarProps {
   onOpenGallery?: () => void;
   onToggleComments?: () => void;
   commentsCount?: number;
+  onSelectAll?: () => void;
+  uiScale?: UiScale;
+  onSetUiScale?: (scale: UiScale) => void;
+  contrast?: 'normal' | 'high';
+  onToggleContrast?: () => void;
+  onStartTutorial?: (id: 'shortcuts' | 'first-document' | 'pen' | 'node') => void;
+  onToggleChecklist?: () => void;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -76,6 +87,8 @@ export const TopBar: React.FC<TopBarProps> = ({
   onExportSvg,
   onExportPng,
   onExportVct,
+  onExportAi,
+  onExportCdr,
   onImportSvg,
   rightDockOpen,
   onToggleRightDock,
@@ -116,6 +129,13 @@ export const TopBar: React.FC<TopBarProps> = ({
   onOpenGallery,
   onToggleComments,
   commentsCount,
+  onSelectAll,
+  uiScale,
+  onSetUiScale,
+  contrast,
+  onToggleContrast,
+  onStartTutorial,
+  onToggleChecklist,
 }) => {
   return (
     <header
@@ -144,6 +164,8 @@ export const TopBar: React.FC<TopBarProps> = ({
         onExportSvg={onExportSvg}
         onExportPng={onExportPng}
         onExportVct={onExportVct}
+        onExportAi={onExportAi}
+        onExportCdr={onExportCdr}
         onImportSvg={onImportSvg}
         rightDockOpen={rightDockOpen}
         onToggleRightDock={onToggleRightDock}
@@ -183,6 +205,13 @@ export const TopBar: React.FC<TopBarProps> = ({
         onOpenExportDialog={onOpenExportDialog}
         onOpenGallery={onOpenGallery}
         onToggleComments={onToggleComments}
+        onSelectAll={onSelectAll}
+        uiScale={uiScale}
+        onSetUiScale={onSetUiScale}
+        contrast={contrast}
+        onToggleContrast={onToggleContrast}
+        onStartTutorial={onStartTutorial}
+        onToggleChecklist={onToggleChecklist}
       />
       <DocumentTabs
         documentName={documentName}

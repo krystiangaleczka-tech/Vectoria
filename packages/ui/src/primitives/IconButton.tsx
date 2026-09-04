@@ -34,7 +34,6 @@ export const IconButton: React.FC<IconButtonProps> = ({
     color: active ? '#ffffff' : 'var(--color-text-secondary)',
     cursor: disabled ? 'not-allowed' : 'pointer',
     opacity: disabled ? 0.35 : 1,
-    outline: 'none',
     transition: 'background var(--duration-fast), color var(--duration-fast)',
     padding: 0,
   };

@@ -1,3 +1,7 @@
+:root {
+  --ui-scale: 1;
+}
+
 :root,
 :root[data-theme='dark'] {
   /* Application & canvas */
@@ -146,3 +150,56 @@
   --color-snap: #b837aa;
   --color-smart-distance: #158458;
 }
+
+/* ─── High Contrast Mode (UX-010) ─────────────────────────────────────────── */
+[data-contrast='high'],
+:root[data-contrast='high'] {
+  --color-text-primary: #ffffff;
+  --color-text-secondary: #f4f4f0;
+  --color-text-muted: #dcdcd5;
+  --color-text-disabled: #aaaaa2;
+  --color-border-subtle: #7a7a72;
+  --color-border-default: #a0a096;
+  --color-border-strong: #ffffff;
+  --color-border-focus: #ffd60a;
+  --color-accent: #7cc0ff;
+  --color-accent-hover: #9cd0ff;
+  --color-danger: #ff6b6b;
+  --color-danger-hover: #ff8585;
+  --color-warning: #ffcf33;
+  --color-success: #4ade80;
+  --color-info: #60a5fa;
+  --color-selection: #ffd60a;
+  --color-selection-surface: #2b3945;
+  --color-selection-surface-strong: #1d5f9c;
+}
+
+[data-theme='light'][data-contrast='high'],
+:root[data-theme='light'][data-contrast='high'] {
+  --color-text-primary: #000000;
+  --color-text-secondary: #1a1a17;
+  --color-text-muted: #3a3a34;
+  --color-text-disabled: #5a5a54;
+  --color-border-subtle: #55554e;
+  --color-border-default: #222220;
+  --color-border-strong: #000000;
+  --color-border-focus: #0047bb;
+  --color-accent: #0056b3;
+  --color-danger: #b30000;
+  --color-warning: #805300;
+  --color-success: #0a6632;
+  --color-selection: #0047bb;
+  --color-selection-surface: #c2dcfa;
+  --color-selection-surface-strong: #a4cefa;
+}
+
+[data-contrast='high'] .vectoria-button:focus-visible,
+[data-contrast='high'] .vectoria-icon-button:focus-visible,
+[data-contrast='high'] input:focus-visible,
+[data-contrast='high'] select:focus-visible,
+[data-contrast='high'] textarea:focus-visible,
+[data-contrast='high'] button:focus-visible {
+  outline: 3px solid var(--color-border-focus) !important;
+  outline-offset: 2px !important;
+}
+

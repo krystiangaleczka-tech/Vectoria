@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import type { DocumentModel, LayerId, ObjectId, SceneObject } from '@vectoria/core';
-import { IconButton, VectoriaIcon } from '@vectoria/ui';
+import { IconButton, VectoriaIcon, ConfirmDialog } from '@vectoria/ui';
 
 export interface LayersPanelProps {
   document: DocumentModel;
@@ -86,6 +86,7 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({
   const [draggedLayerId, setDraggedLayerId] = useState<LayerId | null>(null);
   const [draggedObjectId, setDraggedObjectId] = useState<ObjectId | null>(null);
   const [activeColorPickerLayerId, setActiveColorPickerLayerId] = useState<LayerId | null>(null);
+  const [layerToDelete, setLayerToDelete] = useState<{ id: LayerId; name: string } | null>(null);
 
   const activeLayerId = requestedActiveLayerId ?? doc.activeLayerId;
 
@@ -472,7 +473,7 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({
                       size="sm"
                       icon={<VectoriaIcon name="trash" size={13} />}
                       label={`Usuń warstwę ${layer.name}`}
-                      onClick={() => onDeleteLayer?.(layer.id)}
+                      onClick={() => setLayerToDelete({ id: layer.id, name: layer.name })}
                     />
                   )}
                 </div>
@@ -492,6 +493,21 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({
           );
         })}
       </div>
+
+      {layerToDelete && (
+        <ConfirmDialog
+          title={`Usunąć warstwę „${layerToDelete.name}”?`}
+          description="Wszystkie obiekty w tej warstwie zostaną usunięte. Operację można cofnąć za pomocą Cofnij (Undo)."
+          confirmLabel="Usuń warstwę"
+          destructive
+          onConfirm={() => {
+            onDeleteLayer?.(layerToDelete.id);
+            setLayerToDelete(null);
+          }}
+          onCancel={() => setLayerToDelete(null)}
+          testId="confirm-delete-layer-dialog"
+        />
+      )}
     </section>
   );
 };

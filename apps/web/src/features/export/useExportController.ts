@@ -9,6 +9,8 @@ import {
   rasterizeSvgToBlob,
   optimizeSvg,
   exportDocToPdf,
+  exportAiFile,
+  exportCdrFile,
   downloadBlob,
 } from '@vectoria/io';
 import { resolveFileName } from './export-naming.js';
@@ -112,6 +114,43 @@ export function useExportController(
             return { blob, fileName };
           }
 
+          // Adobe Illustrator Export Pipeline (.ai - ADR-021)
+          if (format === 'ai') {
+            onStage('raster', 0.4);
+            const artboardIds =
+              request.target.kind === 'artboard'
+                ? [request.target.artboardId]
+                : snapshotDoc.artboardIds;
+
+            const blob = await exportAiFile(snapshotDoc, {
+              artboardIds,
+              scale,
+            });
+
+            if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
+            onStage('deliver', 1);
+            downloadBlob(blob, fileName);
+            return { blob, fileName };
+          }
+
+          // CorelDRAW Export Pipeline (.cdr - ADR-021)
+          if (format === 'cdr') {
+            onStage('serialize', 0.4);
+            const artboardId =
+              request.target.kind === 'artboard'
+                ? request.target.artboardId
+                : snapshotDoc.activeArtboardId;
+
+            const blob = await exportCdrFile(snapshotDoc, {
+              artboardId,
+            });
+
+            if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
+            onStage('deliver', 1);
+            downloadBlob(blob, fileName);
+            return { blob, fileName };
+          }
+
           // Raster Export Pipeline: PNG, JPEG, WebP (EXPORT-003..011)
           onStage('serialize', 0.3);
           const svg = exportRegionToSvg(snapshotDoc, rect, { background });
@@ -120,8 +159,11 @@ export function useExportController(
           const targetW = rect.width * scale;
           const targetH = rect.height * scale;
 
+          const rasterFormat: 'png' | 'jpeg' | 'webp' =
+            format === 'jpeg' || format === 'webp' ? format : 'png';
+
           const blob = await rasterizeSvgToBlob(svg, targetW, targetH, {
-            format,
+            format: rasterFormat,
             quality,
             background,
           });

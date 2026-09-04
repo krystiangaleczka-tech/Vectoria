@@ -47,6 +47,8 @@ export const ToolRail: React.FC<ToolRailProps> = ({ activeTool, onSelectTool }) 
           <div className="tool-group" aria-label={group.label}>
             {group.tools.map((tool) => {
               const button = <IconButton
+                data-tool={tool.id}
+                data-testid={`tool-${tool.id}`}
                 size="tool"
                 icon={<VectoriaIcon name={tool.icon} size={20} />}
                 label={tool.disabled ? `${tool.label} — Wkrótce` : tool.label}
@@ -55,7 +57,15 @@ export const ToolRail: React.FC<ToolRailProps> = ({ activeTool, onSelectTool }) 
                 disabled={tool.disabled}
                 onClick={() => onSelectTool(tool.id as ActiveTool)}
               />;
-              return tool.disabled ? <Tooltip key={tool.id} content={`${tool.label} (${tool.shortcut}) — Wkrótce`}>{button}</Tooltip> : <React.Fragment key={tool.id}>{button}</React.Fragment>;
+              const tooltipText = tool.disabled
+                ? `${tool.label}${tool.shortcut ? ` (${tool.shortcut})` : ''} — Wkrótce`
+                : `${tool.label}${tool.shortcut ? ` (${tool.shortcut})` : ''}`;
+
+              return (
+                <Tooltip key={tool.id} content={tooltipText}>
+                  {button}
+                </Tooltip>
+              );
             })}
           </div>
         </React.Fragment>

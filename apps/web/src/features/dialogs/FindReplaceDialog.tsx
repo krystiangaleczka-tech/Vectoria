@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import type { DocumentModel, ObjectId, ObjectStyle } from '@vectoria/core';
 import { findObjectsByStyleCriteria, type FindStyleCriteria } from '@vectoria/core';
-import { Button } from '@vectoria/ui';
+import { Button, Dialog } from '@vectoria/ui';
 
 export interface FindReplaceDialogProps {
   document: DocumentModel;
@@ -149,25 +149,14 @@ export const FindReplaceDialog: React.FC<FindReplaceDialogProps> = ({
   };
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Find and Replace"
-      data-testid="find-replace-dialog"
-      style={{
-        position: 'fixed',
-        top: '60px',
-        right: '320px',
-        width: '380px',
-        backgroundColor: 'var(--color-bg-surface, #1e1e24)',
-        borderRadius: '8px',
-        border: '1px solid var(--color-border-subtle, #333)',
-        padding: '16px',
-        color: 'var(--color-text-primary, #fff)',
-        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
-        zIndex: 9999,
-      }}
+    <Dialog
+      ariaLabel="Find and Replace"
+      onClose={onClose}
+      width={420}
+      testId="find-replace-dialog"
+      modal={false}
     >
+      <div style={{ padding: '16px', display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
         <div role="tablist" style={{ display: 'flex', gap: '8px' }}>
           <Button
@@ -440,6 +429,7 @@ export const FindReplaceDialog: React.FC<FindReplaceDialogProps> = ({
           </div>
         </>
       )}
-    </div>
+      </div>
+    </Dialog>
   );
 };

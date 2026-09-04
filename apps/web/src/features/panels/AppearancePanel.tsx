@@ -2,7 +2,7 @@ import React from 'react';
 import type { DocumentModel, FillStyle, LiveEffect, ObjectStyle, ObjectId } from '@vectoria/core';
 import { BLEND_MODES } from '@vectoria/core';
 import { generateId } from '@vectoria/shared';
-import { NumberInput, ColorControl, Button } from '@vectoria/ui';
+import { NumberInput, ColorControl, Button, ConfirmDialog } from '@vectoria/ui';
 
 export interface AppearancePanelProps {
   document: DocumentModel;
@@ -80,6 +80,7 @@ export const AppearancePanel: React.FC<AppearancePanelProps> = ({
 }) => {
   const [newEffectType, setNewEffectType] = React.useState<LiveEffect['type']>('dropShadow');
   const [dragIndex, setDragIndex] = React.useState<number | null>(null);
+  const [isExpandConfirmOpen, setIsExpandConfirmOpen] = React.useState(false);
   const object = selectedObjectId !== null ? _doc.objects[selectedObjectId] : null;
   const disabled = !object || object.locked;
   const style = object?.style;
@@ -89,8 +90,7 @@ export const AppearancePanel: React.FC<AppearancePanelProps> = ({
 
   const handleExpand = (): void => {
     if (!expandable) return;
-    const confirmed = window.confirm('Expand spowoduje konwersję efektów na trwałą geometrię. Efekty znikną ze stosu (Undo przywróci). Kontynuować?');
-    if (confirmed) onExpandEffects();
+    setIsExpandConfirmOpen(true);
   };
 
   const move = (index: number, direction: -1 | 1): void => {
@@ -210,6 +210,22 @@ export const AppearancePanel: React.FC<AppearancePanelProps> = ({
         </>
       )}
       {selectedObjectIds.length > 1 && <p className="appearance-empty">Zmiany zastosują się do {selectedObjectIds.length} zaznaczonych obiektów.</p>}
+
+      {isExpandConfirmOpen && (
+        <ConfirmDialog
+          title="Konwersja efektów (Expand)"
+          description="Expand spowoduje konwersję efektów na trwałą geometrię. Efekty znikną ze stosu (Undo przywróci). Kontynuować?"
+          confirmLabel="Konwertuj"
+          cancelLabel="Anuluj"
+          destructive={false}
+          testId="confirm-expand-effects"
+          onConfirm={() => {
+            onExpandEffects();
+            setIsExpandConfirmOpen(false);
+          }}
+          onCancel={() => setIsExpandConfirmOpen(false)}
+        />
+      )}
     </div>
   );
 };

@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import type { FolderRecord, ProjectRecord, TagRecord, WorkspaceMeta } from '@vectoria/io';
+import { ConfirmDialog } from '@vectoria/ui';
 
 export interface ProjectGalleryProps {
   meta: WorkspaceMeta;
@@ -664,74 +665,16 @@ export const ProjectGallery: React.FC<ProjectGalleryProps> = ({
 
       {/* Delete Confirmation Dialog (UX-021) */}
       {projectToDelete && (
-        <div
-          role="alertdialog"
-          aria-modal="true"
-          aria-labelledby="confirm-dialog-title"
-          style={{
-            position: 'fixed',
-            inset: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.7)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 10000,
-          }}
-        >
-          <div
-            style={{
-              width: '400px',
-              padding: '24px',
-              borderRadius: '8px',
-              backgroundColor: 'var(--color-panel, #161922)',
-              border: '1px solid var(--color-border-subtle, #374151)',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '16px',
-            }}
-          >
-            <h3 id="confirm-dialog-title" style={{ margin: 0, fontSize: '16px', color: '#ef4444' }}>
-              Potwierdź usunięcie projektu
-            </h3>
-            <p style={{ margin: 0, fontSize: '13px', color: 'var(--color-text, #f3f4f6)', lineHeight: 1.5 }}>
-              Czy na pewno chcesz usunąć projekt <strong>„{projectToDelete.name}”</strong>? Operacji nie można cofnąć.
-            </p>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '8px' }}>
-              <button
-                type="button"
-                onClick={() => setProjectToDelete(null)}
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: '4px',
-                  backgroundColor: 'transparent',
-                  color: '#9ca3af',
-                  border: '1px solid #374151',
-                  fontSize: '13px',
-                  cursor: 'pointer',
-                }}
-              >
-                Anuluj
-              </button>
-              <button
-                type="button"
-                data-testid="confirm-delete-btn"
-                onClick={confirmDeleteProject}
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: '4px',
-                  backgroundColor: '#ef4444',
-                  color: '#fff',
-                  border: 'none',
-                  fontWeight: 600,
-                  fontSize: '13px',
-                  cursor: 'pointer',
-                }}
-              >
-                Usuń projekt
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          title="Potwierdź usunięcie projektu"
+          description={`Czy na pewno chcesz usunąć projekt „${projectToDelete.name}”? Operacji nie można cofnąć.`}
+          confirmLabel="Usuń projekt"
+          cancelLabel="Anuluj"
+          destructive
+          testId="confirm-delete-project"
+          onConfirm={confirmDeleteProject}
+          onCancel={() => setProjectToDelete(null)}
+        />
       )}
     </div>
   );

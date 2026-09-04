@@ -97,10 +97,15 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
       const kb = Math.max(2, Math.round(objCount * 0.45));
       return `~${kb} KB`;
     }
-    if (format === 'pdf') {
+    if (format === 'pdf' || format === 'ai') {
       const pageCount = pdfAllArtboards ? doc.artboardIds.length : 1;
       const mb = Math.max(0.1, (totalPx * 0.0000004 * pageCount));
       return `~${mb.toFixed(1)} MB`;
+    }
+    if (format === 'cdr') {
+      const objCount = Object.keys(doc.objects).length;
+      const kb = Math.max(5, Math.round(objCount * 0.6));
+      return `~${kb} KB`;
     }
     if (format === 'jpeg') {
       const kb = Math.round((totalPx * 0.18 * quality) / 1024);
@@ -334,7 +339,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
 
           {!batchMode ? (
             <div className="export-format-tabs" role="tablist">
-              {(['png', 'svg', 'jpeg', 'webp', 'pdf'] as const).map((fmt) => (
+              {(['png', 'svg', 'pdf', 'ai', 'cdr', 'jpeg', 'webp'] as const).map((fmt) => (
                 <button
                   key={fmt}
                   type="button"
@@ -343,7 +348,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
                   className={`export-tab ${format === fmt ? 'is-active' : ''}`}
                   onClick={() => setFormat(fmt)}
                 >
-                  {fmt.toUpperCase()}
+                  {fmt === 'ai' ? 'AI' : fmt === 'cdr' ? 'CDR' : fmt.toUpperCase()}
                 </button>
               ))}
             </div>

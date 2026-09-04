@@ -611,29 +611,29 @@ Wymóg stopniowego rozszerzania artboardu o 10% wynika bezpośrednio z potrzeby 
 
 ## EPIC-18: UX i dostępność
 
-- [ ] **UX-001** Zapewnić pełną obsługę klawiatury
-- [ ] **UX-002** Zaprojektować focus management
-- [ ] **UX-003** Dodać widoczne focus ringi
-- [ ] **UX-004** Dodać tooltipy z nazwą narzędzia
-- [ ] **UX-005** Pokazywać skrót klawiszowy w tooltipie
-- [ ] **UX-006** Dodać poprawne etykiety ARIA
-- [ ] **UX-007** Dodać jasny motyw
-- [ ] **UX-008** Dodać ciemny motyw
-- [ ] **UX-009** Dodać skalowanie UI
-- [ ] **UX-010** Dodać tryb wysokiego kontrastu
-- [ ] **UX-011** Obsłużyć touch input
-- [ ] **UX-012** Obsłużyć stylus i Apple Pencil
-- [ ] **UX-013** Powiększyć hitboxy dla touch/pen
-- [ ] **UX-014** Obsłużyć pinch-to-zoom
-- [ ] **UX-015** Dodać kontekstowy toolbar
-- [ ] **UX-016** Zbudować onboarding nowego użytkownika
-- [ ] **UX-017** Dodać tutorial pierwszego dokumentu
-- [ ] **UX-018** Dodać tutorial skrótów
-- [ ] **UX-019** Dodać tutorial Pen Tool
-- [ ] **UX-020** Dodać tutorial Node Tool
-- [ ] **UX-021** Dodać potwierdzenie usunięcia projektu
-- [ ] **UX-022** Dodać potwierdzenie operacji destrukcyjnych
-- [ ] **UX-023** Ostrzegać przed konwersją tekstu na krzywe
+- [x] **UX-001** Zapewnić pełną obsługę klawiatury
+- [x] **UX-002** Zaprojektować focus management
+- [x] **UX-003** Dodać widoczne focus ringi
+- [x] **UX-004** Dodać tooltipy z nazwą narzędzia
+- [x] **UX-005** Pokazywać skrót klawiszowy w tooltipie
+- [x] **UX-006** Dodać poprawne etykiety ARIA
+- [x] **UX-007** Dodać jasny motyw
+- [x] **UX-008** Dodać ciemny motyw
+- [x] **UX-009** Dodać skalowanie UI
+- [x] **UX-010** Dodać tryb wysokiego kontrastu
+- [x] **UX-011** Obsłużyć touch input
+- [x] **UX-012** Obsłużyć stylus i Apple Pencil
+- [x] **UX-013** Powiększyć hitboxy dla touch/pen
+- [x] **UX-014** Obsłużyć pinch-to-zoom
+- [x] **UX-015** Dodać kontekstowy toolbar
+- [x] **UX-016** Zbudować onboarding nowego użytkownika
+- [x] **UX-017** Dodać tutorial pierwszego dokumentu
+- [x] **UX-018** Dodać tutorial skrótów
+- [x] **UX-019** Dodać tutorial Pen Tool
+- [x] **UX-020** Dodać tutorial Node Tool
+- [x] **UX-021** Dodać potwierdzenie usunięcia projektu
+- [x] **UX-022** Dodać potwierdzenie operacji destrukcyjnych
+- [x] **UX-023** Ostrzegać przed konwersją tekstu na krzywe
 
 ## EPIC-19: AI-POSTPONE
 

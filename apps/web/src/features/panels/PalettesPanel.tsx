@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { ColorPalette, FillStyle, PaletteSwatch } from '@vectoria/core';
 import { generateId } from '@vectoria/shared';
-import { Button } from '@vectoria/ui';
+import { Button, ConfirmDialog } from '@vectoria/ui';
 import { importPalette } from '@vectoria/io';
 
 export interface PalettesPanelProps {
@@ -20,6 +20,7 @@ export const PalettesPanel: React.FC<PalettesPanelProps> = ({ documentPalettes, 
   const [name, setName] = useState('New palette');
   const [scope, setScope] = useState<'document' | 'user'>('document');
   const [error, setError] = useState<string | null>(null);
+  const [paletteToDelete, setPaletteToDelete] = useState<ColorPalette | null>(null);
   const allPalettes = [...documentPalettes, ...libraryPalettes];
 
   const createPalette = () => {
@@ -74,7 +75,23 @@ export const PalettesPanel: React.FC<PalettesPanelProps> = ({ documentPalettes, 
     </div>
     {error && <p className="palette-error" role="alert">{error}</p>}
     {allPalettes.length === 0 && <div className="panel-empty-state"><strong>No palettes</strong><span>Create or import palette.</span></div>}
-    {allPalettes.map((palette) => <PaletteCard key={palette.id} palette={palette} hasSelection={hasSelection} onApplyFill={onApplyFill} onRename={renamePalette} onDuplicate={duplicatePalette} onDelete={deletePalette} />)}
+    {allPalettes.map((palette) => <PaletteCard key={palette.id} palette={palette} hasSelection={hasSelection} onApplyFill={onApplyFill} onRename={renamePalette} onDuplicate={duplicatePalette} onDelete={(item) => setPaletteToDelete(item)} />)}
+
+    {paletteToDelete && (
+      <ConfirmDialog
+        title="Usuń paletę kolorów"
+        description={`Czy na pewno chcesz usunąć paletę „${paletteToDelete.name}”? Zapisane w niej kolory i próbki zostaną usunięte.`}
+        confirmLabel="Usuń"
+        cancelLabel="Anuluj"
+        destructive
+        testId="confirm-delete-palette"
+        onConfirm={() => {
+          deletePalette(paletteToDelete);
+          setPaletteToDelete(null);
+        }}
+        onCancel={() => setPaletteToDelete(null)}
+      />
+    )}
   </aside>;
 };
 

@@ -29,3 +29,7 @@ export * from './export/raster-export.js';
 export * from './export/export-jobs.js';
 export * from './export/svg-optimize.js';
 export * from './export/pdf-export.js';
+export * from './ai/ai-exporter.js';
+export * from './cdr/cdr-exporter.js';
+
+

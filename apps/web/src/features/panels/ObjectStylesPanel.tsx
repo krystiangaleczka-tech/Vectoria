@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import type { ObjectStyle, SavedObjectStyle } from '@vectoria/core';
 import { generateId } from '@vectoria/shared';
-import { Button } from '@vectoria/ui';
+import { Button, ConfirmDialog } from '@vectoria/ui';
 
 export interface ObjectStylesPanelProps {
   styles: readonly SavedObjectStyle[];
@@ -15,6 +15,8 @@ export interface ObjectStylesPanelProps {
 /** Reusable object-style library with explicit save, apply, duplicate and delete actions. */
 export const ObjectStylesPanel: React.FC<ObjectStylesPanelProps> = ({ styles, selectedStyle, hasSelection, onSave, onApply, onDelete }) => {
   const [name, setName] = useState('New style');
+  const [styleToDelete, setStyleToDelete] = useState<SavedObjectStyle | null>(null);
+
   return <aside className="object-styles-panel" data-testid="object-styles-panel">
     <div className="panel-section-heading"><span>Object Styles</span><span className="panel-count">{styles.length}</span></div>
     <div className="palette-create-form">
@@ -23,12 +25,28 @@ export const ObjectStylesPanel: React.FC<ObjectStylesPanelProps> = ({ styles, se
     </div>
     {styles.length === 0 && <div className="panel-empty-state"><strong>No object styles</strong><span>Select styled object and save its appearance.</span></div>}
     <div className="object-style-list">
-      {styles.map((item) => <ObjectStyleCard key={item.id} item={item} hasSelection={hasSelection} onApply={onApply} onSave={onSave} onDelete={onDelete} />)}
+      {styles.map((item) => <ObjectStyleCard key={item.id} item={item} hasSelection={hasSelection} onApply={onApply} onSave={onSave} onDelete={() => setStyleToDelete(item)} />)}
     </div>
+
+    {styleToDelete && (
+      <ConfirmDialog
+        title="Usuń styl obiektu"
+        description={`Czy na pewno chcesz usunąć styl „${styleToDelete.name}”? Obiekty używające tego stylu zachowają swój obecny wygląd.`}
+        confirmLabel="Usuń"
+        cancelLabel="Anuluj"
+        destructive
+        testId="confirm-delete-style"
+        onConfirm={() => {
+          onDelete(styleToDelete.id);
+          setStyleToDelete(null);
+        }}
+        onCancel={() => setStyleToDelete(null)}
+      />
+    )}
   </aside>;
 };
 
-const ObjectStyleCard: React.FC<{ item: SavedObjectStyle; hasSelection: boolean; onApply: (style: ObjectStyle) => void; onSave: (style: SavedObjectStyle) => void; onDelete: (id: string) => void }> = ({ item, hasSelection, onApply, onSave, onDelete }) => {
+const ObjectStyleCard: React.FC<{ item: SavedObjectStyle; hasSelection: boolean; onApply: (style: ObjectStyle) => void; onSave: (style: SavedObjectStyle) => void; onDelete: () => void }> = ({ item, hasSelection, onApply, onSave, onDelete }) => {
   const [name, setName] = useState(item.name);
   useEffect(() => setName(item.name), [item.name]);
   const updateName = () => {
@@ -40,6 +58,6 @@ const ObjectStyleCard: React.FC<{ item: SavedObjectStyle; hasSelection: boolean;
     <button type="button" className="object-style-apply" disabled={!hasSelection} onClick={() => onApply(item.style)}><span className="style-swatch" style={{ background: item.style.fill.type === 'solid' ? item.style.fill.color : 'var(--color-accent-subtle)' }} />{item.name}</button>
     <input aria-label={`Rename ${item.name}`} value={name} onChange={(event) => setName(event.target.value)} onBlur={updateName} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); updateName(); event.currentTarget.blur(); } }} />
     <Button size="sm" variant="ghost" onClick={() => onSave({ ...item, id: generateId(), name: `${item.name} copy` })}>Duplicate</Button>
-    <Button size="sm" variant="ghost" onClick={() => onDelete(item.id)}>Delete</Button>
+    <Button size="sm" variant="ghost" onClick={onDelete}>Delete</Button>
   </div>;
 };

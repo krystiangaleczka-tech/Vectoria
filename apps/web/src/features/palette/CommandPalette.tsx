@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { EditorCommand, EditorContext } from '@vectoria/editor-engine';
+import { Dialog } from '@vectoria/ui';
 
 export interface CommandPaletteProps {
   isOpen: boolean;
@@ -61,24 +62,11 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      style={{
-        position: 'fixed',
-        top: '20%',
-        left: '50%',
-        transform: 'translate(-50%, 0)',
-        width: '500px',
-        backgroundColor: 'var(--color-bg-surface, #1e1e24)',
-        borderRadius: '8px',
-        border: '1px solid var(--color-border-subtle, #333)',
-        boxShadow: '0 16px 48px rgba(0, 0, 0, 0.6)',
-        zIndex: 10000,
-        display: 'flex',
-        flexDirection: 'column',
-        overflow: 'hidden'
-      }}
+    <Dialog
+      ariaLabel="Paleta poleceń"
+      onClose={onClose}
+      width={500}
+      testId="command-palette"
     >
       <input
         ref={inputRef}
@@ -154,6 +142,6 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
           })
         )}
       </div>
-    </div>
+    </Dialog>
   );
 };

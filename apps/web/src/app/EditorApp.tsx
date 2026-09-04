@@ -139,6 +139,8 @@ import {
   type BootstrapState,
   processDroppedFile,
   exportVctFile,
+  exportAiFile,
+  exportCdrFile,
   type ProjectRecord,
   getDocumentRepository,
   parseAndMigrateDocument,
@@ -172,6 +174,10 @@ import { useWorkspace } from '../features/workspace/useWorkspace.js';
 import { ProjectGallery } from '../features/workspace/ProjectGallery.js';
 import { useComments } from '../features/comments/useComments.js';
 import { CommentsPanel } from '../features/comments/CommentsPanel.js';
+import { useUiPreferences } from '../hooks/useUiPreferences.js';
+import { OnboardingChecklist } from '../features/onboarding/OnboardingChecklist.js';
+import { TutorialOverlay } from '../features/onboarding/TutorialOverlay.js';
+import type { TutorialId } from '../features/onboarding/tutorials.js';
 
 import type { DockPanel } from '../features/panels/RightDock.js';
 import type { PathAction } from '../features/panels/PropertiesPanel.js';
@@ -250,6 +256,15 @@ export const EditorApp: React.FC = () => {
   
   const { shortcuts, saveShortcuts, resetShortcuts } = useShortcutSettings(DEFAULT_SHORTCUTS as ShortcutBinding[]);
   const { presets, savePreset } = useLayoutPresets();
+  const {
+    preferences: uiPrefs,
+    setUiScale,
+    setContrast,
+    markTutorialSeen,
+    setChecklistDismissed,
+  } = useUiPreferences();
+  const [activeTutorial, setActiveTutorial] = useState<TutorialId | null>(null);
+  const [isChecklistOpen, setIsChecklistOpen] = useState(false);
 
   const shortcutManager = useMemo(
     () => new ShortcutManager(shortcuts, isMacPlatform()),
@@ -724,6 +739,22 @@ export const EditorApp: React.FC = () => {
     } catch (err) { console.error('[Vectoria] VCT export error:', err); }
   }, [doc]);
 
+  const handleExportAi = useCallback(async () => {
+    if (!doc) return;
+    try {
+      const blob = await exportAiFile(doc);
+      downloadBlob(blob, `${doc.name.toLowerCase().replace(/\s+/g, '-')}.ai`);
+    } catch (err) { console.error('[Vectoria] AI export error:', err); }
+  }, [doc]);
+
+  const handleExportCdr = useCallback(async () => {
+    if (!doc) return;
+    try {
+      const blob = await exportCdrFile(doc);
+      downloadBlob(blob, `${doc.name.toLowerCase().replace(/\s+/g, '-')}.cdr`);
+    } catch (err) { console.error('[Vectoria] CDR export error:', err); }
+  }, [doc]);
+
   const handleCreateDocument = useCallback((options: Parameters<typeof createDefaultDocument>[0]) => {
     const next = createDefaultDocument(options);
     latestRevisionRef.current += 1;
@@ -819,6 +850,24 @@ export const EditorApp: React.FC = () => {
     if (!doc || selectedObjectIds.length === 0) return;
     handleExecuteCommand(new DuplicateTransformCommand(selectedObjectIds));
   }, [doc, selectedObjectIds, handleExecuteCommand]);
+
+  const handleSelectAll = useCallback(() => {
+    if (!doc) return;
+    const activeLayer = doc.layers[doc.activeLayerId];
+    let targetIds: readonly ObjectId[] = [];
+    if (activeLayer && activeLayer.objectIds.length > 0) {
+      targetIds = activeLayer.objectIds.filter((id) => {
+        const obj = doc.objects[id];
+        return obj && obj.visible !== false && !obj.locked;
+      });
+    }
+    if (targetIds.length === 0) {
+      targetIds = Object.values(doc.objects)
+        .filter((obj): obj is SceneObject => Boolean(obj) && obj.visible !== false && !obj.locked)
+        .map((obj) => obj.id);
+    }
+    setSelection({ objectIds: [...targetIds], nodeIds: [], mode: 'object' });
+  }, [doc]);
 
   const handleReplaceStyles = useCallback((updates: ReadonlyMap<ObjectId, Partial<ObjectStyle>>) => {
     if (updates.size === 0) return;
@@ -1575,6 +1624,11 @@ export const EditorApp: React.FC = () => {
       execute: () => handleSelectSame('type')
     });
     r.register({
+      id: 'edit.select-all', title: 'Zaznacz wszystko', shortcut: '⌘A',
+      enabled: () => true,
+      execute: () => handleSelectAll(),
+    });
+    r.register({
       id: 'view.command-palette', title: 'Paleta poleceń', shortcut: '⌘K',
       enabled: () => true,
       execute: () => setCommandPaletteOpen(true)
@@ -1605,7 +1659,7 @@ export const EditorApp: React.FC = () => {
       execute: () => setIsCommentsPanelOpen((prev) => !prev)
     });
     return r;
-  }, [handlePaste, handleSelectSame, handleFitArtboard, handleZoom100, selectedObjectIds.length]);
+  }, [handlePaste, handleSelectSame, handleSelectAll, handleFitArtboard, handleZoom100, selectedObjectIds.length]);
 
   const paletteCtx = useMemo<EditorContext | null>(() => (doc ? {
     doc,
@@ -1621,6 +1675,7 @@ export const EditorApp: React.FC = () => {
       case 'clipboard.paste': handlePaste(); break;
       case 'clipboard.paste-in-place': handlePaste('in-place'); break;
       case 'clipboard.paste-all-artboards': handlePaste('all-artboards'); break;
+      case 'edit.select-all': handleSelectAll(); break;
       case 'edit.duplicate': handleDuplicate(); break;
       case 'edit.group': handleGroup(); break;
       case 'edit.ungroup': handleUngroup(); break;
@@ -1651,6 +1706,7 @@ export const EditorApp: React.FC = () => {
     handleCopy,
     handleCut,
     handlePaste,
+    handleSelectAll,
     handleDuplicate,
     handleGroup,
     handleUngroup,
@@ -1796,6 +1852,8 @@ export const EditorApp: React.FC = () => {
          onNewDocument={() => setNewDocumentOpen(true)}
          onExportPng={handleExportPng}
          onExportVct={handleExportVct}
+         onExportAi={handleExportAi}
+         onExportCdr={handleExportCdr}
           onFitDrawing={handleFitDrawing}
           onFitSelection={handleFitSelection}
          onImportSvg={handleImportFile}
@@ -1834,6 +1892,13 @@ export const EditorApp: React.FC = () => {
         onOpenGallery={() => setWorkspaceMode('gallery')}
         onToggleComments={() => setIsCommentsPanelOpen((prev) => !prev)}
         commentsCount={comments.annotations.length}
+        onSelectAll={handleSelectAll}
+        uiScale={uiPrefs.uiScale}
+        onSetUiScale={setUiScale}
+        contrast={uiPrefs.contrast}
+        onToggleContrast={() => setContrast(uiPrefs.contrast === 'high' ? 'normal' : 'high')}
+        onStartTutorial={(id) => setActiveTutorial(id)}
+        onToggleChecklist={() => setIsChecklistOpen((prev) => !prev)}
       />
 
       {bootstrapState.status === 'recovery-error' && (
@@ -2152,6 +2217,28 @@ export const EditorApp: React.FC = () => {
             onClose={() => setWorkspaceMode('editor')}
           />
         )}
+
+        <OnboardingChecklist
+          isOpen={isChecklistOpen}
+          onToggle={() => {
+            setIsChecklistOpen((open) => {
+              const next = !open;
+              if (!next) setChecklistDismissed(true);
+              return next;
+            });
+          }}
+          onStartTutorial={(id) => setActiveTutorial(id)}
+          completedTutorials={uiPrefs.tutorialsSeen}
+        />
+
+        <TutorialOverlay
+          tutorialId={activeTutorial}
+          onClose={() => setActiveTutorial(null)}
+          onComplete={(id) => {
+            markTutorialSeen(id);
+            setActiveTutorial(null);
+          }}
+        />
     </div>
   );
 };

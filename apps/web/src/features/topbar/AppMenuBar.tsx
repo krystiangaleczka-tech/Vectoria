@@ -3,6 +3,8 @@ import { Button, IconButton, VectoriaIcon } from '@vectoria/ui';
 import type { DockPanel } from '../panels/RightDock.js';
 import type { ObjectId } from '@vectoria/core';
 
+import type { UiScale } from '../../hooks/useUiPreferences.js';
+
 interface AppMenuBarProps {
   saveStatus: 'idle' | 'dirty' | 'saving' | 'saved-locally' | 'error' | 'offline';
   canUndo: boolean;
@@ -17,6 +19,8 @@ interface AppMenuBarProps {
   onExportSvg: () => void;
   onExportPng: () => void;
   onExportVct: () => void;
+  onExportAi?: () => void;
+  onExportCdr?: () => void;
   onImportSvg: () => void;
   rightDockOpen: boolean;
   onToggleRightDock: () => void;
@@ -56,6 +60,13 @@ interface AppMenuBarProps {
   onOpenExportDialog?: () => void;
   onOpenGallery?: () => void;
   onToggleComments?: () => void;
+  onSelectAll?: () => void;
+  uiScale?: UiScale;
+  onSetUiScale?: (scale: UiScale) => void;
+  contrast?: 'normal' | 'high';
+  onToggleContrast?: () => void;
+  onStartTutorial?: (id: 'shortcuts' | 'first-document' | 'pen' | 'node') => void;
+  onToggleChecklist?: () => void;
 }
 
 type MenuName = 'Plik' | 'Edycja' | 'Obiekt' | 'Tekst' | 'Widok' | 'Okno' | 'Pomoc';
@@ -74,6 +85,8 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
   onExportSvg,
   onExportPng,
   onExportVct,
+  onExportAi,
+  onExportCdr,
   onImportSvg,
   rightDockOpen,
   onToggleRightDock,
@@ -113,6 +126,13 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
   onOpenExportDialog,
   onOpenGallery,
   onToggleComments,
+  onSelectAll,
+  uiScale,
+  onSetUiScale,
+  contrast,
+  onToggleContrast,
+  onStartTutorial,
+  onToggleChecklist,
 }) => {
   const [openMenu, setOpenMenu] = useState<MenuName | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -146,6 +166,8 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
         <MenuItem label="Nowy artboard" onClick={() => run(() => onCreateArtboard?.())} />
         <MenuItem label="Otwórz / Importuj..." onClick={() => run(onImportSvg)} />
         <MenuItem label="Zapisz jako .vct" onClick={() => run(onExportVct)} />
+        <MenuItem label="Zapisz kopię jako Adobe Illustrator (.ai)" onClick={() => run(onExportAi)} />
+        <MenuItem label="Zapisz kopię jako CorelDRAW (.cdr)" onClick={() => run(onExportCdr)} />
         <MenuItem label="Eksportuj..." shortcut="Ctrl+Shift+E" onClick={() => run(() => (onOpenExportDialog ? onOpenExportDialog() : onExportSvg()))} />
         <MenuItem label="Eksportuj SVG" onClick={() => run(onExportSvg)} />
         <MenuItem label="Eksportuj PNG" onClick={() => run(onExportPng)} />
@@ -160,7 +182,7 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
         <MenuItem label="Wklej" shortcut="Cmd+V" onClick={() => run(onPaste)} />
         <MenuItem label="Wklej na miejscu" shortcut="⇧⌘V" onClick={() => run(() => onPasteInPlace?.())} />
         <MenuItem label="Wklej na wszystkich artboardach" onClick={() => run(() => onPasteAllArtboards?.())} />
-        <MenuItem label="Zaznacz wszystko" disabled />
+        <MenuItem label="Zaznacz wszystko" shortcut="Cmd+A" onClick={() => run(onSelectAll)} />
       </>;
     }
     if (menu === 'Widok') {
@@ -174,6 +196,12 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
         <MenuItem label={`${showGrid ? 'Ukryj' : 'Pokaż'} siatkę`} onClick={() => run(onToggleGrid)} />
         <MenuItem label={`${snapToGrid ? 'Wyłącz' : 'Włącz'} snap do siatki`} onClick={() => run(onToggleSnap)} />
         <MenuItem label={`Motyw: ${theme === 'dark' ? 'jasny' : 'ciemny'}`} onClick={() => run(onToggleTheme)} />
+        <MenuItem label={`Wysoki kontrast: ${contrast === 'high' ? 'Wyłącz' : 'Włącz'}`} onClick={() => run(onToggleContrast)} />
+        <MenuItem label={`Skala UI: ${Math.round((uiScale ?? 1) * 100)}%`} onClick={() => {
+          const current = uiScale ?? 1;
+          const next = current <= 0.85 ? 1 : current === 1 ? 1.15 : current === 1.15 ? 1.3 : 0.85;
+          run(() => onSetUiScale?.(next));
+        }} />
         <MenuItem label="Paleta poleceń..." shortcut="Cmd+K" onClick={() => run(() => onOpenCommandPalette?.())} />
         <MenuItem label="Zapisz układ jako preset…" onClick={() => run(() => onSaveLayoutPreset?.())} />
       </>;
@@ -213,6 +241,15 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
         <MenuItem label="Historia" onClick={() => run(() => onShowPanel('history'))} />
         <MenuItem label={rightDockOpen ? 'Ukryj dock' : 'Pokaż dock'} onClick={() => run(onToggleRightDock)} />
         <MenuItem label="Konfiguracja skrótów..." onClick={() => run(() => onOpenShortcutConfig?.())} />
+      </>;
+    }
+    if (menu === 'Pomoc') {
+      return <>
+        <MenuItem label="Kroki startowe (Onboarding)" onClick={() => run(onToggleChecklist)} />
+        <MenuItem label="Samouczek: Skróty klawiszowe" onClick={() => run(() => onStartTutorial?.('shortcuts'))} />
+        <MenuItem label="Samouczek: Pierwszy dokument" onClick={() => run(() => onStartTutorial?.('first-document'))} />
+        <MenuItem label="Samouczek: Narzędzie Pióro" onClick={() => run(() => onStartTutorial?.('pen'))} />
+        <MenuItem label="Samouczek: Edycja węzłów" onClick={() => run(() => onStartTutorial?.('node'))} />
       </>;
     }
     return <MenuItem label="Wkrótce" disabled />;

@@ -35,6 +35,8 @@ export const StatusBar: React.FC<StatusBarProps> = ({
     <footer
       data-testid="statusbar"
       className="statusbar"
+      role="status"
+      aria-label="Pasek stanu"
       style={{
         height: '26px',
         minHeight: '26px',
@@ -50,21 +52,21 @@ export const StatusBar: React.FC<StatusBarProps> = ({
       }}
     >
       {/* Left: Tool hint */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }} aria-label="Informacje o narzędziu">
         <span className="status-tool"><strong>{activeTool}</strong> · {toolHint}</span>
-        {selectedObjectName && <span className="status-selection">{selectedObjectName} · {selectedObjectCount} zazn.</span>}
+        {selectedObjectName && <span className="status-selection" aria-label="Zaznaczenie">{selectedObjectName} · {selectedObjectCount} zazn.</span>}
       </div>
 
       {/* Right: Info */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontFamily: 'var(--font-mono)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontFamily: 'var(--font-mono)' }} aria-label="Parametry dokumentu">
         {cursorWorld && (
-          <span>
+          <span aria-label="Pozycja kursora w świecie">
             X: {convertUnit(cursorWorld.x, 'px', unit).toFixed(1)} {unit} · Y: {convertUnit(cursorWorld.y, 'px', unit).toFixed(1)} {unit}
           </span>
         )}
-        <span data-testid="status-bar-objects">{objectCount} {objectCount === 1 ? 'object' : 'objects'}</span>
-        <span>{zoomPercent}%</span>
-        <span>Snap: {snapEnabled ? 'Grid' : 'Off'}</span>
+        <span data-testid="status-bar-objects" aria-label="Liczba obiektów">{objectCount} {objectCount === 1 ? 'object' : 'objects'}</span>
+        <span aria-label="Powiększenie widoku">{zoomPercent}%</span>
+        <span aria-label="Przyciąganie do siatki">Snap: {snapEnabled ? 'Grid' : 'Off'}</span>
         <span
           data-testid="status-bar-sync"
           role="status"

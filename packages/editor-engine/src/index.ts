@@ -44,3 +44,4 @@ export { PaintBucketTool, type PaintBucketResult, type PaintBucketState } from '
 export { TextTool, type TextToolPreview, type TextToolCommitResult } from './tools/text-tool.js';
 export { TextEditSession } from './interaction/text-edit-session.js';
 export * from './math/expression-parser.js';
+export { hitTolerancePx, type PointerCategory } from './tools/hit-tolerance.js';

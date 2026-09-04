@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /** Supported export formats for the document and regional exports. */
-export const EXPORT_FORMATS = ['svg', 'png', 'jpeg', 'webp', 'pdf'] as const;
+export const EXPORT_FORMATS = ['svg', 'png', 'jpeg', 'webp', 'pdf', 'ai', 'cdr'] as const;
 export type ExportFormat = typeof EXPORT_FORMATS[number];
 
 /** Schema validating the target region of an export job. */

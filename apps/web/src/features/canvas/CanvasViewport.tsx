@@ -60,7 +60,7 @@ import {
   computeTextFrameLayout,
   SetTextContentCommand,
 } from '@vectoria/core';
- import { Camera, DragSession, SelectTool, DirectSelectTool, PenTool, PencilTool, BrushTool, SmoothTool, CornerTool, EraserTool, KnifeTool, ScissorsTool, WidthTool, SnapService, IsolationService, LassoSession, calculateObjectSnap, ShapeTool, PolylineTool, EyedropperTool, PaintBucketTool, TextTool, TextEditSession, type GridSettings, type SnapResult, type ObjectSnapResult, type StyleSampleTarget } from '@vectoria/editor-engine';
+ import { Camera, DragSession, SelectTool, DirectSelectTool, PenTool, PencilTool, BrushTool, SmoothTool, CornerTool, EraserTool, KnifeTool, ScissorsTool, WidthTool, SnapService, IsolationService, LassoSession, calculateObjectSnap, ShapeTool, PolylineTool, EyedropperTool, PaintBucketTool, TextTool, TextEditSession, hitTolerancePx, type GridSettings, type SnapResult, type ObjectSnapResult, type StyleSampleTarget } from '@vectoria/editor-engine';
 import { mat3TransformPoint, parseColor } from '@vectoria/shared';
 import {
   RenderLoop,
@@ -322,6 +322,105 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   const [cornerPreview, setCornerPreview] = React.useState<import('@vectoria/core').GeometryPreview | null>(null);
   const [draggingPinId, setDraggingPinId] = useState<string | null>(null);
   const [pinDragScreenPos, setPinDragScreenPos] = useState<Vec2 | null>(null);
+
+  // Active pointers for pinch-to-zoom (UX-014)
+  const activePointersRef = useRef(new Map<number, { x: number; y: number }>());
+  const pinchRef = useRef<{ dist: number; center: { x: number; y: number } } | null>(null);
+
+  // Keyboard Nudge burst accumulator (UX-001)
+  const nudgeBurstRef = useRef<{
+    initialTransforms: Map<ObjectId, import('@vectoria/core').Transform2D>;
+    accumulatedDelta: Vec2;
+    timer: ReturnType<typeof setTimeout> | null;
+  } | null>(null);
+
+  const commitNudgeBurst = useCallback(() => {
+    if (!nudgeBurstRef.current) return;
+    const { initialTransforms, accumulatedDelta, timer } = nudgeBurstRef.current;
+    if (timer) clearTimeout(timer);
+    nudgeBurstRef.current = null;
+    updateDragPreview({});
+
+    if (accumulatedDelta.x === 0 && accumulatedDelta.y === 0) return;
+
+    const newTransforms = new Map<ObjectId, import('@vectoria/core').Transform2D>();
+    const objectIds: ObjectId[] = [];
+
+    for (const [id, initialTransform] of initialTransforms) {
+      objectIds.push(id);
+      newTransforms.set(id, {
+        ...initialTransform,
+        position: {
+          x: initialTransform.position.x + accumulatedDelta.x,
+          y: initialTransform.position.y + accumulatedDelta.y,
+        },
+      });
+    }
+
+    if (objectIds.length > 0) {
+      onExecuteCommand(new TransformObjectsCommand(objectIds, newTransforms));
+    }
+  }, [onExecuteCommand, updateDragPreview]);
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (
+        e.key === 'ArrowLeft' ||
+        e.key === 'ArrowRight' ||
+        e.key === 'ArrowUp' ||
+        e.key === 'ArrowDown'
+      ) {
+        if (selectedObjectIds.length === 0) return;
+        e.preventDefault();
+
+        const step = e.shiftKey ? 10 : 1;
+        const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0;
+        const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0;
+
+        if (!nudgeBurstRef.current) {
+          const initials = new Map<ObjectId, import('@vectoria/core').Transform2D>();
+          for (const id of selectedObjectIds) {
+            const obj = doc.objects[id];
+            if (obj && !obj.locked) {
+              initials.set(id, obj.transform);
+            }
+          }
+          nudgeBurstRef.current = {
+            initialTransforms: initials,
+            accumulatedDelta: { x: 0, y: 0 },
+            timer: null,
+          };
+        }
+
+        if (nudgeBurstRef.current.timer) {
+          clearTimeout(nudgeBurstRef.current.timer);
+        }
+
+        nudgeBurstRef.current.accumulatedDelta = {
+          x: nudgeBurstRef.current.accumulatedDelta.x + dx,
+          y: nudgeBurstRef.current.accumulatedDelta.y + dy,
+        };
+
+        const preview: Record<string, import('@vectoria/core').Transform2D> = {};
+        for (const [id, initialTransform] of nudgeBurstRef.current.initialTransforms) {
+          preview[id] = {
+            ...initialTransform,
+            position: {
+              x: initialTransform.position.x + nudgeBurstRef.current.accumulatedDelta.x,
+              y: initialTransform.position.y + nudgeBurstRef.current.accumulatedDelta.y,
+            },
+          };
+        }
+        updateDragPreview(preview);
+        renderLoopRef.current?.invalidate();
+
+        nudgeBurstRef.current.timer = setTimeout(() => {
+          commitNudgeBurst();
+        }, 300);
+      }
+    },
+    [selectedObjectIds, doc.objects, updateDragPreview, commitNudgeBurst]
+  );
   const penToolRef = useRef<PenTool | null>(null);
   if (!penToolRef.current) penToolRef.current = new PenTool();
   const [penVersion, setPenVersion] = React.useState(0);
@@ -777,8 +876,24 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     const screenPos = getPointerScreen(e);
     const worldPos = snapWorldPoint(camera.screenToWorld(screenPos));
 
+    // Track pointer for pinch-to-zoom (UX-014)
+    activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (activePointersRef.current.size === 2) {
+      const [a, b] = [...activePointersRef.current.values()];
+      const dist = Math.hypot(a!.x - b!.x, a!.y - b!.y);
+      const center = { x: (a!.x + b!.x) / 2, y: (a!.y + b!.y) / 2 };
+      pinchRef.current = { dist, center };
+      dragStateRef.current = null;
+      updateDragPreview({});
+      return;
+    }
+
+    // Stylus eraser tip detection (UX-012)
+    const isStylusEraser = e.pointerType === 'pen' && (e.buttons === 32 || (e as unknown as { button?: number }).button === 5);
+    const effectiveTool: ActiveTool = isStylusEraser ? 'eraser' : activeTool;
+
     // Pan via middle button or Space key
-    if (e.button === 1 || isSpacePressed || activeTool === 'hand') {
+    if (e.button === 1 || isSpacePressed || effectiveTool === 'hand') {
       (e.target as HTMLElement).setPointerCapture(e.pointerId);
       dragStateRef.current = {
         type: 'pan',
@@ -793,7 +908,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     if (e.button !== 0) return; // Left click only from here
 
     // Close active text edit session if clicking outside
-    if (textEditSessionRef.current && activeTool !== 'text') {
+    if (textEditSessionRef.current && effectiveTool !== 'text') {
       const activeSession = textEditSessionRef.current;
       const activeObject = doc.objects[activeSession.targetObjectId];
       const activeInverse = activeObject && (activeObject.type === 'text' || activeObject.type === 'text-frame') ? getInverseTransformMatrix(activeObject.transform) : null;
@@ -853,26 +968,26 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       return;
     }
 
-    if (activeTool === 'pencil' || activeTool === 'brush' || activeTool === 'eraser' || activeTool === 'knife') {
+    if (effectiveTool === 'pencil' || effectiveTool === 'brush' || effectiveTool === 'eraser' || effectiveTool === 'knife') {
       try { (e.target as HTMLElement).setPointerCapture(e.pointerId); } catch { /* synthetic or already-captured pointer */ }
-      freehandOperationRef.current = activeTool;
-      if (activeTool === 'pencil') pencilToolRef.current?.pointerDown({ screenPoint: screenPos, worldPoint: worldPos, pressure: freehandSettings.pressure ? e.pressure : 1, time: e.timeStamp });
-      if (activeTool === 'brush') brushToolRef.current?.pointerDown({ screenPoint: screenPos, worldPoint: worldPos, pressure: freehandSettings.pressure ? e.pressure : 1, time: e.timeStamp });
-      if (activeTool === 'eraser') { eraserToolRef.current!.radiusPx = freehandSettings.eraserRadius; eraserToolRef.current?.pointerDown(worldPos); }
-      if (activeTool === 'knife') knifeToolRef.current?.pointerDown(worldPos);
+      freehandOperationRef.current = effectiveTool;
+      if (effectiveTool === 'pencil') pencilToolRef.current?.pointerDown({ screenPoint: screenPos, worldPoint: worldPos, pressure: freehandSettings.pressure ? e.pressure : 1, time: e.timeStamp });
+      if (effectiveTool === 'brush') brushToolRef.current?.pointerDown({ screenPoint: screenPos, worldPoint: worldPos, pressure: freehandSettings.pressure ? e.pressure : 1, time: e.timeStamp });
+      if (effectiveTool === 'eraser') { eraserToolRef.current!.radiusPx = freehandSettings.eraserRadius; eraserToolRef.current?.pointerDown(worldPos); }
+      if (effectiveTool === 'knife') knifeToolRef.current?.pointerDown(worldPos);
       freehandCursorRef.current = worldPos;
       setFreehandVersion((version) => version + 1);
       return;
     }
 
-    if (activeTool === 'scissors') {
+    if (effectiveTool === 'scissors') {
       freehandOperationRef.current = 'scissors';
       freehandCursorRef.current = worldPos;
       setFreehandVersion((version) => version + 1);
       return;
     }
 
-    if (activeTool === 'width') {
+    if (effectiveTool === 'width') {
       const selectedPath = selectedObjectId ? doc.objects[selectedObjectId] : null;
       if (selectedPath?.type === 'path') {
         const nearest = selectNearestPathPoint(selectedPath, worldPos);
@@ -886,7 +1001,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       return;
     }
 
-    if (activeTool === 'smooth') {
+    if (effectiveTool === 'smooth') {
       const selectedPath = selectedObjectId ? doc.objects[selectedObjectId] : null;
       if (selectedPath?.type === 'path') {
         freehandOperationRef.current = 'smooth';
@@ -897,7 +1012,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       return;
     }
 
-    if (activeTool === 'corner') {
+    if (effectiveTool === 'corner') {
       const selectedPath = selectedObjectId ? doc.objects[selectedObjectId] : null;
       if (selectedPath?.type === 'path') {
         try { (e.target as HTMLElement).setPointerCapture(e.pointerId); } catch { /* synthetic pointer */ }
@@ -908,9 +1023,9 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     }
 
     // Pen owns its draft state; pointer capture loss must not cancel completed nodes.
-    if (activeTool !== 'pen') (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    if (effectiveTool !== 'pen') (e.target as HTMLElement).setPointerCapture(e.pointerId);
 
-    if (activeTool === 'select' && selectedObjectId && selectedObjectIds.length === 1) {
+    if (effectiveTool === 'select' && selectedObjectId && selectedObjectIds.length === 1) {
       const selected = doc.objects[selectedObjectId];
       const handle = selected && !selected.locked ? gradientHandleAt(selected, camera, screenPos) : undefined;
       if (selected && handle) {
@@ -920,7 +1035,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       }
     }
 
-    if (activeTool === 'pen') {
+    if (effectiveTool === 'pen') {
       // In-Pen editing: clicking an existing path segment inserts a node there
       // without leaving the Pen; the draft stays untouched.
       const segmentHit = findPathSegmentAt(doc, worldPos, camera.screenToWorldDistance(6));
@@ -935,24 +1050,24 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       );
       if (result?.type === 'commit') commitPen(result.nodes, result.closed);
       setPenVersion((version) => version + 1);
-    } else if (isDragShapeTool(activeTool)) {
-      const tool = new ShapeTool(activeTool);
+    } else if (isDragShapeTool(effectiveTool)) {
+      const tool = new ShapeTool(effectiveTool);
       shapeToolRef.current = tool;
       tool.pointerDown({ screenPoint: screenPos, worldPoint: worldPos, shiftKey: e.shiftKey, altKey: e.altKey });
       dragStateRef.current = {
         type: 'create-shape',
-        shape: activeTool,
+        shape: effectiveTool,
         startScreen: screenPos,
         startWorld: worldPos,
         currentWorld: worldPos,
         pointerId: e.pointerId,
       };
-    } else if (activeTool === 'polyline') {
+    } else if (effectiveTool === 'polyline') {
       const result = polylineToolRef.current?.pointerDown({ screenPoint: screenPos, worldPoint: worldPos, shiftKey: e.shiftKey, altKey: e.altKey });
       if (result?.type === 'commit') commitPolyline(result.points);
       setPolylineVersion((version) => version + 1);
-    } else if (activeTool === 'direct-select') {
-      const handleHit = directSelect.hitHandle(doc, worldPos, camera.zoom, selectedObjectId ?? undefined);
+    } else if (effectiveTool === 'direct-select') {
+      const handleHit = directSelect.hitHandle(doc, worldPos, camera.zoom, selectedObjectId ?? undefined, hitTolerancePx(e.pointerType, 8));
       if (handleHit?.part?.endsWith('handle')) {
         const object = doc.objects[handleHit.objectId];
         const side = handleHit.part === 'in-handle' ? 'in' : 'out';
@@ -965,7 +1080,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         }
         return;
       }
-      const nodeHit = directSelect.hitNode(doc, worldPos, camera.zoom);
+      const nodeHit = directSelect.hitNode(doc, worldPos, camera.zoom, hitTolerancePx(e.pointerType, 8));
       const nextSelection = directSelect.select(selection, nodeHit, e.shiftKey);
       onSelectSelection?.(nextSelection);
       if (nodeHit) {
@@ -977,11 +1092,11 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
           };
         }
       }
-    } else if (activeTool === 'select') {
+    } else if (effectiveTool === 'select') {
       const selected = selectedObjectId ? doc.objects[selectedObjectId] : null;
       if (selected) {
         const { rotationHandle, resizeHandles, pivotWorld, bounds } = getObjectHandles(selected, camera, doc);
-        if (!e.shiftKey && Math.hypot(screenPos.x - rotationHandle.x, screenPos.y - rotationHandle.y) <= 12) {
+        if (!e.shiftKey && Math.hypot(screenPos.x - rotationHandle.x, screenPos.y - rotationHandle.y) <= hitTolerancePx(e.pointerType, 12)) {
           try { (e.target as HTMLElement).setPointerCapture(e.pointerId); } catch { /* capture failed */ }
           setHoverHandleCursor(ROTATE_CURSOR);
           dragStateRef.current = {
@@ -998,7 +1113,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
           return;
         }
         const hitResize = resizeHandles.find(
-          (h) => Math.hypot(screenPos.x - h.point.x, screenPos.y - h.point.y) <= 12
+          (h) => Math.hypot(screenPos.x - h.point.x, screenPos.y - h.point.y) <= hitTolerancePx(e.pointerType, 12)
         );
         if (hitResize) {
           try { (e.target as HTMLElement).setPointerCapture(e.pointerId); } catch { /* capture failed */ }
@@ -1080,6 +1195,26 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
+    // Pinch-to-zoom handling for 2 active pointers (UX-014)
+    if (activePointersRef.current.has(e.pointerId)) {
+      activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    }
+    if (activePointersRef.current.size === 2) {
+      const [a, b] = [...activePointersRef.current.values()];
+      const dist = Math.hypot(a!.x - b!.x, a!.y - b!.y);
+      const center = { x: (a!.x + b!.x) / 2, y: (a!.y + b!.y) / 2 };
+      const rect = containerRef.current?.getBoundingClientRect();
+      if (rect && pinchRef.current && pinchRef.current.dist > 0) {
+        const factor = dist / pinchRef.current.dist;
+        const centerScreen = { x: center.x - rect.left, y: center.y - rect.top };
+        camera.zoomAtPoint(factor, centerScreen);
+        camera.panBy({ x: center.x - pinchRef.current.center.x, y: center.y - pinchRef.current.center.y });
+        renderLoopRef.current?.invalidate();
+      }
+      pinchRef.current = { dist, center };
+      return;
+    }
+
     const screenPos = getPointerScreen(e);
     const rawWorldPos = camera.screenToWorld(screenPos);
     const drag = dragStateRef.current;
@@ -1109,11 +1244,11 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       const selected = doc.objects[selectedObjectId];
       if (selected) {
         const { rotationHandle, resizeHandles, pivotWorld } = getObjectHandles(selected, camera, doc);
-        if (Math.hypot(screenPos.x - rotationHandle.x, screenPos.y - rotationHandle.y) <= 12) {
+        if (Math.hypot(screenPos.x - rotationHandle.x, screenPos.y - rotationHandle.y) <= hitTolerancePx(e.pointerType, 12)) {
           if (hoverHandleCursor !== ROTATE_CURSOR) setHoverHandleCursor(ROTATE_CURSOR);
         } else {
           const hitResize = resizeHandles.find(
-            (h) => Math.hypot(screenPos.x - h.point.x, screenPos.y - h.point.y) <= 12
+            (h) => Math.hypot(screenPos.x - h.point.x, screenPos.y - h.point.y) <= hitTolerancePx(e.pointerType, 12)
           );
           if (hitResize) {
             const centerScreen = camera.worldToScreen(pivotWorld);
@@ -1397,6 +1532,11 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   };
 
   const finishInteraction = (e: React.PointerEvent) => {
+    activePointersRef.current.delete(e.pointerId);
+    if (activePointersRef.current.size < 2) {
+      pinchRef.current = null;
+    }
+
     const freehandOperation = freehandOperationRef.current;
     if (freehandOperation) {
       const screenPoint = getPointerScreen(e);
@@ -1624,6 +1764,9 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   };
 
   const cancelInteraction = () => {
+    activePointersRef.current.clear();
+    pinchRef.current = null;
+
     if (freehandOperationRef.current) {
       pencilToolRef.current?.cancel();
       brushToolRef.current?.cancel();
@@ -1986,6 +2129,11 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   return (
     <div
       ref={containerRef}
+      tabIndex={0}
+      role="application"
+      aria-label="Obszar roboczy — użyj strzałek, aby przesunąć zaznaczenie; Escape anuluje narzędzie"
+      aria-roledescription="edytor wektorowy"
+      onKeyDown={handleKeyDown}
       data-testid="canvas-viewport"
       onWheel={handleWheel}
       onPointerDown={handlePointerDown}
