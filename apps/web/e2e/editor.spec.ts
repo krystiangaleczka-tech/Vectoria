@@ -769,9 +769,12 @@ test.describe('Vectoria MVP Skeleton', () => {
     await page.getByRole('button', { name: 'Select Tool', exact: true }).click();
     await page.mouse.click(box.x + 130, box.y + 130);
 
-    // Select same: Typ
-    await page.getByRole('button', { name: 'Obiekt' }).click();
-    await page.getByRole('menuitem', { name: 'Zaznacz podobne: Typ' }).click();
+    // Select same: Typ via Command Palette (UI menu removed per UX decision, engine preserved)
+    await page.getByRole('button', { name: 'Widok' }).click();
+    await page.getByRole('menuitem', { name: /Paleta poleceń/ }).click();
+    const paletteInput = page.getByPlaceholder('Wpisz komendę...');
+    await paletteInput.fill('typ obiektu');
+    await page.getByText('Zaznacz takie same: typ obiektu').click();
 
     // Should select the 2 rectangles
     await expect(page.getByTestId('properties-panel')).toContainText('2 objects');

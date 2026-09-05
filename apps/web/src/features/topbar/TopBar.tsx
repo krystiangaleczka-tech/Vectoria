@@ -53,7 +53,7 @@ export interface TopBarProps {
   onPasteInPlace?: () => void;
   onPasteAllArtboards?: () => void;
   onDuplicate: () => void;
-  onSelectSame: (target: import('@vectoria/core').SelectSameTarget) => void;
+  onSetZoom?: (factor: number) => void;
   onOpenCommandPalette?: () => void;
   onOpenShortcutConfig?: () => void;
   onSaveLayoutPreset?: () => void;
@@ -119,7 +119,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   onPasteInPlace,
   onPasteAllArtboards,
   onDuplicate,
-  onSelectSame,
+  onSetZoom,
   onOpenCommandPalette,
   onOpenShortcutConfig,
   onSaveLayoutPreset,
@@ -196,7 +196,7 @@ export const TopBar: React.FC<TopBarProps> = ({
         onPasteInPlace={onPasteInPlace}
         onPasteAllArtboards={onPasteAllArtboards}
         onDuplicate={onDuplicate}
-        onSelectSame={onSelectSame}
+        onSetZoom={onSetZoom}
         onOpenCommandPalette={onOpenCommandPalette}
         onOpenShortcutConfig={onOpenShortcutConfig}
         onSaveLayoutPreset={onSaveLayoutPreset}

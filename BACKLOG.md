@@ -213,7 +213,7 @@ Wymóg stopniowego rozszerzania artboardu o 10% wynika bezpośrednio z potrzeby 
 - [ ] **SEL-035** Dodać duplikowanie skrótem
 - [ ] **SEL-036** Dodać duplikowanie z przesunięciem
 - [ ] **SEL-037** Dodać repeat transform
-- [ ] **SEL-038** Dodać smart distance podczas przesuwania
+- [x] **SEL-038** Dodać smart distance podczas przesuwania (etykieta ΔX/ΔY przy przesuwaniu usunięta decyzją UX; pomiary hover-Alt zachowane)
 
 ## EPIC-04: Kształty podstawowe
 
@@ -520,12 +520,12 @@ Wymóg stopniowego rozszerzania artboardu o 10% wynika bezpośrednio z potrzeby 
 - [x] **PROD-013** Dodać paste in place
 - [x] **PROD-014** Dodać paste on all artboards
 - [x] **PROD-015** Dodać duplicate and transform
-- [x] **PROD-016** Dodać Select Same: fill
-- [x] **PROD-017** Dodać Select Same: stroke
-- [x] **PROD-018** Dodać Select Same: font
-- [x] **PROD-019** Dodać Select Same: rozmiar
-- [x] **PROD-020** Dodać Select Same: opacity
-- [x] **PROD-021** Dodać Select Same: typ obiektu
+- [x] **PROD-016** Dodać Select Same: fill (silnik zachowany w core, wejście w menu UI usunięte decyzją UX)
+- [x] **PROD-017** Dodać Select Same: stroke (silnik zachowany w core, wejście w menu UI usunięte decyzją UX)
+- [x] **PROD-018** Dodać Select Same: font (silnik zachowany w core, wejście w menu UI usunięte decyzją UX)
+- [x] **PROD-019** Dodać Select Same: rozmiar (silnik zachowany w core, wejście w menu UI usunięte decyzją UX)
+- [x] **PROD-020** Dodać Select Same: opacity (silnik zachowany w core, wejście w menu UI usunięte decyzją UX)
+- [x] **PROD-021** Dodać Select Same: typ obiektu (silnik zachowany w core, wejście w menu UI usunięte decyzją UX)
 - [x] **PROD-022** Dodać Find and Replace Object
 - [x] **PROD-023** Dodać Find and Replace Style
 - [x] **PROD-024** Zaimplementować Command Palette

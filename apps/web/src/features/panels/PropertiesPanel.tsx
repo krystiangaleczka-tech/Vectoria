@@ -156,8 +156,11 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
 
   return (
     <aside className="properties-panel" data-testid="properties-panel">
-       <div className="panel-section-heading"><span>{selected ? 'Object Properties' : 'Artboard Properties'}</span>{selectedObjectIds.length > 1 && <span className="panel-count" data-testid="selection-summary">{selectedObjectIds.length} objects</span>}</div>
       <div className="dock-panel-content">
+        <div className="panel-section-heading">
+          <span>{selected ? 'Object Properties' : 'Artboard Properties'}</span>
+          {selectedObjectIds.length > 1 && <span className="panel-count" data-testid="selection-summary">{selectedObjectIds.length} objects</span>}
+        </div>
         {selected ? <>
            {selected.locked && <div className="property-lock-message" role="status">Object is locked. Unlock it in Layers to edit.</div>}
            <GeometryProperties document={doc} selectedObjectId={selectedObjectId} selectedObjectIds={selectedObjectIds} preview={geometryPreview ?? null} onAction={onGeometryAction ?? (() => undefined)} onApplyPreview={onApplyGeometryPreview ?? (() => undefined)} onCancelPreview={onCancelGeometryPreview ?? (() => undefined)} onOpenCleanup={onOpenCleanup ?? (() => undefined)} />

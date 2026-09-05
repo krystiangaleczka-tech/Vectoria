@@ -21,27 +21,29 @@ export const DocumentProperties: React.FC<DocumentPropertiesProps> = ({ document
   }, [document]);
 
   return (
-    <div style={{ padding: '0 12px' }}>
-      <div style={{ marginBottom: '16px' }}>
-        <h3 style={{ fontSize: '13px', fontWeight: 'bold', margin: '0 0 12px 0' }}>Document</h3>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '18px', padding: '0 4px' }}>
+      <div>
+        <div className="panel-section-heading"><span>Document</span></div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           <div>
-            <label style={{ fontSize: '11px', color: 'var(--color-text-secondary)', marginBottom: '4px', display: 'block' }}>Name</label>
-            <div style={{ fontSize: '12px' }}>{document.name}</div>
+            <label style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginBottom: '4px', display: 'block', fontWeight: 500 }}>Name</label>
+            <div style={{ fontSize: '12px', color: 'var(--color-text-primary)', fontWeight: 500 }}>{document.name}</div>
           </div>
           <div>
-            <label style={{ fontSize: '11px', color: 'var(--color-text-secondary)', marginBottom: '4px', display: 'block' }}>Unit</label>
+            <label style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginBottom: '4px', display: 'block', fontWeight: 500 }}>Unit</label>
             <select
               value={document.unit}
               onChange={(e) => onExecuteCommand(new SetDocumentUnitCommand(e.target.value as import('@vectoria/core').DocumentUnit))}
               style={{
                 width: '100%',
-                padding: '4px 8px',
-                backgroundColor: 'var(--color-bg-base)',
+                height: '28px',
+                padding: '0 8px',
+                backgroundColor: 'var(--color-input)',
                 color: 'var(--color-text-primary)',
                 border: '1px solid var(--color-border-subtle)',
-                borderRadius: '4px',
-                fontSize: '12px'
+                borderRadius: 'var(--radius-sm)',
+                fontSize: '12px',
+                fontFamily: 'var(--font-ui)',
               }}
             >
               <option value="px">px</option>
@@ -51,40 +53,69 @@ export const DocumentProperties: React.FC<DocumentPropertiesProps> = ({ document
             </select>
           </div>
         </div>
-        </div>
-
+      </div>
 
       {artboard && (
         <div>
-          <h3 style={{ fontSize: '13px', fontWeight: 'bold', margin: '0 0 12px 0' }}>Artboard</h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div className="panel-section-heading"><span>Artboard</span></div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <div style={{ display: 'flex', gap: '8px' }}>
               <div style={{ flex: 1 }}>
-                <label style={{ fontSize: '11px', color: 'var(--color-text-secondary)', marginBottom: '4px', display: 'block' }}>Width</label>
+                <label style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginBottom: '4px', display: 'block', fontWeight: 500 }}>Width</label>
                 <input
                   type="number"
                   value={artboard.width}
                   onChange={(e) => onExecuteCommand(new UpdateArtboardCommand(artboard.id, { width: Number(e.target.value) }))}
-                  style={{ width: '100%', padding: '4px', fontSize: '12px', background: 'var(--color-bg-base)', color: 'white', border: '1px solid var(--color-border-subtle)', borderRadius: '4px' }}
+                  style={{
+                    width: '100%',
+                    height: '28px',
+                    padding: '0 8px',
+                    fontSize: '12px',
+                    fontFamily: 'var(--font-ui)',
+                    fontVariantNumeric: 'tabular-nums',
+                    background: 'var(--color-input)',
+                    color: 'var(--color-text-primary)',
+                    border: '1px solid var(--color-border-subtle)',
+                    borderRadius: 'var(--radius-sm)',
+                  }}
                 />
               </div>
               <div style={{ flex: 1 }}>
-                <label style={{ fontSize: '11px', color: 'var(--color-text-secondary)', marginBottom: '4px', display: 'block' }}>Height</label>
+                <label style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginBottom: '4px', display: 'block', fontWeight: 500 }}>Height</label>
                 <input
                   type="number"
                   value={artboard.height}
                   onChange={(e) => onExecuteCommand(new UpdateArtboardCommand(artboard.id, { height: Number(e.target.value) }))}
-                  style={{ width: '100%', padding: '4px', fontSize: '12px', background: 'var(--color-bg-base)', color: 'white', border: '1px solid var(--color-border-subtle)', borderRadius: '4px' }}
+                  style={{
+                    width: '100%',
+                    height: '28px',
+                    padding: '0 8px',
+                    fontSize: '12px',
+                    fontFamily: 'var(--font-ui)',
+                    fontVariantNumeric: 'tabular-nums',
+                    background: 'var(--color-input)',
+                    color: 'var(--color-text-primary)',
+                    border: '1px solid var(--color-border-subtle)',
+                    borderRadius: 'var(--radius-sm)',
+                  }}
                 />
               </div>
             </div>
             <div>
-              <label style={{ fontSize: '11px', color: 'var(--color-text-secondary)', marginBottom: '4px', display: 'block' }}>Background</label>
+              <label style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginBottom: '4px', display: 'block', fontWeight: 500 }}>Background</label>
               <input
                 type="color"
                 value={artboard.background.type === 'color' ? artboard.background.color : '#ffffff'}
                 onChange={(e) => onExecuteCommand(new UpdateArtboardCommand(artboard.id, { background: { type: 'color', color: e.target.value } }))}
-                style={{ width: '100%', height: '24px', padding: 0, border: 'none', background: 'none' }}
+                style={{
+                  width: '100%',
+                  height: '28px',
+                  padding: '2px',
+                  border: '1px solid var(--color-border-subtle)',
+                  borderRadius: 'var(--radius-sm)',
+                  background: 'var(--color-input)',
+                  cursor: 'pointer',
+                }}
               />
             </div>
           </div>
@@ -92,15 +123,15 @@ export const DocumentProperties: React.FC<DocumentPropertiesProps> = ({ document
       )}
 
       <div>
-        <h3 style={{ fontSize: '13px', fontWeight: 'bold', margin: '0 0 12px 0' }}>Stats</h3>
-        <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+        <div className="panel-section-heading"><span>Stats</span></div>
+        <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span>Layers</span>
-            <span>{stats.layerCount}</span>
+            <span style={{ fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums', fontWeight: 600, color: 'var(--color-text-primary)' }}>{stats.layerCount}</span>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span>Objects</span>
-            <span>{stats.objectCount}</span>
+            <span style={{ fontFamily: 'var(--font-ui)', fontVariantNumeric: 'tabular-nums', fontWeight: 600, color: 'var(--color-text-primary)' }}>{stats.objectCount}</span>
           </div>
         </div>
       </div>

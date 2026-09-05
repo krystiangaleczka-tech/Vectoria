@@ -137,7 +137,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
           fontSize: '12px',
           textAlign: 'right',
           fontVariantNumeric: 'tabular-nums',
-          fontFamily: 'var(--font-mono)',
+          fontFamily: 'var(--font-ui)',
         }}
       />
       {hasError && <span id={`${testId ?? 'input'}-error`} role="alert" aria-live="polite" style={{ display: 'none' }}>Nieprawidłowe wyrażenie</span>}

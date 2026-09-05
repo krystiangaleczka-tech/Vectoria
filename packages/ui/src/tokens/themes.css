@@ -11,6 +11,9 @@
   --color-workspace-grid: rgba(255, 255, 255, 0.035);
   --color-artboard: #ffffff;
   --color-artboard-shadow: rgba(0, 0, 0, 0.36);
+  --color-ruler: #262624;
+  --color-ruler-tick: #464641;
+  --color-ruler-text: #a8a89f;
 
   /* Surfaces */
   --color-topbar: #222220;
@@ -104,6 +107,9 @@
   --color-workspace-grid: rgba(24, 24, 20, 0.08);
   --color-artboard: #ffffff;
   --color-artboard-shadow: rgba(24, 24, 20, 0.22);
+  --color-ruler: #f2f2ed;
+  --color-ruler-tick: #cacac3;
+  --color-ruler-text: #55554f;
 
   --color-topbar: #fbfbf9;
   --color-toolbar: #f7f7f5;

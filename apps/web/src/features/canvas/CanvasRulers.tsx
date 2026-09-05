@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import type { Camera } from '@vectoria/editor-engine';
 import { convertUnit } from '@vectoria/shared';
 import type { DocumentUnit } from '@vectoria/core';
@@ -6,29 +6,55 @@ import type { DocumentUnit } from '@vectoria/core';
 export interface CanvasRulersProps {
   camera: Camera;
   unit: DocumentUnit;
-  onAddGuide?: (axis: 'horizontal' | 'vertical', position: number) => void;
+  theme?: 'dark' | 'light';
+  onAddGuide?: (axis: 'horizontal' | 'vertical', worldCoord: number) => void;
 }
 
-export const CanvasRulers: React.FC<CanvasRulersProps> = ({ camera, unit, onAddGuide }) => {
+const RULER_SIZE = 22; // Height of horizontal ruler and width of vertical ruler in CSS px
+
+function getThemeColor(varName: string, fallback: string): string {
+  if (typeof document === 'undefined') return fallback;
+  return getComputedStyle(document.documentElement).getPropertyValue(varName).trim() || fallback;
+}
+
+export const CanvasRulers: React.FC<CanvasRulersProps> = ({ camera, unit, theme, onAddGuide }) => {
   const horizontalRef = useRef<HTMLCanvasElement>(null);
   const verticalRef = useRef<HTMLCanvasElement>(null);
-  const RULER_SIZE = 24;
+  const [currentTheme, setCurrentTheme] = useState<'dark' | 'light'>(
+    theme ?? (typeof document !== 'undefined' && document.documentElement.dataset.theme === 'light' ? 'light' : 'dark')
+  );
 
   useEffect(() => {
-    const horizCanvas = horizontalRef.current;
-    const vertCanvas = verticalRef.current;
-    if (!horizCanvas || !vertCanvas) return;
+    if (theme) {
+      setCurrentTheme(theme);
+    }
+  }, [theme]);
 
-    const horizCtx = horizCanvas.getContext('2d', { alpha: false });
-    const vertCtx = vertCanvas.getContext('2d', { alpha: false });
-    if (!horizCtx || !vertCtx) return;
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const observer = new MutationObserver(() => {
+      const isLight = document.documentElement.dataset.theme === 'light';
+      setCurrentTheme(isLight ? 'light' : 'dark');
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => observer.disconnect();
+  }, []);
 
+  useEffect(() => {
     let rafId: number;
     let lastCameraSig = '';
 
     const render = () => {
       rafId = requestAnimationFrame(render);
-      const sig = `${camera.pan.x.toFixed(2)},${camera.pan.y.toFixed(2)},${camera.zoom.toFixed(4)}`;
+      const horizCanvas = horizontalRef.current;
+      const vertCanvas = verticalRef.current;
+      if (!horizCanvas || !vertCanvas) return;
+
+      const horizCtx = horizCanvas.getContext('2d', { alpha: false });
+      const vertCtx = vertCanvas.getContext('2d', { alpha: false });
+      if (!horizCtx || !vertCtx) return;
+
+      const sig = `${camera.pan.x.toFixed(2)},${camera.pan.y.toFixed(2)},${camera.zoom.toFixed(4)},${currentTheme}`;
       if (sig === lastCameraSig) return;
       lastCameraSig = sig;
 
@@ -57,18 +83,23 @@ export const CanvasRulers: React.FC<CanvasRulersProps> = ({ camera, unit, onAddG
       horizCtx.scale(dpr, dpr);
       vertCtx.scale(dpr, dpr);
 
+      const isLight = currentTheme === 'light' || (typeof document !== 'undefined' && document.documentElement.dataset.theme === 'light');
+      const bgColor = getThemeColor('--color-ruler', isLight ? '#f2f2ed' : '#262624');
+      const strokeColor = getThemeColor('--color-ruler-tick', isLight ? '#cacac3' : '#464641');
+      const textColor = getThemeColor('--color-ruler-text', isLight ? '#55554f' : '#a8a89f');
+
       // Background
-      horizCtx.fillStyle = '#1c1c1c'; // dark theme bg, should use CSS var in reality
+      horizCtx.fillStyle = bgColor;
       horizCtx.fillRect(0, 0, width, RULER_SIZE);
-      vertCtx.fillStyle = '#1c1c1c';
+      vertCtx.fillStyle = bgColor;
       vertCtx.fillRect(0, 0, RULER_SIZE, height);
 
-      horizCtx.strokeStyle = '#444';
-      vertCtx.strokeStyle = '#444';
-      horizCtx.fillStyle = '#888';
-      vertCtx.fillStyle = '#888';
-      horizCtx.font = '10px Inter, sans-serif';
-      vertCtx.font = '10px Inter, sans-serif';
+      horizCtx.strokeStyle = strokeColor;
+      vertCtx.strokeStyle = strokeColor;
+      horizCtx.fillStyle = textColor;
+      vertCtx.fillStyle = textColor;
+      horizCtx.font = '10px var(--font-ui), Inter, sans-serif';
+      vertCtx.font = '10px var(--font-ui), Inter, sans-serif';
       horizCtx.textBaseline = 'top';
       vertCtx.textBaseline = 'top';
 
@@ -145,7 +176,7 @@ export const CanvasRulers: React.FC<CanvasRulersProps> = ({ camera, unit, onAddG
 
     rafId = requestAnimationFrame(render);
     return () => cancelAnimationFrame(rafId);
-  }, [camera, unit]);
+  }, [camera, unit, currentTheme]);
 
   const handlePointerDown = (axis: 'horizontal' | 'vertical', e: React.PointerEvent) => {
     e.preventDefault();

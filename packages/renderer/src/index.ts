@@ -168,15 +168,10 @@ export function renderBackground(
     ctx.stroke();
   }
 
-  // Artboard shadow
+  // Artboard bounds
   const screenPos = camera.worldToScreen({ x: artboard.x, y: artboard.y });
   const screenW = artboard.width * camera.zoom;
   const screenH = artboard.height * camera.zoom;
-
-  ctx.shadowColor = 'rgba(0, 0, 0, 0.32)';
-  ctx.shadowBlur = 18;
-  ctx.shadowOffsetX = 0;
-  ctx.shadowOffsetY = 4;
 
   // Artboard fill
   const background = artboard.background;
@@ -202,11 +197,6 @@ export function renderBackground(
     ctx.fillStyle = background.color;
     ctx.fillRect(screenPos.x, screenPos.y, screenW, screenH);
   }
-
-  ctx.shadowColor = 'transparent';
-  ctx.shadowBlur = 0;
-  ctx.shadowOffsetX = 0;
-  ctx.shadowOffsetY = 0;
 
   // Artboard border
   ctx.strokeStyle = themeColor('--color-border-subtle', '#33332f');
@@ -1497,7 +1487,9 @@ export function renderOverlay(
     ctx.fillStyle = themeColor('--color-smart-distance', '#5acc9a');
     ctx.strokeStyle = themeColor('--color-smart-distance', '#5acc9a');
     ctx.font = '10px var(--font-mono)';
-    ctx.fillText(`ΔX ${options.smartDistance.dx.toFixed(1)} · ΔY ${options.smartDistance.dy.toFixed(1)}`, point.x + 8, point.y + 16);
+    if (options.smartDistance.hover) {
+      ctx.fillText(`ΔX ${options.smartDistance.dx.toFixed(1)} · ΔY ${options.smartDistance.dy.toFixed(1)}`, point.x + 8, point.y + 16);
+    }
     
     if (options.smartDistance.hover) {
       const { selectionBounds: sb, hoverBounds: hb } = options.smartDistance.hover;
@@ -1845,8 +1837,8 @@ function renderRectangleSelectionOutline(
     { x: obj.width / 2, y: obj.height },
     { x: 0, y: obj.height },
     { x: 0, y: obj.height / 2 },
-  ]);
-  drawRotationHandle(ctx, camera, obj.width / 2, 0);
+  ], obj.transform.scale);
+  drawRotationHandle(ctx, camera, obj.width / 2, 0, obj.transform.scale);
 
   ctx.restore();
 }
@@ -1883,8 +1875,8 @@ function renderEllipseSelectionOutline(
     { x: obj.width / 2, y: obj.height },
     { x: 0, y: obj.height },
     { x: 0, y: obj.height / 2 },
-  ]);
-  drawRotationHandle(ctx, camera, obj.width / 2, 0);
+  ], obj.transform.scale);
+  drawRotationHandle(ctx, camera, obj.width / 2, 0, obj.transform.scale);
 
   ctx.restore();
 }
@@ -1999,19 +1991,36 @@ function renderPathSelectionOutline(
   ctx.restore();
 }
 
-function drawResizeHandles(ctx: CanvasRenderingContext2D, camera: Camera, points: readonly { x: number; y: number }[]): void {
-  const size = 8 / camera.zoom;
+function drawResizeHandles(
+  ctx: CanvasRenderingContext2D,
+  camera: Camera,
+  points: readonly { x: number; y: number }[],
+  scale: { x: number; y: number } = { x: 1, y: 1 },
+): void {
+  const sx = Math.abs(scale.x || 1) || 1;
+  const sy = Math.abs(scale.y || 1) || 1;
+  const sizeX = 8 / (camera.zoom * sx);
+  const sizeY = 8 / (camera.zoom * sy);
   ctx.fillStyle = themeColor('--color-node', '#ffffff');
   ctx.strokeStyle = themeColor('--color-selection', '#5caeff');
   ctx.lineWidth = 1 / camera.zoom;
   for (const point of points) {
-    ctx.fillRect(point.x - size / 2, point.y - size / 2, size, size);
-    ctx.strokeRect(point.x - size / 2, point.y - size / 2, size, size);
+    ctx.fillRect(point.x - sizeX / 2, point.y - sizeY / 2, sizeX, sizeY);
+    ctx.strokeRect(point.x - sizeX / 2, point.y - sizeY / 2, sizeX, sizeY);
   }
 }
 
-function drawRotationHandle(ctx: CanvasRenderingContext2D, camera: Camera, x: number, y: number): void {
-  const offset = 20 / camera.zoom;
+function drawRotationHandle(
+  ctx: CanvasRenderingContext2D,
+  camera: Camera,
+  x: number,
+  y: number,
+  scale: { x: number; y: number } = { x: 1, y: 1 },
+): void {
+  const sx = Math.abs(scale.x || 1) || 1;
+  const sy = Math.abs(scale.y || 1) || 1;
+  const offset = 20 / (camera.zoom * sy);
+  const radius = 4 / (camera.zoom * Math.sqrt(sx * sy));
   ctx.strokeStyle = themeColor('--color-selection', '#5caeff');
   ctx.fillStyle = themeColor('--color-node', '#ffffff');
   ctx.lineWidth = 1 / camera.zoom;
@@ -2020,7 +2029,7 @@ function drawRotationHandle(ctx: CanvasRenderingContext2D, camera: Camera, x: nu
   ctx.lineTo(x, y - offset);
   ctx.stroke();
   ctx.beginPath();
-  ctx.arc(x, y - offset, 4 / camera.zoom, 0, Math.PI * 2);
+  ctx.arc(x, y - offset, radius, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
 }

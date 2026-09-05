@@ -31,19 +31,18 @@ export const ColorControl: React.FC<ColorControlProps> = ({
       return;
     }
     setError(false);
-    setText(next.hex);
+    setText(next.hex.toUpperCase());
     onChange(next.hex);
   };
 
   return (
     <div
       style={{
-         display: 'flex',
-         flexWrap: 'wrap',
-         alignItems: 'center',
+        display: 'flex',
+        alignItems: 'center',
         justifyContent: 'space-between',
-         minHeight: '28px',
-        padding: '0 4px',
+        minHeight: '32px',
+        padding: '0 8px',
         backgroundColor: 'var(--color-input)',
         border: '1px solid var(--color-border-subtle)',
         borderRadius: 'var(--radius-sm)',
@@ -54,20 +53,20 @@ export const ColorControl: React.FC<ColorControlProps> = ({
         style={{
           fontSize: '11px',
           color: 'var(--color-text-muted)',
-          fontWeight: 500,
-          paddingLeft: '4px',
+          fontWeight: 600,
+          letterSpacing: '0.02em',
         }}
       >
         {label}
       </span>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, justifyContent: 'flex-end', minWidth: 0 }}>
         {/* Color preview swatch + hidden native color input */}
         <label
           style={{
             position: 'relative',
-            width: '20px',
-            height: '20px',
+            width: '22px',
+            height: '22px',
             borderRadius: 'var(--radius-xs)',
             backgroundColor: isNone ? 'transparent' : (color ?? '#cccccc'),
             border: '1px solid var(--color-border-default)',
@@ -76,14 +75,15 @@ export const ColorControl: React.FC<ColorControlProps> = ({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
+            flexShrink: 0,
           }}
-           title={isNone ? 'No color (Click to pick)' : `Current color: ${color}`}
+          title={isNone ? 'Brak koloru (kliknij, aby wybrać)' : `Bieżący kolor: ${color}`}
         >
           {isNone && (
             <div
               style={{
                 width: '100%',
-                height: '1px',
+                height: '1.5px',
                 backgroundColor: 'var(--color-danger)',
                 transform: 'rotate(-45deg)',
               }}
@@ -104,27 +104,32 @@ export const ColorControl: React.FC<ColorControlProps> = ({
           />
         </label>
 
-        {/* Hex Text or "None" */}
-        <span
-          style={{
-            fontSize: '11px',
-            fontFamily: 'var(--font-mono)',
-            color: isNone ? 'var(--color-text-muted)' : 'var(--color-text-primary)',
-            minWidth: '55px',
-          }}
-        >
-          {isNone ? 'None' : color?.toUpperCase()}
-        </span>
-
+        {/* Hex input */}
         <input
           aria-label={`${label} HEX`}
-          value={text}
+          value={isNone ? 'None' : text.toUpperCase()}
+          placeholder={isNone ? 'None' : '#000000'}
           disabled={disabled || isNone}
           onChange={(event) => { setText(event.target.value); setError(false); }}
           onBlur={() => !isNone && commit(text)}
           onKeyDown={(event) => { if (event.key === 'Enter') commit(text); if (event.key === 'Escape') setText(color ?? ''); }}
           aria-invalid={error}
-          style={{ width: '76px', height: '22px', border: `1px solid ${error ? 'var(--color-danger)' : 'var(--color-border-subtle)'}`, borderRadius: 'var(--radius-xs)', background: 'var(--color-input)', color: 'var(--color-text-primary)', font: '10px var(--font-mono)', padding: '0 4px' }}
+          style={{
+            flex: '1 1 78px',
+            minWidth: '64px',
+            height: '24px',
+            border: `1px solid ${error ? 'var(--color-danger)' : 'var(--color-border-subtle)'}`,
+            borderRadius: 'var(--radius-xs)',
+            background: 'var(--color-input)',
+            color: isNone ? 'var(--color-text-muted)' : 'var(--color-text-primary)',
+            fontSize: '11px',
+            fontFamily: 'var(--font-ui)',
+            fontVariantNumeric: 'tabular-nums',
+            textTransform: 'uppercase',
+            textAlign: 'center',
+            padding: '0 6px',
+            letterSpacing: '0.04em',
+          }}
         />
 
         {/* None toggle button */}
@@ -133,15 +138,17 @@ export const ColorControl: React.FC<ColorControlProps> = ({
           disabled={disabled}
           onClick={() => onChange(isNone ? '#5caeff' : null)}
           style={{
-            fontSize: '10px',
-            padding: '2px 6px',
+            fontSize: '11px',
+            fontWeight: 500,
+            padding: '2px 8px',
+            height: '24px',
             borderRadius: 'var(--radius-xs)',
             border: '1px solid var(--color-border-subtle)',
             backgroundColor: isNone ? 'var(--color-accent-subtle)' : 'transparent',
             color: isNone ? 'var(--color-accent)' : 'var(--color-text-muted)',
             cursor: disabled ? 'default' : 'pointer',
           }}
-          title={isNone ? 'Set solid color' : 'Set no fill'}
+          title={isNone ? 'Ustaw kolor wypełnienia' : 'Ustaw brak wypełnienia'}
         >
           {isNone ? 'Fill' : 'None'}
         </button>

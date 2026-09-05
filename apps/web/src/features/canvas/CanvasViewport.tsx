@@ -308,9 +308,14 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   const lastGroupPickRef = useRef<{ id: ObjectId; timestamp: number } | null>(null);
   const dragSessionRef = useRef<DragSession | null>(null);
   const [isSpacePressed, setIsSpacePressed] = React.useState(false);
+  const dragPreviewRef = React.useRef<Record<string, import('@vectoria/core').Transform2D>>({});
+  const stylePreviewRef = React.useRef<Record<string, import('@vectoria/core').ObjectStyle>>({});
+  const pathPreviewRef = React.useRef<Record<string, readonly import('@vectoria/core').PathNode[]>>({});
+
   const [dragPreview, setDragPreview] = React.useState<Record<string, import('@vectoria/core').Transform2D>>({});
   const updateDragPreview = React.useCallback(
     (preview: Record<string, import('@vectoria/core').Transform2D>) => {
+      dragPreviewRef.current = preview;
       setDragPreview(preview);
       onDragPreviewChange?.(preview);
     },
@@ -318,7 +323,21 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   );
   const [hoverHandleCursor, setHoverHandleCursor] = React.useState<string | null>(null);
   const [stylePreview, setStylePreview] = React.useState<Record<string, import('@vectoria/core').ObjectStyle>>({});
+  const updateStylePreview = React.useCallback(
+    (preview: Record<string, import('@vectoria/core').ObjectStyle>) => {
+      stylePreviewRef.current = preview;
+      setStylePreview(preview);
+    },
+    []
+  );
   const [pathPreview, setPathPreview] = React.useState<Record<string, readonly import('@vectoria/core').PathNode[]>>({});
+  const updatePathPreview = React.useCallback(
+    (preview: Record<string, readonly import('@vectoria/core').PathNode[]>) => {
+      pathPreviewRef.current = preview;
+      setPathPreview(preview);
+    },
+    []
+  );
   const [cornerPreview, setCornerPreview] = React.useState<import('@vectoria/core').GeometryPreview | null>(null);
   const [draggingPinId, setDraggingPinId] = useState<string | null>(null);
   const [pinDragScreenPos, setPinDragScreenPos] = useState<Vec2 | null>(null);
@@ -516,9 +535,6 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       objectSnap: objectSnapRef.current ?? undefined,
       smartDistance: (() => {
         const drag = dragStateRef.current;
-        if (drag?.type === 'move-object') {
-          return { point: drag.currentWorld, dx: (objectSnapRef.current?.dx ?? 0) + drag.currentWorld.x - drag.startWorld.x, dy: (objectSnapRef.current?.dy ?? 0) + drag.currentWorld.y - drag.startWorld.y };
-        }
         if (!drag && altKeyRef.current && selectedIds.size > 0 && hoveredObjectIdRef.current && !selectedIds.has(hoveredObjectIdRef.current)) {
           const hoveredObj = doc.objects[hoveredObjectIdRef.current];
           const selectedId = [...selectedIds][0];
@@ -798,6 +814,14 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     renderLoopRef.current?.invalidate();
   }, [doc, selectedIds, dragPreview, stylePreview, pathPreview, selection, activeTool, penVersion]);
 
+  // Invalidate render loop on theme changes (UX / Motyw refresh)
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const observer = new MutationObserver(() => renderLoopRef.current?.invalidate());
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => observer.disconnect();
+  }, []);
+
   // Canvas resize handler
   const handleResize = useCallback(() => {
     const bg = bgCanvasRef.current;
@@ -1006,7 +1030,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       if (selectedPath?.type === 'path') {
         freehandOperationRef.current = 'smooth';
         smoothStartScreenRef.current = screenPos;
-        setPathPreview({ [selectedPath.id]: smoothToolRef.current!.previewPath(selectedPath, freehandSettings.smoothing).nodes });
+        updatePathPreview({ [selectedPath.id]: smoothToolRef.current!.previewPath(selectedPath, freehandSettings.smoothing).nodes });
         setFreehandVersion((version) => version + 1);
       }
       return;
@@ -1277,7 +1301,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       const object = doc.objects[drag.objectIds[0]];
       if (object) {
         const fill = updateGradientFill(drag.initialStyle, drag.gradientHandle, object.transform, worldPos);
-        if (fill) setStylePreview({ [object.id]: { ...drag.initialStyle, fill } });
+        if (fill) updateStylePreview({ [object.id]: { ...drag.initialStyle, fill } });
       }
       drag.currentWorld = worldPos;
       renderLoopRef.current?.invalidate();
@@ -1307,7 +1331,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         const object = doc.objects[selectedObjectId];
         if (object?.type === 'path') {
           const amount = Math.min(100, Math.max(0, freehandSettings.smoothing + (screenPos.x - smoothStartScreenRef.current.x) / 2));
-          setPathPreview({ [object.id]: smoothToolRef.current!.previewPath(object, amount).nodes });
+          updatePathPreview({ [object.id]: smoothToolRef.current!.previewPath(object, amount).nodes });
         }
       }
       setFreehandVersion((version) => version + 1);
@@ -1366,7 +1390,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
           outHandle: node.outHandle ? { x: node.outHandle.x + delta.x, y: node.outHandle.y + delta.y } : null,
         };
       });
-      setPathPreview({ [objectId]: nodes });
+      updatePathPreview({ [objectId]: nodes });
     } else if (drag.type === 'move-object') {
       const screenDist = Math.hypot(screenPos.x - drag.startScreen.x, screenPos.y - drag.startScreen.y);
       if (screenDist < DRAG_THRESHOLD_PX) {
@@ -1571,9 +1595,9 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         if (object?.type === 'path' && profile.length > 0) onExecuteCommand(new SetPathWidthCommand(object.id, profile));
       } else if (freehandOperation === 'smooth') {
         const object = selectedObjectId ? doc.objects[selectedObjectId] : null;
-        const nodes = object?.type === 'path' ? pathPreview[object.id] : undefined;
+        const nodes = object?.type === 'path' ? pathPreviewRef.current[object.id] : undefined;
         if (object?.type === 'path' && nodes) onExecuteCommand(new SetPathGeometryCommand(object.id, { nodes }));
-        setPathPreview({});
+        updatePathPreview({});
       }
       eraserToolRef.current?.cancel();
       knifeToolRef.current?.cancel();
@@ -1582,7 +1606,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       freehandOperationRef.current = null;
       widthStartScreenRef.current = null;
       freehandCursorRef.current = null;
-      setPathPreview({});
+      updatePathPreview({});
       setFreehandVersion((version) => version + 1);
       qualityPolicyRef.current?.endInteraction();
       return;
@@ -1642,9 +1666,9 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
 
     if (drag.type === 'gradient-handle' && drag.objectIds?.[0]) {
       const objectId = drag.objectIds[0];
-      const preview = stylePreview[objectId];
+      const preview = stylePreviewRef.current[objectId];
       if (preview) onExecuteCommand(new SetObjectStyleCommand([objectId], preview));
-      setStylePreview({});
+      updateStylePreview({});
       dragStateRef.current = null;
       renderLoopRef.current?.invalidate();
       qualityPolicyRef.current?.endInteraction();
@@ -1680,7 +1704,13 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       }
       lassoSessionRef.current = null;
     } else if (drag.type === 'create-shape') {
-      const result = shapeToolRef.current?.pointerUp({ screenPoint: drag.currentWorld, worldPoint: drag.currentWorld, shiftKey: e.shiftKey, altKey: e.altKey });
+      const screenPos = getPointerScreen(e);
+      const result = shapeToolRef.current?.pointerUp({
+        screenPoint: screenPos,
+        worldPoint: camera.screenToWorld(screenPos),
+        shiftKey: e.shiftKey,
+        altKey: e.altKey,
+      });
       shapeToolRef.current = null;
 
        // Only create if non-zero size
@@ -1708,7 +1738,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         setTextEditVersion((v) => v + 1);
       }
     } else if (drag.type === 'move-object') {
-      const transforms = new Map(Object.entries(dragPreview) as [ObjectId, import('@vectoria/core').Transform2D][]);
+      const transforms = new Map(Object.entries(dragPreviewRef.current) as [ObjectId, import('@vectoria/core').Transform2D][]);
       if (transforms.size > 0) {
         const moved = [...transforms.entries()].some(([id, transform]) => {
           const initial = drag.initialTransforms?.[id];
@@ -1719,18 +1749,18 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       updateDragPreview({});
     } else if ((drag.type === 'move-node' || drag.type === 'move-handle') && drag.objectIds?.[0] && drag.nodeIndex !== undefined) {
       const objectId = drag.objectIds[0];
-      const nodes = pathPreview[objectId];
+      const nodes = pathPreviewRef.current[objectId];
       if (nodes) onExecuteCommand(new SetPathGeometryCommand(objectId, { nodes }));
-      setPathPreview({});
+      updatePathPreview({});
     } else if (drag.type === 'rotate-object') {
-      const transforms = new Map(Object.entries(dragPreview) as [ObjectId, import('@vectoria/core').Transform2D][]);
+      const transforms = new Map(Object.entries(dragPreviewRef.current) as [ObjectId, import('@vectoria/core').Transform2D][]);
       if (transforms.size > 0) onExecuteCommand(new TransformObjectsCommand([...transforms.keys()], transforms));
       updateDragPreview({});
       setHoverHandleCursor(null);
     } else if (drag.type === 'resize-object' && drag.objectIds?.[0]) {
       const objectId = drag.objectIds[0];
       const object = doc.objects[objectId];
-      const preview = dragPreview[objectId];
+      const preview = dragPreviewRef.current[objectId];
       if (object && preview && drag.initialSize) {
         const initScale = drag.initialTransform?.scale ?? { x: 1, y: 1 };
         const finalWidth = Math.max(1, Math.round(drag.initialSize.width * Math.abs(preview.scale.x / (initScale.x || 1))));
@@ -1806,11 +1836,13 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       eyedropperToolRef.current?.cancel();
       paintBucketToolRef.current?.cancel();
     }
-    if (drag.type === 'gradient-handle') setStylePreview({});
-    if (drag.type === 'move-node' || drag.type === 'move-handle') setPathPreview({});
+    if (drag.type === 'gradient-handle') updateStylePreview({});
+    if (drag.type === 'move-node' || drag.type === 'move-handle') updatePathPreview({});
     if (drag.type === 'create-shape') {
-      shapeToolRef.current?.cancel();
-      shapeToolRef.current = null;
+      if (shapeToolRef.current?.currentState === 'drawing') {
+        shapeToolRef.current?.cancel();
+        shapeToolRef.current = null;
+      }
     }
     dragSessionRef.current = null;
 
@@ -1889,7 +1921,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     freehandOperationRef.current = null;
     freehandCursorRef.current = null;
     widthStartScreenRef.current = null;
-    setPathPreview({});
+    updatePathPreview({});
     setFreehandVersion((version) => version + 1);
   }, [activeTool, commitPen]);
 

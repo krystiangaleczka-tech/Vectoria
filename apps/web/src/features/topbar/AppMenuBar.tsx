@@ -5,6 +5,8 @@ import type { ObjectId } from '@vectoria/core';
 
 import type { UiScale } from '../../hooks/useUiPreferences.js';
 
+const ZOOM_PRESETS = [0.25, 0.5, 0.75, 0.87, 1, 1.5];
+
 interface AppMenuBarProps {
   saveStatus: 'idle' | 'dirty' | 'saving' | 'saved-locally' | 'error' | 'offline';
   canUndo: boolean;
@@ -51,7 +53,7 @@ interface AppMenuBarProps {
   onPasteInPlace?: () => void;
   onPasteAllArtboards?: () => void;
   onDuplicate: () => void;
-  onSelectSame: (target: import('@vectoria/core').SelectSameTarget) => void;
+  onSetZoom?: (factor: number) => void;
   onOpenCommandPalette?: () => void;
   onOpenShortcutConfig?: () => void;
   onSaveLayoutPreset?: () => void;
@@ -117,7 +119,7 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
   onPasteInPlace,
   onPasteAllArtboards,
   onDuplicate,
-  onSelectSame,
+  onSetZoom,
   onOpenCommandPalette,
   onOpenShortcutConfig,
   onSaveLayoutPreset,
@@ -135,6 +137,28 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
   onToggleChecklist,
 }) => {
   const [openMenu, setOpenMenu] = useState<MenuName | null>(null);
+  const [customEditing, setCustomEditing] = useState(false);
+  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressRef = useRef(false);
+
+  const handleZoomPointerDown = () => {
+    longPressRef.current = false;
+    holdTimerRef.current = setTimeout(() => {
+      longPressRef.current = true;
+      setCustomEditing(true);
+    }, 500);
+  };
+
+  const handleZoomClick = () => {
+    if (longPressRef.current) return;
+    const current = zoomPercent / 100;
+    const next = ZOOM_PRESETS.find((p) => p > current + 0.005) ?? ZOOM_PRESETS[0]!;
+    if (onSetZoom) {
+      onSetZoom(next);
+    } else {
+      onZoom100();
+    }
+  };
   const menuRef = useRef<HTMLDivElement>(null);
   const menus: MenuName[] = ['Plik', 'Edycja', 'Obiekt', 'Tekst', 'Widok', 'Okno', 'Pomoc'];
 
@@ -208,13 +232,6 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
     }
     if (menu === 'Obiekt') {
       return <>
-        <MenuItem label="Zaznacz podobne: Wypełnienie" disabled={selectedObjectIds.length !== 1} onClick={() => run(() => onSelectSame('fill'))} />
-        <MenuItem label="Zaznacz podobne: Obrys" disabled={selectedObjectIds.length !== 1} onClick={() => run(() => onSelectSame('stroke'))} />
-        <MenuItem label="Zaznacz podobne: Wypełnienie i Obrys" disabled={selectedObjectIds.length !== 1} onClick={() => run(() => onSelectSame('fill-stroke'))} />
-        <MenuItem label="Zaznacz podobne: Czcionka" disabled={selectedObjectIds.length !== 1} onClick={() => run(() => onSelectSame('font'))} />
-        <MenuItem label="Zaznacz podobne: Rozmiar" disabled={selectedObjectIds.length !== 1} onClick={() => run(() => onSelectSame('size'))} />
-        <MenuItem label="Zaznacz podobne: Krycie" disabled={selectedObjectIds.length !== 1} onClick={() => run(() => onSelectSame('opacity'))} />
-        <MenuItem label="Zaznacz podobne: Typ" disabled={selectedObjectIds.length !== 1} onClick={() => run(() => onSelectSame('type'))} />
         <MenuItem label="Group" shortcut="Cmd+G" disabled={selectedObjectIds.length < 2} onClick={() => run(onGroup)} />
         <MenuItem label="Ungroup" shortcut="Cmd+Shift+G" disabled={selectedObjectIds.length === 0} onClick={() => run(onUngroup)} />
         <MenuItem label="Powiel i przekształć" shortcut="Cmd+D" disabled={selectedObjectIds.length === 0} onClick={() => run(onDuplicate)} />
@@ -285,7 +302,37 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
         <span className="action-divider" aria-hidden="true" />
         <IconButton data-testid="undo-button" icon={<VectoriaIcon name="undo" size={16} />} label="Cofnij" shortcut="Cmd+Z" size="sm" disabled={!canUndo} onClick={onUndo} />
         <IconButton data-testid="redo-button" icon={<VectoriaIcon name="redo" size={16} />} label="Ponów" shortcut="Cmd+Shift+Z" size="sm" disabled={!canRedo} onClick={onRedo} />
-        <button type="button" className="zoom-readout" onClick={onZoom100} title="Zoom 100% (Cmd+0)">{zoomPercent}%</button>
+        {customEditing ? (
+          <input
+            className="zoom-readout zoom-input"
+            autoFocus
+            defaultValue={`${zoomPercent}%`}
+            aria-label="Zoom custom"
+            onBlur={() => setCustomEditing(false)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                const parsed = parseFloat(e.currentTarget.value.replace('%', '').replace(',', '.'));
+                if (Number.isFinite(parsed) && onSetZoom) {
+                  onSetZoom(parsed / 100);
+                }
+                setCustomEditing(false);
+              }
+              if (e.key === 'Escape') setCustomEditing(false);
+            }}
+          />
+        ) : (
+          <button
+            type="button"
+            className="zoom-readout"
+            title="Klik: cykl zoomu · Przytrzymaj: własna wartość"
+            onPointerDown={handleZoomPointerDown}
+            onPointerUp={() => { if (holdTimerRef.current) clearTimeout(holdTimerRef.current); }}
+            onPointerLeave={() => { if (holdTimerRef.current) clearTimeout(holdTimerRef.current); }}
+            onClick={handleZoomClick}
+          >
+            {zoomPercent}%
+          </button>
+        )}
         <Button size="sm" variant="ghost" onClick={onFitArtboard} title="Dopasuj obszar roboczy">Dopasuj</Button>
         <IconButton className="dock-toggle" size="sm" icon={<VectoriaIcon name="sliders" size={15} />} label={rightDockOpen ? 'Ukryj panele' : 'Pokaż panele'} active={rightDockOpen} onClick={onToggleRightDock} />
         <Button data-testid="export-svg-button" size="sm" variant="ghost" onClick={onExportSvg} title="Szybki eksport SVG">SVG</Button>

@@ -1568,6 +1568,13 @@ export const EditorApp: React.FC = () => {
     reader.readAsDataURL(file);
   }, [handleExecuteCommand]);
 
+  const handleSetZoom = useCallback((factor: number) => {
+    const canvas = document.querySelector<HTMLElement>('[data-testid="canvas-viewport"]');
+    if (!canvas) return;
+    camera.setZoom(factor, { x: canvas.clientWidth, y: canvas.clientHeight });
+    setZoomPercent(camera.zoomPercent);
+  }, [camera]);
+
   const handleSelectSame = useCallback((target: SelectSameTarget) => {
     if (!doc || selectedObjectIds.length !== 1) return;
     const referenceId = selectedObjectIds[0];
@@ -1883,7 +1890,7 @@ export const EditorApp: React.FC = () => {
         onPasteInPlace={() => handlePaste('in-place')}
         onPasteAllArtboards={() => handlePaste('all-artboards')}
         onDuplicate={handleDuplicate}
-        onSelectSame={handleSelectSame}
+        onSetZoom={handleSetZoom}
         onOpenCommandPalette={() => setCommandPaletteOpen(true)}
         onOpenShortcutConfig={() => setShortcutConfigOpen(true)}
         onSaveLayoutPreset={handleSaveLayoutPreset}
@@ -1953,7 +1960,7 @@ export const EditorApp: React.FC = () => {
               </button>
             </div>
           )}
-          <CanvasRulers camera={camera} unit={doc?.unit ?? 'px'} onAddGuide={handleAddGuide} />
+          <CanvasRulers camera={camera} unit={doc?.unit ?? 'px'} theme={theme} onAddGuide={handleAddGuide} />
          <CanvasViewport
             document={doc}
             activeTool={activeTool}
