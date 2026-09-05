@@ -1,8 +1,16 @@
 import { z } from 'zod';
+import type { DocumentModel, SelectionState } from '@vectoria/core';
+import type { Rect } from '@vectoria/shared';
 
 /** Supported export formats for the document and regional exports. */
-export const EXPORT_FORMATS = ['svg', 'png', 'jpeg', 'webp', 'pdf', 'ai', 'cdr'] as const;
+export const EXPORT_FORMATS = ['svg', 'png', 'jpeg', 'webp', 'pdf'] as const;
 export type ExportFormat = typeof EXPORT_FORMATS[number];
+
+export interface PdfExportFormatOptions {
+  readonly artboards?: 'target' | 'all';
+  readonly bleedPt?: number;
+  readonly cropMarks?: boolean;
+}
 
 /** Schema validating the target region of an export job. */
 export const ExportTargetSchema = z.discriminatedUnion('kind', [
@@ -33,8 +41,24 @@ export const ExportFormatOptionsSchema = z.object({
   background: z.union([z.literal('transparent'), z.string().regex(/^#[0-9a-fA-F]{3,8}$/)]).optional(),
   optimizeSvg: z.boolean().default(false),
   fileNameTemplate: z.string().default('{artboard}.{ext}'),
+  pdf: z
+    .object({
+      artboards: z.enum(['target', 'all']).default('target'),
+      bleedPt: z.number().min(0).max(50).default(0),
+      cropMarks: z.boolean().default(false),
+    })
+    .optional(),
 });
 export type ExportFormatOptions = z.infer<typeof ExportFormatOptionsSchema>;
+
+/**
+ * Frozen snapshot of document and selection geometry captured at job enqueue time.
+ */
+export interface ExportExecutionSnapshot {
+  readonly document: DocumentModel;
+  readonly selection: SelectionState;
+  readonly rect: Rect;
+}
 
 /**
  * High-level export specification representing target geometry and format settings.

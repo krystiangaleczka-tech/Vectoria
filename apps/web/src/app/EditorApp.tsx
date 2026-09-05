@@ -144,6 +144,7 @@ import {
   type ProjectRecord,
   getDocumentRepository,
   parseAndMigrateDocument,
+  type PersistedDocument,
 } from '@vectoria/io';
 import { selectSame, type SelectSameTarget } from '@vectoria/core';
 
@@ -367,7 +368,7 @@ export const EditorApp: React.FC = () => {
         const request = queue.pending;
         queue.pending = null;
         try {
-          await saveDocumentSnapshot(request.document, request.revision);
+          await saveDocumentSnapshot(request.document, request.revision, request.document.id);
           if (latestRevisionRef.current === request.revision) {
             savedRevisionRef.current = request.revision;
             setSavedRevision(request.revision);
@@ -509,33 +510,26 @@ export const EditorApp: React.FC = () => {
       const repo = getDocumentRepository();
       try {
         const raw = await repo.load(project.documentId);
-        if (raw) {
-          const rawDoc = typeof raw === 'object' && raw !== null && 'document' in raw ? (raw as unknown as { document: unknown }).document : raw;
-          const parsed = parseAndMigrateDocument(rawDoc);
-          setDoc(parsed);
-          latestDocRef.current = parsed;
-          history.clear(0);
-          setRevision(0);
-          latestRevisionRef.current = 0;
-          savedRevisionRef.current = 0;
-          setSavedRevision(0);
-          setActiveProjectId(project.id);
-          setWorkspaceMode('editor');
-        } else {
-          const newDoc: DocumentModel = { ...createDefaultDocument(), name: project.name };
-          await repo.save({ app: 'vectoria', schemaVersion: newDoc.schemaVersion, document: newDoc, revision: 0, savedAt: new Date().toISOString() });
-          setDoc(newDoc);
-          latestDocRef.current = newDoc;
-          history.clear(0);
-          setRevision(0);
-          latestRevisionRef.current = 0;
-          savedRevisionRef.current = 0;
-          setSavedRevision(0);
-          setActiveProjectId(project.id);
-          setWorkspaceMode('editor');
+        if (!raw) {
+          throw new Error(`PROJECT_DOCUMENT_MISSING: ${project.id} → ${project.documentId}`);
         }
+        const rawDoc = typeof raw === 'object' && raw !== null && 'document' in raw ? (raw as unknown as { document: unknown }).document : raw;
+        const parsed = parseAndMigrateDocument(rawDoc);
+        setDoc(parsed);
+        latestDocRef.current = parsed;
+        const rev = typeof raw === 'object' && raw !== null && 'revision' in raw && typeof (raw as { revision: unknown }).revision === 'number'
+          ? (raw as { revision: number }).revision
+          : 0;
+        history.clear(rev);
+        setRevision(rev);
+        latestRevisionRef.current = rev;
+        savedRevisionRef.current = rev;
+        setSavedRevision(rev);
+        setActiveProjectId(project.id);
+        setWorkspaceMode('editor');
       } catch (err) {
         console.error('[Vectoria] Failed to open project:', err);
+        alert(`Nie udało się otworzyć projektu: ${err instanceof Error ? err.message : String(err)}`);
       }
     },
     [flushAutosave, history],
@@ -544,15 +538,28 @@ export const EditorApp: React.FC = () => {
   const handleCreateProjectInGallery = useCallback(
     async (name: string, folderId?: string, tags?: readonly string[], isTemplate?: boolean) => {
       const newDoc: DocumentModel = { ...createDefaultDocument(), name };
+      const snapshot: PersistedDocument = {
+        app: 'vectoria',
+        schemaVersion: newDoc.schemaVersion,
+        document: newDoc,
+        revision: 0,
+        savedAt: new Date().toISOString(),
+      };
       const repo = getDocumentRepository();
-      await repo.save({ app: 'vectoria', schemaVersion: newDoc.schemaVersion, document: newDoc, revision: 0, savedAt: new Date().toISOString() });
-      await workspace.createProject({
-        name,
-        folderId,
-        tags,
-        documentId: newDoc.id,
-        isTemplate,
-      });
+      await repo.save(newDoc.id, snapshot);
+      try {
+        const project = await workspace.createProject({
+          name,
+          folderId,
+          tags,
+          documentId: newDoc.id,
+          isTemplate,
+        });
+        setActiveProjectId(project.id);
+      } catch (error) {
+        await repo.deleteDocument?.(newDoc.id);
+        throw error;
+      }
     },
     [workspace],
   );
@@ -564,7 +571,17 @@ export const EditorApp: React.FC = () => {
           name: doc.name || 'Mój pierwszy projekt',
           documentId: doc.id,
         })
-        .then((p) => setActiveProjectId(p.id))
+        .then(async (p) => {
+          setActiveProjectId(p.id);
+          const snapshot: PersistedDocument = {
+            app: 'vectoria',
+            schemaVersion: doc.schemaVersion,
+            document: doc,
+            revision: 0,
+            savedAt: new Date().toISOString(),
+          };
+          await getDocumentRepository().save(doc.id, snapshot);
+        })
         .catch(() => {});
     }
   }, [workspace.loading, workspace.meta.projects.length, doc, workspace]);

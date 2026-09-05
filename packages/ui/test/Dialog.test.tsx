@@ -107,4 +107,60 @@ describe('Dialog primitive', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(document.activeElement).toBe(trigger);
   });
+
+  it('closes on backdrop click but does not close when clicking inside dialog content', () => {
+    const handleClose = vi.fn();
+
+    render(
+      <Dialog labelledBy="test-title" onClose={handleClose} testId="test-modal">
+        <h2 id="test-title">Tytuł</h2>
+        <button data-testid="content-btn">Wewnątrz</button>
+      </Dialog>
+    );
+
+    const dialog = screen.getByRole('dialog');
+    const backdrop = dialog.parentElement;
+    expect(backdrop).toBeInTheDocument();
+
+    // Click inside content
+    const contentBtn = screen.getByTestId('content-btn');
+    fireEvent.click(contentBtn);
+    expect(handleClose).not.toHaveBeenCalled();
+
+    // Click backdrop
+    if (backdrop) {
+      fireEvent.click(backdrop);
+    }
+    expect(handleClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('focus trap ignores disabled buttons and includes textarea and select', () => {
+    const handleClose = vi.fn();
+
+    render(
+      <Dialog labelledBy="test-title" onClose={handleClose}>
+        <h2 id="test-title">Tytuł</h2>
+        <button disabled data-testid="disabled-btn">Nieaktywny</button>
+        <textarea data-testid="first-field" defaultValue="Tekst" />
+        <select data-testid="middle-select">
+          <option value="1">Opcja 1</option>
+        </select>
+        <button data-testid="last-active-btn">Aktywny</button>
+      </Dialog>
+    );
+
+    const firstField = screen.getByTestId('first-field');
+    const lastActive = screen.getByTestId('last-active-btn');
+    const disabledBtn = screen.getByTestId('disabled-btn');
+
+    // First active element focused (textarea, skipping disabled button)
+    expect(document.activeElement).toBe(firstField);
+    expect(document.activeElement).not.toBe(disabledBtn);
+
+    // Tab cycle from last to first
+    lastActive.focus();
+    const dialog = screen.getByRole('dialog');
+    fireEvent.keyDown(dialog, { key: 'Tab', shiftKey: false });
+    expect(document.activeElement).toBe(firstField);
+  });
 });

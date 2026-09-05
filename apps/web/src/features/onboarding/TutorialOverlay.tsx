@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useLayoutEffect, useState, useRef } from 'react';
 import { Button, IconButton, VectoriaIcon } from '@vectoria/ui';
 import { TUTORIALS, type TutorialId } from './tutorials.js';
 
@@ -6,6 +6,55 @@ export interface TutorialOverlayProps {
   tutorialId: TutorialId | null;
   onClose: () => void;
   onComplete: (id: TutorialId) => void;
+}
+
+export type SpotlightRect = {
+  top: number;
+  left: number;
+  width: number;
+  height: number;
+};
+
+/**
+ * Tracks the screen bounding rect of a DOM element for tutorial spotlighting.
+ */
+function useTutorialTarget(selector?: string): SpotlightRect | null {
+  const [rect, setRect] = useState<SpotlightRect | null>(null);
+
+  useLayoutEffect(() => {
+    if (!selector || typeof document === 'undefined') {
+      setRect(null);
+      return;
+    }
+
+    const updateRect = () => {
+      const element = document.querySelector(selector);
+      if (!element) {
+        setRect(null);
+        return;
+      }
+
+      const bounds = element.getBoundingClientRect();
+      setRect({
+        top: bounds.top,
+        left: bounds.left,
+        width: bounds.width,
+        height: bounds.height,
+      });
+    };
+
+    updateRect();
+
+    window.addEventListener('resize', updateRect);
+    window.addEventListener('scroll', updateRect, true);
+
+    return () => {
+      window.removeEventListener('resize', updateRect);
+      window.removeEventListener('scroll', updateRect, true);
+    };
+  }, [selector]);
+
+  return rect;
 }
 
 /**
@@ -60,10 +109,10 @@ export const TutorialOverlay: React.FC<TutorialOverlayProps> = ({
     }
   }, [tutorial, stepIndex]);
 
-  if (!tutorial) return null;
+  const currentStep = tutorial?.steps[stepIndex];
+  const spotlight = useTutorialTarget(currentStep?.targetSelector);
 
-  const currentStep = tutorial.steps[stepIndex];
-  if (!currentStep) return null;
+  if (!tutorial || !currentStep) return null;
 
   const isLast = stepIndex === tutorial.steps.length - 1;
 
@@ -92,7 +141,7 @@ export const TutorialOverlay: React.FC<TutorialOverlayProps> = ({
         position: 'fixed',
         inset: 0,
         zIndex: 9000,
-        backgroundColor: 'rgba(0, 0, 0, 0.45)',
+        backgroundColor: spotlight ? 'transparent' : 'rgba(0, 0, 0, 0.45)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -102,6 +151,25 @@ export const TutorialOverlay: React.FC<TutorialOverlayProps> = ({
         if (e.target === e.currentTarget) onClose();
       }}
     >
+      {spotlight && (
+        <div
+          aria-hidden="true"
+          className="tutorial-spotlight"
+          data-testid="tutorial-spotlight"
+          style={{
+            position: 'fixed',
+            top: Math.max(0, spotlight.top - 6),
+            left: Math.max(0, spotlight.left - 6),
+            width: spotlight.width + 12,
+            height: spotlight.height + 12,
+            border: '3px solid var(--color-border-focus, #e67e22)',
+            borderRadius: 8,
+            boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.55)',
+            pointerEvents: 'none',
+            zIndex: 9001,
+          }}
+        />
+      )}
       <div
         ref={cardRef}
         tabIndex={-1}

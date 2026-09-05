@@ -7,7 +7,7 @@ import type { DocumentRepository, DocumentVersion } from './document-repository.
 const CURRENT_DOC_KEY = 'current_document';
 const LAST_KNOWN_GOOD_KEY = 'last_known_good_document';
 const VERSIONS_KEY = 'document_versions';
-let activeRepository: DocumentRepository = new IndexedDBDocumentRepository(CURRENT_DOC_KEY);
+let activeRepository: DocumentRepository = new IndexedDBDocumentRepository();
 const SESSION_MARKER = 'vectoria-session-open';
 
 /** Injects a custom DocumentRepository instance for testing or alternative storage providers. */
@@ -52,7 +52,7 @@ export async function bootstrapDocument(): Promise<BootstrapState> {
 
     if (!raw) {
       const defaultDoc = createDefaultDocument();
-      await saveDocument(defaultDoc, 0);
+      await saveDocument(defaultDoc, 0, CURRENT_DOC_KEY);
       return { status: 'ready', document: defaultDoc, revision: 0 };
     }
 
@@ -110,11 +110,11 @@ export async function bootstrapDocument(): Promise<BootstrapState> {
 /**
  * Persists a document into IndexedDB.
  */
-export async function saveDocument(document: DocumentModel, revision = 0): Promise<void> {
-  return saveDocumentSnapshot(document, revision);
+export async function saveDocument(document: DocumentModel, revision = 0, documentId?: string): Promise<void> {
+  return saveDocumentSnapshot(document, revision, documentId);
 }
 
-export async function saveLastKnownGoodSnapshot(document: DocumentModel, revision: number): Promise<void> {
+export async function saveLastKnownGoodSnapshot(document: DocumentModel, revision: number, documentId?: string): Promise<void> {
   if (!Number.isInteger(revision) || revision < 0) {
     throw new Error('Cannot persist document with invalid revision');
   }
@@ -129,11 +129,12 @@ export async function saveLastKnownGoodSnapshot(document: DocumentModel, revisio
     revision,
     savedAt: new Date().toISOString(),
   };
-  return activeRepository.saveAtomic?.(snapshot, LAST_KNOWN_GOOD_KEY) ?? activeRepository.save(snapshot);
+  const key = documentId ?? document.id;
+  return activeRepository.saveAtomic?.(key, snapshot, LAST_KNOWN_GOOD_KEY) ?? activeRepository.save(key, snapshot);
 }
 
 /** Persists validated document snapshot with revision metadata for stale-write guards. */
-export async function saveDocumentSnapshot(document: DocumentModel, revision: number): Promise<void> {
+export async function saveDocumentSnapshot(document: DocumentModel, revision: number, documentId?: string): Promise<void> {
   if (!Number.isInteger(revision) || revision < 0) {
     throw new Error('Cannot persist document with invalid revision');
   }
@@ -148,7 +149,8 @@ export async function saveDocumentSnapshot(document: DocumentModel, revision: nu
     revision,
     savedAt: new Date().toISOString(),
   };
-  return activeRepository.save(snapshot);
+  const key = documentId ?? document.id;
+  return activeRepository.save(key, snapshot);
 }
 
 /** Save a bounded named document version without changing the active document. */

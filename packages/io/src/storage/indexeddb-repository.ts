@@ -25,10 +25,10 @@ function openDB(): Promise<IDBDatabase> {
 }
 
 export class IndexedDBDocumentRepository implements DocumentRepository {
-  constructor(private readonly storageKey?: string) {}
+  constructor(private readonly defaultStorageKey?: string) {}
 
   /** Saves one validated document envelope under its stable document key. */
-  async save(snapshot: PersistedDocument): Promise<void> {
+  async save(documentId: string, snapshot: PersistedDocument): Promise<void> {
     const db = await openDB();
     
     let payload: PersistedDocument | ArrayBuffer = snapshot;
@@ -38,10 +38,12 @@ export class IndexedDBDocumentRepository implements DocumentRepository {
       console.warn('Document compression failed, falling back to uncompressed', e);
     }
 
+    const key = documentId || this.defaultStorageKey || snapshot.document.id;
+
     try {
       await new Promise<void>((resolve, reject) => {
         const tx = db.transaction(STORE_NAME, 'readwrite');
-        tx.objectStore(STORE_NAME).put(payload, this.storageKey ?? snapshot.document.id);
+        tx.objectStore(STORE_NAME).put(payload, key);
         tx.oncomplete = () => resolve();
         tx.onerror = () => reject(tx.error ?? new Error('Failed to save document to IndexedDB'));
         tx.onabort = () => reject(tx.error ?? new Error('IndexedDB save transaction aborted'));
@@ -57,7 +59,7 @@ export class IndexedDBDocumentRepository implements DocumentRepository {
   }
 
   /** Commit current and last-known-good snapshots in one IndexedDB transaction. */
-  async saveAtomic(snapshot: PersistedDocument, knownGoodKey: string): Promise<void> {
+  async saveAtomic(documentId: string, snapshot: PersistedDocument, knownGoodKey?: string): Promise<void> {
     const db = await openDB();
     
     let payload: PersistedDocument | ArrayBuffer = snapshot;
@@ -67,12 +69,16 @@ export class IndexedDBDocumentRepository implements DocumentRepository {
       console.warn('Document compression failed, falling back to uncompressed', e);
     }
 
+    const key = documentId || this.defaultStorageKey || snapshot.document.id;
+
     try {
       await new Promise<void>((resolve, reject) => {
         const tx = db.transaction(STORE_NAME, 'readwrite');
         const store = tx.objectStore(STORE_NAME);
-        store.put(payload, this.storageKey ?? snapshot.document.id);
-        store.put(payload, knownGoodKey);
+        store.put(payload, key);
+        if (knownGoodKey) {
+          store.put(payload, knownGoodKey);
+        }
         tx.oncomplete = () => resolve();
         tx.onerror = () => reject(tx.error ?? new Error('Failed to atomically save document snapshots'));
         tx.onabort = () => reject(tx.error ?? new Error('IndexedDB atomic save aborted'));

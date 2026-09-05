@@ -87,8 +87,8 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
   onExportSvg,
   onExportPng,
   onExportVct,
-  onExportAi,
-  onExportCdr,
+  onExportAi: _onExportAi,
+  onExportCdr: _onExportCdr,
   onImportSvg,
   rightDockOpen,
   onToggleRightDock,
@@ -190,8 +190,7 @@ export const AppMenuBar: React.FC<AppMenuBarProps> = ({
         <MenuItem label="Nowy artboard" onClick={() => run(() => onCreateArtboard?.())} />
         <MenuItem label="Otwórz / Importuj..." onClick={() => run(onImportSvg)} />
         <MenuItem label="Zapisz jako .vct" onClick={() => run(onExportVct)} />
-        <MenuItem label="Zapisz kopię jako Adobe Illustrator (.ai)" onClick={() => run(onExportAi)} />
-        <MenuItem label="Zapisz kopię jako CorelDRAW (.cdr)" onClick={() => run(onExportCdr)} />
+        <MenuItem label="Eksportuj wektorowy PDF do aplikacji DTP…" onClick={() => run(() => (onOpenExportDialog ? onOpenExportDialog() : onExportSvg()))} />
         <MenuItem label="Eksportuj..." shortcut="Ctrl+Shift+E" onClick={() => run(() => (onOpenExportDialog ? onOpenExportDialog() : onExportSvg()))} />
         <MenuItem label="Eksportuj SVG" onClick={() => run(onExportSvg)} />
         <MenuItem label="Eksportuj PNG" onClick={() => run(onExportPng)} />

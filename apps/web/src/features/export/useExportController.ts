@@ -4,13 +4,12 @@ import {
   ExportJobRunner,
   type ExportJob,
   type ExportRequest,
+  type ExportExecutionSnapshot,
   resolveExportRect,
   exportRegionToSvg,
   rasterizeSvgToBlob,
   optimizeSvg,
   exportDocToPdf,
-  exportAiFile,
-  exportCdrFile,
   downloadBlob,
 } from '@vectoria/io';
 import { resolveFileName } from './export-naming.js';
@@ -66,14 +65,30 @@ export function useExportController(
         request.target.kind === 'artboard' ? request.target.artboardId : snapshotDoc.activeArtboardId;
       const targetArtboard = snapshotDoc.artboards[targetArtboardId] ?? activeArtboard;
 
+      const currentSelection = selectionRef.current;
+      const selectionSnapshot: SelectionState = {
+        objectIds: [...currentSelection.objectIds],
+        nodeIds: [...currentSelection.nodeIds],
+        mode: currentSelection.mode,
+      };
+      const rect = resolveExportRect(snapshotDoc, request.target, selectionSnapshot);
+      const executionSnapshot: ExportExecutionSnapshot = {
+        document: snapshotDoc,
+        selection: selectionSnapshot,
+        rect,
+      };
+
       return runner.enqueue({
         request,
-        run: async (signal, onStage) => {
+        snapshot: executionSnapshot,
+        run: async (signal, onStage, jobSnapshot) => {
           onStage('serialize', 0.15);
+
+          const effectiveDoc = jobSnapshot?.document ?? snapshotDoc;
+          const effectiveRect = jobSnapshot?.rect ?? rect;
 
           const { format, scale, quality, background, optimizeSvg: shouldOptimize, fileNameTemplate } =
             request.options;
-          const rect = resolveExportRect(snapshotDoc, request.target, selectionRef.current);
 
           const fileName = resolveFileName(fileNameTemplate, {
             artboard: targetArtboard?.name,
@@ -86,7 +101,7 @@ export function useExportController(
 
           // SVG Export Pipeline (EXPORT-001, EXPORT-002)
           if (format === 'svg') {
-            const rawSvg = exportRegionToSvg(snapshotDoc, rect, { background });
+            const rawSvg = exportRegionToSvg(effectiveDoc, effectiveRect, { background });
             onStage('encode', 0.7);
             const finalSvg = shouldOptimize ? optimizeSvg(rawSvg) : rawSvg;
             const blob = new Blob([finalSvg], { type: 'image/svg+xml;charset=utf-8' });
@@ -98,51 +113,19 @@ export function useExportController(
           // PDF Export Pipeline (EXPORT-012, EXPORT-013, EXPORT-014)
           if (format === 'pdf') {
             onStage('raster', 0.4);
+            const pdfOptions = request.options.pdf;
             const artboardIds =
-              request.target.kind === 'artboard'
-                ? [request.target.artboardId]
-                : snapshotDoc.artboardIds;
+              pdfOptions?.artboards === 'all'
+                ? effectiveDoc.artboardIds
+                : request.target.kind === 'artboard'
+                  ? [request.target.artboardId]
+                  : [effectiveDoc.activeArtboardId];
 
-            const blob = await exportDocToPdf(snapshotDoc, {
+            const blob = await exportDocToPdf(effectiveDoc, {
               artboardIds,
               scale,
-            });
-
-            if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
-            onStage('deliver', 1);
-            downloadBlob(blob, fileName);
-            return { blob, fileName };
-          }
-
-          // Adobe Illustrator Export Pipeline (.ai - ADR-021)
-          if (format === 'ai') {
-            onStage('raster', 0.4);
-            const artboardIds =
-              request.target.kind === 'artboard'
-                ? [request.target.artboardId]
-                : snapshotDoc.artboardIds;
-
-            const blob = await exportAiFile(snapshotDoc, {
-              artboardIds,
-              scale,
-            });
-
-            if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
-            onStage('deliver', 1);
-            downloadBlob(blob, fileName);
-            return { blob, fileName };
-          }
-
-          // CorelDRAW Export Pipeline (.cdr - ADR-021)
-          if (format === 'cdr') {
-            onStage('serialize', 0.4);
-            const artboardId =
-              request.target.kind === 'artboard'
-                ? request.target.artboardId
-                : snapshotDoc.activeArtboardId;
-
-            const blob = await exportCdrFile(snapshotDoc, {
-              artboardId,
+              bleed: pdfOptions?.bleedPt ?? 0,
+              cropMarks: pdfOptions?.cropMarks ?? false,
             });
 
             if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
@@ -153,11 +136,11 @@ export function useExportController(
 
           // Raster Export Pipeline: PNG, JPEG, WebP (EXPORT-003..011)
           onStage('serialize', 0.3);
-          const svg = exportRegionToSvg(snapshotDoc, rect, { background });
+          const svg = exportRegionToSvg(effectiveDoc, effectiveRect, { background });
 
           onStage('raster', 0.6);
-          const targetW = rect.width * scale;
-          const targetH = rect.height * scale;
+          const targetW = effectiveRect.width * scale;
+          const targetH = effectiveRect.height * scale;
 
           const rasterFormat: 'png' | 'jpeg' | 'webp' =
             format === 'jpeg' || format === 'webp' ? format : 'png';

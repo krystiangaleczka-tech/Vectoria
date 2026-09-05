@@ -5,8 +5,14 @@ import { exportCdrFile } from '../src/cdr/cdr-exporter.js';
 import { ZipBuilder, crc32 } from '../src/cdr/zip-builder.js';
 import { importAi } from '../src/ai/ai-importer.js';
 import { parseCdr } from '../src/cdr/cdr-parser.js';
+import { EXPORT_FORMATS } from '../src/export/export-types.js';
 
 describe('AI and CDR Export and Round-trip (ADR-021)', () => {
+  it('does not expose unverified native AI/CDR in EXPORT_FORMATS pipeline', () => {
+    expect(EXPORT_FORMATS).toEqual(['svg', 'png', 'jpeg', 'webp', 'pdf']);
+    expect((EXPORT_FORMATS as readonly string[]).includes('ai')).toBe(false);
+    expect((EXPORT_FORMATS as readonly string[]).includes('cdr')).toBe(false);
+  });
   describe('ZipBuilder and CRC-32', () => {
     it('computes standard IEEE 802.3 CRC-32 checksums', () => {
       const data = new TextEncoder().encode('123456789');

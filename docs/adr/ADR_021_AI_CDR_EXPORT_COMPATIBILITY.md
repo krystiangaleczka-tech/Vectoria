@@ -1,7 +1,7 @@
 # ADR-021: Standard i kompatybilność eksportu do formatów Adobe Illustrator (.ai) oraz CorelDRAW (.cdr)
 
-- **Status:** Accepted
-- **Data:** 2026-09-04
+- **Status:** Superseded / Proposed (zastąpione wymianą wektorową PDF do aplikacji DTP)
+- **Data:** 2026-09-04 (rewizja: 2026-09-05)
 - **Decydent:** Vectoria Architecture Team
 - **Powiązane ADR:** ADR-005 (VCT jako format projektu), ADR-008 (AI/CDR format-first), ADR-016 (Pipeline eksportu)
 

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
+import { createDefaultDocument } from '@vectoria/core';
 import { ExportJobRunner } from '../src/export/export-jobs.js';
-import type { ExportRequest } from '../src/export/export-types.js';
+import type { ExportExecutionSnapshot, ExportRequest } from '../src/export/export-types.js';
 
 const dummyRequest: ExportRequest = {
   target: { kind: 'artboard', artboardId: 'a1' },
@@ -102,5 +103,32 @@ describe('ExportJobRunner (EXPORT-023, EXPORT-024)', () => {
       expect(job?.error?.code).toBe('EXPORT_MEMORY_LIMIT');
       expect(job?.error?.message).toContain('Dimensions exceeded');
     });
+  });
+
+  it('freezes execution snapshot passed at enqueue time and delivers it to run callback', async () => {
+    const runner = new ExportJobRunner();
+    let deliveredSnapshot: unknown = null;
+
+    const doc = createDefaultDocument({ name: 'Frozen Test' });
+    const mockSnapshot: ExportExecutionSnapshot = {
+      document: doc,
+      selection: { objectIds: ['rect-frozen'], nodeIds: [], mode: 'object' },
+      rect: { x: 10, y: 10, width: 100, height: 80 },
+    };
+
+    const id = runner.enqueue({
+      request: dummyRequest,
+      snapshot: mockSnapshot,
+      run: async (_signal, _onStage, snapshot) => {
+        deliveredSnapshot = snapshot;
+        return { blob: new Blob(['frozen']), fileName: 'frozen.png' };
+      },
+    });
+
+    await vi.waitFor(() => {
+      expect(runner.snapshot.find((j) => j.id === id)?.status).toBe('done');
+    });
+
+    expect(deliveredSnapshot).toEqual(mockSnapshot);
   });
 });

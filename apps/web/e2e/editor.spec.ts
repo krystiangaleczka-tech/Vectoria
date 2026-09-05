@@ -928,7 +928,7 @@ test.describe('Vectoria MVP Skeleton', () => {
     await expect(page.getByTestId('history-panel')).toContainText('Add dropShadow effect');
   });
 
-  test('ADR-021: AI and CDR export options in Plik menu and Export dialog', async ({ page }) => {
+  test('ADR-021: Vector DTP PDF export in Plik menu and Export dialog', async ({ page }, testInfo) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
 
@@ -937,34 +937,33 @@ test.describe('Vectoria MVP Skeleton', () => {
 
     // Verify presence of menu items
     const vctItem = page.getByRole('menuitem', { name: 'Zapisz jako .vct' });
-    const aiItem = page.getByRole('menuitem', { name: 'Zapisz kopię jako Adobe Illustrator (.ai)' });
-    const cdrItem = page.getByRole('menuitem', { name: 'Zapisz kopię jako CorelDRAW (.cdr)' });
+    const dtpPdfItem = page.getByRole('menuitem', { name: 'Eksportuj wektorowy PDF do aplikacji DTP…' });
 
     await expect(vctItem).toBeVisible();
-    await expect(aiItem).toBeVisible();
-    await expect(cdrItem).toBeVisible();
+    await expect(dtpPdfItem).toBeVisible();
 
-    await page.screenshot({ path: '/Users/krystiangaleczka/.gemini/antigravity-ide/brain/4de5cd63-54c7-4829-bb93-4684783d1901/ai_cdr_plik_menu.png' });
+    await page.screenshot({ path: testInfo.outputPath('dtp_pdf_plik_menu.png') });
 
     // Open ExportDialog
     await page.getByRole('menuitem', { name: 'Eksportuj...' }).click();
     await expect(page.getByRole('dialog')).toBeVisible();
 
-    // Verify AI and CDR format tabs
-    const aiTab = page.getByRole('tab', { name: 'AI' });
-    const cdrTab = page.getByRole('tab', { name: 'CDR' });
-    await expect(aiTab).toBeVisible();
-    await expect(cdrTab).toBeVisible();
+    // Verify format tabs (only honest, fully supported formats)
+    const pdfTab = page.getByRole('tab', { name: 'PDF' });
+    const pngTab = page.getByRole('tab', { name: 'PNG' });
+    const svgTab = page.getByRole('tab', { name: 'SVG' });
 
-    // Click AI tab and verify
-    await aiTab.click();
-    await expect(aiTab).toHaveAttribute('aria-selected', 'true');
+    await expect(pdfTab).toBeVisible();
+    await expect(pngTab).toBeVisible();
+    await expect(svgTab).toBeVisible();
+    await expect(page.getByRole('tab', { name: 'AI' })).not.toBeVisible();
+    await expect(page.getByRole('tab', { name: 'CDR' })).not.toBeVisible();
 
-    // Click CDR tab and verify
-    await cdrTab.click();
-    await expect(cdrTab).toHaveAttribute('aria-selected', 'true');
+    // Click PDF tab and verify
+    await pdfTab.click();
+    await expect(pdfTab).toHaveAttribute('aria-selected', 'true');
 
-    await page.screenshot({ path: '/Users/krystiangaleczka/.gemini/antigravity-ide/brain/4de5cd63-54c7-4829-bb93-4684783d1901/ai_cdr_export_dialog.png' });
+    await page.screenshot({ path: testInfo.outputPath('dtp_pdf_export_dialog.png') });
 
     await page.locator('.dialog-close').click();
     await expect(page.getByRole('dialog')).not.toBeVisible();

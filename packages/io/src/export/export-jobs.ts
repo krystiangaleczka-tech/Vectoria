@@ -1,10 +1,12 @@
-import type { ExportJob, ExportRequest, ExportStage } from './export-types.js';
+import type { ExportExecutionSnapshot, ExportJob, ExportRequest, ExportStage } from './export-types.js';
 
 export interface JobInput {
   readonly request: ExportRequest;
+  readonly snapshot?: ExportExecutionSnapshot;
   readonly run: (
     signal: AbortSignal,
     onStage: (stage: ExportStage, progress?: number) => void,
+    snapshot?: ExportExecutionSnapshot,
   ) => Promise<{ blob: Blob; fileName: string }>;
 }
 
@@ -118,7 +120,7 @@ export class ExportJobRunner {
         this.updateJob(id, { stage, progress });
       };
 
-      const result = await input.run(controller.signal, onStage);
+      const result = await input.run(controller.signal, onStage, input.snapshot);
 
       if (controller.signal.aborted) {
         this.updateJob(id, { status: 'cancelled' });
