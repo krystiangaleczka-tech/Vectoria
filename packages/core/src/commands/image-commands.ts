@@ -276,3 +276,58 @@ export class TraceImageCommand implements Command {
     };
   }
 }
+
+/**
+ * Sets the missing status flag on an ImageObject with undo support (ASSET-009).
+ * Used when an external linked resource is unavailable or fails to load.
+ */
+export class SetImageMissingStatusCommand implements Command {
+  readonly type = 'set-image-missing-status';
+  readonly description = 'Set image missing status';
+  private previousStatus: boolean | undefined = undefined;
+
+  constructor(
+    private readonly objectId: ObjectId,
+    private readonly isMissing: boolean,
+  ) {}
+
+  execute(doc: DocumentModel): DocumentModel {
+    const obj = doc.objects[this.objectId];
+    if (!obj || obj.type !== 'image') return doc;
+
+    this.previousStatus = obj.isMissing;
+
+    const nextImage: ImageObject = {
+      ...obj,
+      isMissing: this.isMissing,
+    };
+
+    return {
+      ...doc,
+      objects: {
+        ...doc.objects,
+        [this.objectId]: nextImage,
+      },
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  undo(doc: DocumentModel): DocumentModel {
+    const obj = doc.objects[this.objectId];
+    if (!obj || obj.type !== 'image') return doc;
+
+    const nextImage: ImageObject = {
+      ...obj,
+      isMissing: this.previousStatus,
+    };
+
+    return {
+      ...doc,
+      objects: {
+        ...doc.objects,
+        [this.objectId]: nextImage,
+      },
+      updatedAt: new Date().toISOString(),
+    };
+  }
+}

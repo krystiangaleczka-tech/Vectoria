@@ -114,8 +114,11 @@ export interface RightDockProps {
   onInsertStockSvg?: (svgData: string, name: string) => void;
   onApplyBrandFont?: (fontFamily: string) => void;
   onAddBrandLogo?: (file: File) => void;
+  onInsertBrandLogo?: (logo: { readonly id: string; readonly name: string; readonly imageUrl?: string; readonly svgData?: string }) => void;
+  onEditSymbolDefinition?: (symbolId: string, name: string) => void;
   onEmbedImage?: (objectId: string) => void;
   onRelinkImage?: (objectId: string, file: File) => void;
+  onSetImageMissingStatus?: (objectId: string, isMissing: boolean) => void;
   onImportBrandKit?: (brandKit: import('@vectoria/core').BrandKit) => void;
 }
 
@@ -228,8 +231,11 @@ export const RightDock: React.FC<RightDockProps> = ({
   onInsertStockSvg,
   onApplyBrandFont,
   onAddBrandLogo,
+  onInsertBrandLogo,
+  onEditSymbolDefinition,
   onEmbedImage,
   onRelinkImage,
+  onSetImageMissingStatus,
   onImportBrandKit,
 }) => {
   const [localActivePanel, setLocalActivePanel] = useState<DockPanel>('properties');
@@ -363,6 +369,8 @@ export const RightDock: React.FC<RightDockProps> = ({
             onInsertStockSvg={onInsertStockSvg}
             onApplyBrandFont={onApplyBrandFont}
             onAddBrandLogo={onAddBrandLogo}
+            onInsertBrandLogo={onInsertBrandLogo}
+            onEditSymbolDefinition={onEditSymbolDefinition}
             onImportBrandKit={onImportBrandKit}
           />
         )}
@@ -372,6 +380,7 @@ export const RightDock: React.FC<RightDockProps> = ({
             onSelectObject={(id) => onSelectObject(id)}
             onEmbedImage={(id) => onEmbedImage?.(id)}
             onRelinkImage={(id, file) => onRelinkImage?.(id, file)}
+            onSetImageMissingStatus={onSetImageMissingStatus}
           />
         )}
         {activePanel === 'artboards' && onSelectArtboard && onCreateArtboard && onDuplicateArtboard && onDeleteArtboard && onRenameArtboard && onOrientArtboard && (

@@ -488,14 +488,14 @@ Wymóg stopniowego rozszerzania artboardu o 10% wynika bezpośrednio z potrzeby 
 - [x] **FX-013** Dodać rozszerzone blend modes
 - [x] **FX-014** Dodać pattern fill
 - [x] **FX-015** Dodać texture fill
-- [x] **FX-016** Dodać brushes kaligraficzne
-- [x] **FX-017** Dodać brushes artystyczne
-- [x] **FX-018** Dodać pattern brushes
-- [x] **FX-019** Dodać distort
-- [x] **FX-020** Dodać envelope distortion
-- [x] **FX-021** Dodać mesh
-- [x] **FX-022** Dodać perspective
-- [x] **FX-023** Dodać podstawowe 3D
+- [ ] **FX-016** Dodać brushes kaligraficzne (częściowe MVP: kąt i spłaszczenie w narzędziu brush; zaawansowany silnik pędzli w planie)
+- [ ] **FX-017** Dodać brushes artystyczne (MVP: rozciąganie wektora wzdłuż ścieżki w planie)
+- [ ] **FX-018** Dodać pattern brushes (MVP: powtarzanie segmentów w planie)
+- [ ] **FX-019** Dodać distort (MVP: proste transformacje zniekształceń w planie)
+- [ ] **FX-020** Dodać envelope distortion (MVP: siatka deformacji obwiedni w planie)
+- [ ] **FX-021** Dodać mesh (gradient mesh w planie)
+- [ ] **FX-022** Dodać perspective (siatka perspektywiczna w planie)
+- [ ] **FX-023** Dodać podstawowe 3D (ekstruzja i obrót w planie)
 - [x] **FX-024** Dodać radial repeat
 - [x] **FX-025** Dodać mirror repeat
 - [x] **FX-026** Dodać grid repeat
@@ -546,11 +546,11 @@ Wymóg stopniowego rozszerzania artboardu o 10% wynika bezpośrednio z potrzeby 
 - [x] **IO-009** Dodać PNG import
 - [x] **IO-010** Dodać JPG import
 - [x] **IO-011** Dodać WebP import
-- [x] **IO-012** Dodać PDF import z zachowaniem wektorów tam, gdzie możliwe
-- [x] **IO-013** Dodać EPS import
-- [x] **IO-014** Dodać AI import
-- [x] **IO-015** Dodać CDR import
-- [x] **IO-016** Jasno oznaczać ograniczenia AI/CDR importu
+- [ ] **IO-012** Dodać PDF import z zachowaniem wektorów tam, gdzie możliwe (częściowy import wektorowy: ścieżki i teksty z obsługą skali/stron, fallback do rasteryzacji; pełny PDF print/color engine jako dalszy etap)
+- [ ] **IO-013** Dodać EPS import (częściowy: odzyskiwanie wektorów PostScript Level 2/3 oraz TIFF/WMF preview; pełny interpreter języka PostScript jako dalszy etap)
+- [ ] **IO-014** Dodać AI import (częściowy: odzyskiwanie strumienia PDF-compatible stream w kontenerze .ai; natywne formaty PGF/legacy AI jako dalszy etap)
+- [ ] **IO-015** Dodać CDR import (częściowy: ekstrakcja wektorów SVG/XML z archiwum PKZIP CorelDRAW v13+; binarne wersje raportują uczciwy status unsupported)
+- [x] **IO-016** Jasno oznaczać ograniczenia AI/CDR/EPS/PDF importu (ImportReport z wpisami editable/simplified/unsupported i wskazówkami)
 - [x] **IO-017** Dodać wklejanie SVG ze schowka
 - [x] **IO-018** Dodać bezpieczne parsowanie nieufnego SVG
 - [x] **IO-019** Dodać walidację i sanityzację importowanego SVG

@@ -12,6 +12,13 @@ export const cdrProvider: FormatProvider = {
     const buffer = await file.arrayBuffer();
     const result = await parseCdr(buffer);
 
+    if (result.objects.length === 0) {
+      return {
+        status: 'unsupported',
+        report: result.report,
+      };
+    }
+
     return {
       status: 'ok-partial',
       objects: result.objects,

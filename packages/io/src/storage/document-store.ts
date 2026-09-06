@@ -129,6 +129,7 @@ export async function saveLastKnownGoodSnapshot(document: DocumentModel, revisio
     revision,
     savedAt: new Date().toISOString(),
   };
+  await activeRepository.save(CURRENT_DOC_KEY, snapshot).catch(() => {});
   const key = documentId ?? document.id;
   return activeRepository.saveAtomic?.(key, snapshot, LAST_KNOWN_GOOD_KEY) ?? activeRepository.save(key, snapshot);
 }
@@ -149,6 +150,7 @@ export async function saveDocumentSnapshot(document: DocumentModel, revision: nu
     revision,
     savedAt: new Date().toISOString(),
   };
+  await activeRepository.save(CURRENT_DOC_KEY, snapshot).catch(() => {});
   const key = documentId ?? document.id;
   return activeRepository.save(key, snapshot);
 }

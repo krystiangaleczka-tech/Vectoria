@@ -1,7 +1,9 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { parseEps } from '../src/eps/eps-parser.js';
 import { importAi } from '../src/ai/ai-importer.js';
 import { parseCdr } from '../src/cdr/cdr-parser.js';
+import { ZipBuilder } from '../src/cdr/zip-builder.js';
 import { epsProvider, aiProvider, cdrProvider } from '../src/providers/honest-unsupported-providers.js';
 
 describe('EPIC-15: EPS, AI, and CDR Vector Parsers', () => {
@@ -97,15 +99,31 @@ startxref
       0x00, 0x00, 0x00, 0x00,
     ]);
 
-    it('extracts vector objects from CDR container', async () => {
+    it('reports unsupported for binary CDR container without embedded SVG (zero fake geometry)', async () => {
       const { objects, report } = await parseCdr(cdrRifxFixture.buffer);
-      expect(objects.length).toBeGreaterThanOrEqual(1);
-      expect(objects[0]!.type).toBe('path');
-      expect(report.editable).toBeGreaterThanOrEqual(1);
+      expect(objects).toHaveLength(0);
+      expect(report.unsupported).toBeGreaterThanOrEqual(1);
+      expect(report.entries[0]?.code).toBe('cdr.binary_stream.unsupported');
     });
 
-    it('cdrProvider imports File and returns ok-partial with objects', async () => {
-      const file = new File([cdrRifxFixture], 'drawing.cdr', { type: 'application/x-coreldraw' });
+    it('cdrProvider returns status unsupported for binary CDR files without embedded SVG', async () => {
+      const file = new File([cdrRifxFixture.buffer as ArrayBuffer], 'drawing.cdr', { type: 'application/x-coreldraw' });
+      const result = await cdrProvider.import(file);
+      expect(result.status).toBe('unsupported');
+      expect('objects' in result).toBe(false);
+    });
+
+    it('extracts real vector objects from CDR package with embedded SVG stream', async () => {
+      const builder = new ZipBuilder();
+      const svgStream = `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect x="10" y="10" width="80" height="80" fill="#ff0000" /></svg>`;
+      builder.addFile('content/root.xml', svgStream);
+      const zipBytes = builder.build();
+
+      const { objects, report } = await parseCdr(zipBytes.buffer as ArrayBuffer);
+      expect(objects.length).toBeGreaterThanOrEqual(1);
+      expect(report.editable).toBeGreaterThanOrEqual(1);
+
+      const file = new File([zipBytes.buffer as ArrayBuffer], 'package.cdr', { type: 'application/x-coreldraw' });
       const result = await cdrProvider.import(file);
       expect(result.status).toBe('ok-partial');
       if (result.status === 'ok-partial') {

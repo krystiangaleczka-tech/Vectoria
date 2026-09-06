@@ -75,6 +75,23 @@ startxref
     }
   });
 
+  it('scales imported geometry and font sizes when scale option is provided', async () => {
+    const result = await importPdf(pdfFixture, { scale: 2 });
+    const texts = result.objects.filter((obj) => obj.type === 'text');
+    expect(texts.length).toBeGreaterThanOrEqual(1);
+    if (texts[0]!.type === 'text') {
+      expect(texts[0]!.fontSize).toBe(48); // 24 * 2
+    }
+  });
+
+  it('generates a detailed compatibility report for extracted elements', async () => {
+    const result = await importPdf(pdfFixture);
+    expect(result.report).toBeDefined();
+    expect(result.report!.editable).toBeGreaterThanOrEqual(2);
+    expect(result.report!.entries.some((e) => e.code === 'pdf.paths.extracted')).toBe(true);
+    expect(result.report!.entries.some((e) => e.code === 'pdf.text.extracted')).toBe(true);
+  });
+
   it('rejects invalid PDF buffer with controlled error', async () => {
     const invalidBuffer = new TextEncoder().encode('NOT A VALID PDF PAYLOAD').buffer;
     await expect(importPdf(invalidBuffer)).rejects.toThrow(/brak sygnatury %PDF-/);

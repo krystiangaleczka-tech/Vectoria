@@ -5,9 +5,10 @@ import type {
   StrokeStyle,
   TextObject,
   Artboard,
+  ImportReport,
 } from '@vectoria/core';
 import type { Vec2 } from '@vectoria/shared';
-import { createTransform, defaultObjectStyle } from '@vectoria/core';
+import { createTransform, defaultObjectStyle, countReport } from '@vectoria/core';
 import { generateId } from '@vectoria/shared';
 
 export interface PdfImportOptions {
@@ -21,6 +22,7 @@ export interface ImportedDocument {
   readonly pageCount: number;
   readonly title?: string;
   readonly artboards?: Artboard[];
+  readonly report?: ImportReport;
 }
 
 interface GraphicsState {
@@ -34,15 +36,15 @@ interface GraphicsState {
   fontSize: number;
 }
 
-const defaultGraphicsState = (): GraphicsState => ({
-  ctm: [1, 0, 0, 1, 0, 0],
+const defaultGraphicsState = (scale: number = 1): GraphicsState => ({
+  ctm: [scale, 0, 0, scale, 0, 0],
   fillColor: '#000000',
   strokeColor: '#000000',
-  strokeWidth: 1,
+  strokeWidth: 1 * scale,
   lineCap: 'butt',
   lineJoin: 'miter',
   fontFamily: 'Inter',
-  fontSize: 16,
+  fontSize: 16 * scale,
 });
 
 /**
@@ -111,7 +113,7 @@ function cmykToRgbHex(c: number, m: number, y: number, k: number): string {
  */
 export async function importPdf(
   data: ArrayBuffer | Uint8Array,
-  _options: PdfImportOptions = {},
+  options: PdfImportOptions = {},
 ): Promise<ImportedDocument> {
   const uint8 = data instanceof Uint8Array ? data : new Uint8Array(data);
   const rawText = new TextDecoder('latin1').decode(uint8);
@@ -121,9 +123,10 @@ export async function importPdf(
     throw new Error('Plik nie jest poprawnym dokumentem PDF (brak sygnatury %PDF-)');
   }
 
+  const scale = options.scale !== undefined && options.scale > 0 ? options.scale : 1;
   const objects: SceneObject[] = [];
   const stateStack: GraphicsState[] = [];
-  let state = defaultGraphicsState();
+  let state = defaultGraphicsState(scale);
 
   // Find stream ... endstream blocks
   const streamRegex = /stream\r?\n([\s\S]*?)\r?\nendstream/g;
@@ -217,7 +220,29 @@ export async function importPdf(
     isPathClosed = false;
   };
 
-  for (const stream of streamsToParse) {
+  // Determine page count from document dictionary
+  const pagesCountMatch = rawText.match(/\/Count\s+(\d+)/);
+  const pageCount = pagesCountMatch ? parseInt(pagesCountMatch[1]!, 10) : 1;
+
+  // Filter streams by pageNumber if multiple streams exist and not importAllPages
+  let streamsToExecute = streamsToParse;
+  if (
+    options.pageNumber !== undefined &&
+    options.pageNumber > 0 &&
+    !options.importAllPages &&
+    streamsToParse.length > 1
+  ) {
+    const pageIndex = Math.min(streamsToParse.length - 1, options.pageNumber - 1);
+    streamsToExecute = [streamsToParse[pageIndex]!];
+  }
+
+  const knownUnsupportedOps = new Set([
+    'Do', 'sh', 'W', 'W*', 'd0', 'd1', 'cs', 'sc', 'SC', 'scn', 'SCN', 'ri', 'i', 'gs', 'MP', 'DP', 'BMC', 'BDC', 'EMC'
+  ]);
+  let skippedOpsCount = 0;
+  const skippedOpNames = new Set<string>();
+
+  for (const stream of streamsToExecute) {
     // Tokenize stream into operands and operators
     // Matches tokens: strings in (), hex strings in <>, or space-separated numbers/names
     const tokens = stream.match(/\([^)]*\)|<[^>]*>|[^\s()<>]+/g) || [];
@@ -309,7 +334,7 @@ export async function importPdf(
         // Line width & styles
         case 'w': {
           if (stack.length >= 1) {
-            state.strokeWidth = Math.max(0.1, parseFloat(stack.pop()!));
+            state.strokeWidth = Math.max(0.1, parseFloat(stack.pop()!) * scale);
           }
           break;
         }
@@ -501,9 +526,31 @@ export async function importPdf(
         // Text
         case 'Tf': {
           if (stack.length >= 2) {
-            state.fontSize = parseFloat(stack.pop()!);
+            state.fontSize = parseFloat(stack.pop()!) * scale;
             const rawFont = stack.pop()!.replace(/^\//, '');
             state.fontFamily = rawFont || 'Inter';
+          }
+          break;
+        }
+        case 'Td':
+        case 'TD': {
+          if (stack.length >= 2) {
+            const ty = parseFloat(stack.pop()!);
+            const tx = parseFloat(stack.pop()!);
+            currentPoint = transformPoint({ x: tx, y: ty }, state.ctm);
+          }
+          break;
+        }
+        case 'Tm': {
+          if (stack.length >= 6) {
+            const f = parseFloat(stack.pop()!);
+            const e = parseFloat(stack.pop()!);
+            const d = parseFloat(stack.pop()!);
+            const c = parseFloat(stack.pop()!);
+            const b = parseFloat(stack.pop()!);
+            const a = parseFloat(stack.pop()!);
+            state.ctm = multiplyMatrices(state.ctm, [a, b, c, d, e, f]);
+            currentPoint = transformPoint({ x: 0, y: 0 }, state.ctm);
           }
           break;
         }
@@ -545,23 +592,52 @@ export async function importPdf(
         }
 
         default:
+          if (knownUnsupportedOps.has(token)) {
+            skippedOpsCount++;
+            skippedOpNames.add(token);
+          }
           stack.push(token);
           break;
       }
     }
   }
 
-  // Determine page count from document dictionary
-  const pagesCountMatch = rawText.match(/\/Count\s+(\d+)/);
-  const pageCount = pagesCountMatch ? parseInt(pagesCountMatch[1]!, 10) : 1;
-
   // Extract Title if present
   const titleMatch = rawText.match(/\/Title\s*\(([^)]+)\)/);
   const title = titleMatch ? titleMatch[1] : undefined;
+
+  const reportEntries: import('@vectoria/core').ImportReportEntry[] = [];
+  const pathCount = objects.filter((o) => o.type === 'path').length;
+  const textCount = objects.filter((o) => o.type === 'text').length;
+
+  if (pathCount > 0) {
+    reportEntries.push({
+      category: 'editable',
+      code: 'pdf.paths.extracted',
+      message: `Wyodrębniono ${pathCount} ścieżek wektorowych z PDF`,
+    });
+  }
+  if (textCount > 0) {
+    reportEntries.push({
+      category: 'editable',
+      code: 'pdf.text.extracted',
+      message: `Wyodrębniono ${textCount} bloków tekstu z PDF`,
+    });
+  }
+  if (skippedOpsCount > 0) {
+    reportEntries.push({
+      category: 'simplified',
+      code: 'pdf.operators.skipped',
+      message: `Pominięto ${skippedOpsCount} nieobsługiwanych lub zaawansowanych operatorów PDF (${[...skippedOpNames].slice(0, 5).join(', ')})`,
+    });
+  }
+
+  const report = countReport(reportEntries);
 
   return {
     objects,
     pageCount,
     title,
+    report,
   };
 }

@@ -6,6 +6,7 @@ import {
   UpdateImagePropertiesCommand,
   CropImageCommand,
   TraceImageCommand,
+  SetImageMissingStatusCommand,
   validateInvariants,
   type ImageObject,
   type PathObject,
@@ -183,5 +184,47 @@ describe('Image Commands (EPIC-12)', () => {
     expect(doc.objects['traced-path-1']).toBeUndefined();
     expect(doc.layers[layerId]!.objectIds).toContain('img-trace');
     expect(validateInvariants(doc)).toEqual([]);
+  });
+
+  it('updates image missing status with undo/redo (ASSET-009)', () => {
+    let doc = createDefaultDocument({ name: 'Missing Link Doc' });
+    const layerId = doc.layerIds[0]!;
+    const img: ImageObject = {
+      id: 'img-link-1',
+      name: 'Linked Image',
+      layerId,
+      visible: true,
+      locked: false,
+      type: 'image',
+      transform: createTransform({ x: 0, y: 0 }),
+      style: { fill: { type: 'none' }, stroke: null, opacity: 1, blendMode: 'normal' },
+      source: { type: 'link', url: 'https://example.com/broken.png', mimeType: 'image/png' },
+      naturalWidth: 400,
+      naturalHeight: 300,
+      width: 200,
+      height: 150,
+    };
+    doc = new CreateImageObjectCommand(img, layerId).execute(doc);
+
+    expect((doc.objects['img-link-1'] as ImageObject).isMissing).toBeUndefined();
+
+    // Mark missing
+    const missingCmd = new SetImageMissingStatusCommand('img-link-1', true);
+    doc = missingCmd.execute(doc);
+    expect((doc.objects['img-link-1'] as ImageObject).isMissing).toBe(true);
+    expect(validateInvariants(doc)).toEqual([]);
+
+    // Undo reverts to undefined
+    doc = missingCmd.undo(doc);
+    expect((doc.objects['img-link-1'] as ImageObject).isMissing).toBeUndefined();
+
+    // Redo restores isMissing: true
+    doc = missingCmd.execute(doc);
+    expect((doc.objects['img-link-1'] as ImageObject).isMissing).toBe(true);
+
+    // Clear missing status
+    const restoreCmd = new SetImageMissingStatusCommand('img-link-1', false);
+    doc = restoreCmd.execute(doc);
+    expect((doc.objects['img-link-1'] as ImageObject).isMissing).toBe(false);
   });
 });

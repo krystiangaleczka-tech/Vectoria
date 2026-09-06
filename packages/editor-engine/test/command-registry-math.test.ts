@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CommandRegistry, type EditorCommand, type EditorContext } from '../src/commands/command-registry.js';
-import { evaluateNumber } from '../src/math/expression-parser.js';
+import { evaluateNumber, parseAndEvaluateNumber } from '../src/math/expression-parser.js';
 
 describe('EPIC-14: Command Registry & Math Parser', () => {
   describe('CommandRegistry', () => {
@@ -70,6 +70,63 @@ describe('EPIC-14: Command Registry & Math Parser', () => {
       expect(evaluateNumber('2in')).toBe(192); // 2 * 96
       expect(evaluateNumber('100px')).toBe(100);
       expect(evaluateNumber('25.4mm')).toBeCloseTo(96, 1);
+    });
+  });
+
+  describe('parseAndEvaluateNumber (Result & Error Handling)', () => {
+    it('returns error on division by zero', () => {
+      const res = parseAndEvaluateNumber('100 / 0');
+      expect(res.ok).toBe(false);
+      if (!res.ok) {
+        expect(res.error.kind).toBe('division-by-zero');
+        expect(res.error.message).toContain('Division by zero');
+      }
+    });
+
+    it('returns error on unconsumed trailing tokens', () => {
+      const res = parseAndEvaluateNumber('12foo');
+      expect(res.ok).toBe(false);
+      if (!res.ok) {
+        expect(res.error.kind).toBe('unconsumed-tokens');
+      }
+    });
+
+    it('returns error on unbalanced parentheses', () => {
+      const res = parseAndEvaluateNumber('(20 + 30');
+      expect(res.ok).toBe(false);
+      if (!res.ok) {
+        expect(res.error.kind).toBe('unbalanced-parens');
+      }
+    });
+
+    it('returns error on empty or whitespace expression', () => {
+      const res = parseAndEvaluateNumber('   ');
+      expect(res.ok).toBe(false);
+      if (!res.ok) {
+        expect(res.error.kind).toBe('empty');
+      }
+    });
+
+    it('uses context.currentUnit for unitless numbers', () => {
+      const res = parseAndEvaluateNumber('25.4', { currentUnit: 'mm' });
+      expect(res.ok).toBe(true);
+      if (res.ok) {
+        expect(res.value).toBeCloseTo(96, 1); // 25.4mm in px is 96
+      }
+
+      const resInches = parseAndEvaluateNumber('2', { currentUnit: 'in' });
+      expect(resInches.ok).toBe(true);
+      if (resInches.ok) {
+        expect(resInches.value).toBe(192); // 2in in px is 192
+      }
+    });
+
+    it('handles mixed unit expressions accurately', () => {
+      const res = parseAndEvaluateNumber('100px + 1in');
+      expect(res.ok).toBe(true);
+      if (res.ok) {
+        expect(res.value).toBe(196); // 100 + 96
+      }
     });
   });
 });

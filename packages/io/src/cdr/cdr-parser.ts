@@ -1,6 +1,5 @@
-import type { PathNode, PathObject, SceneObject } from '@vectoria/core';
-import { createTransform, defaultObjectStyle, countReport, type ImportReport } from '@vectoria/core';
-import { generateId } from '@vectoria/shared';
+import type { SceneObject, ImportReport } from '@vectoria/core';
+import { countReport } from '@vectoria/core';
 import { importSvgWithReport } from '../svg/import.js';
 
 export interface CdrImportResult {
@@ -23,8 +22,6 @@ export async function parseCdr(data: ArrayBuffer | Uint8Array): Promise<CdrImpor
     throw new Error('Plik nie jest poprawnym dokumentem CorelDRAW (.cdr)');
   }
 
-  const objects: SceneObject[] = [];
-
   // Search for embedded SVG or XML vector stream within the CDR container
   const rawText = new TextDecoder('latin1').decode(bytes);
   const svgStart = rawText.indexOf('<svg');
@@ -39,54 +36,21 @@ export async function parseCdr(data: ArrayBuffer | Uint8Array): Promise<CdrImpor
         report,
       };
     } catch {
-      // Fall through to binary chunk scanning
+      // Fall through to unextractable stream reporting
     }
   }
 
-  // Scan for vector coordinate sequences in RIFX/RIFF streams
-  // Generate recovered vector geometry
-  const defaultNodes: PathNode[] = [
-    { point: { x: 50, y: 50 }, inHandle: null, outHandle: null, kind: 'corner' },
-    { point: { x: 200, y: 50 }, inHandle: null, outHandle: null, kind: 'corner' },
-    { point: { x: 200, y: 150 }, inHandle: null, outHandle: null, kind: 'corner' },
-    { point: { x: 50, y: 150 }, inHandle: null, outHandle: null, kind: 'corner' },
-  ];
-
-  const recoveredPath: PathObject = {
-    id: generateId(),
-    type: 'path',
-    name: 'CDR Vector Object',
-    layerId: 'layer-1',
-    visible: true,
-    locked: false,
-    transform: createTransform({ x: 0, y: 0 }),
-    style: {
-      ...defaultObjectStyle,
-      fill: { type: 'solid', color: '#4f46e5' },
-      stroke: {
-        color: '#312e81',
-        width: 2,
-        lineCap: 'round',
-        lineJoin: 'round',
-        miterLimit: 4,
-        dashArray: [],
-        opacity: 1,
-      },
-      opacity: 1,
-    },
-    nodes: defaultNodes,
-    closed: true,
-  };
-
-  objects.push(recoveredPath);
-
+  // Binary CDR containers without embedded SVG stream cannot be extracted into synthetic geometry.
+  // Report honest unsupported status rather than manufacturing fake objects.
   const report = countReport([
     {
-      category: 'editable',
-      code: 'cdr.vector.extracted',
-      message: 'Zaimportowano geometrię wektorową z kontenera CorelDRAW',
+      category: 'unsupported',
+      code: 'cdr.binary_stream.unsupported',
+      message:
+        'Kontener CorelDRAW został rozpoznany, lecz plik nie zawiera osadzonego strumienia wektorowego SVG/XML. Odczyt surowych rekordów binarnych CDR (RIFF/RIFX) wymaga konwersji zewnętrznej.',
     },
   ]);
 
-  return { objects, report };
+  return { objects: [], report };
 }
+

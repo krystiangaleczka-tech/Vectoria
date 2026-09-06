@@ -12,6 +12,8 @@ export interface AssetsPanelProps {
   onInsertStockSvg?: (svgData: string, name: string) => void;
   onApplyBrandFont?: (fontFamily: string) => void;
   onAddBrandLogo?: (file: File) => void;
+  onInsertBrandLogo?: (logo: { readonly id: string; readonly name: string; readonly imageUrl?: string; readonly svgData?: string }) => void;
+  onEditSymbolDefinition?: (symbolId: string, name: string) => void;
   onImportBrandKit?: (brandKit: import('@vectoria/core').BrandKit) => void;
 }
 
@@ -44,6 +46,8 @@ export const AssetsPanel: React.FC<AssetsPanelProps> = ({
   onInsertStockSvg,
   onApplyBrandFont,
   onAddBrandLogo,
+  onInsertBrandLogo,
+  onEditSymbolDefinition,
   onImportBrandKit,
 }) => {
   const [activeSection, setActiveSection] = useState<AssetSection>('all');
@@ -141,19 +145,44 @@ export const AssetsPanel: React.FC<AssetsPanelProps> = ({
             ) : (
               <div className="assets-grid">
                 {filteredSymbols.map((sym) => (
-                  <button
-                    key={sym.id}
-                    type="button"
-                    className="asset-card symbol-card"
-                    onClick={() => onInsertSymbol?.(sym.id)}
-                    title={`Wstaw instancję symbolu: ${sym.name} (${sym.bounds.width}×${sym.bounds.height}px)`}
-                  >
-                    <div className="asset-preview-box symbol-preview">
-                      <VectoriaIcon name="symbol" size={24} className="symbol-icon-large" />
-                    </div>
-                    <span className="asset-card-label">{sym.name}</span>
-                    <span className="asset-card-sub">{Math.round(sym.bounds.width)}×{Math.round(sym.bounds.height)}</span>
-                  </button>
+                  <div key={sym.id} className="asset-card-container" style={{ display: 'flex', flexDirection: 'column' }}>
+                    <button
+                      type="button"
+                      className="asset-card symbol-card"
+                      onClick={() => onInsertSymbol?.(sym.id)}
+                      title={`Wstaw instancję symbolu: ${sym.name} (${sym.bounds.width}×${sym.bounds.height}px)`}
+                    >
+                      <div className="asset-preview-box symbol-preview">
+                        <VectoriaIcon name="symbol" size={24} className="symbol-icon-large" />
+                      </div>
+                      <span className="asset-card-label">{sym.name}</span>
+                      <span className="asset-card-sub">{Math.round(sym.bounds.width)}×{Math.round(sym.bounds.height)}</span>
+                    </button>
+                    {onEditSymbolDefinition && (
+                      <button
+                        type="button"
+                        style={{
+                          fontSize: '10px',
+                          padding: '2px',
+                          marginTop: '2px',
+                          background: 'transparent',
+                          border: '1px solid rgba(128,128,128,0.2)',
+                          borderRadius: '3px',
+                          cursor: 'pointer',
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const newName = prompt('Zmień nazwę symbolu:', sym.name);
+                          if (newName && newName.trim()) {
+                            onEditSymbolDefinition(sym.id, newName.trim());
+                          }
+                        }}
+                        title="Zmień nazwę lub edytuj definicję symbolu"
+                      >
+                        Zmień nazwę
+                      </button>
+                    )}
+                  </div>
                 ))}
               </div>
             )}
@@ -245,7 +274,13 @@ export const AssetsPanel: React.FC<AssetsPanelProps> = ({
               ) : (
                 <div className="brand-logos-grid">
                   {brandLogos.map((logo) => (
-                    <div key={logo.id} className="brand-logo-card">
+                    <div
+                      key={logo.id}
+                      className="brand-logo-card"
+                      onClick={() => onInsertBrandLogo?.(logo)}
+                      style={{ cursor: onInsertBrandLogo ? 'pointer' : 'default' }}
+                      title={onInsertBrandLogo ? `Kliknij, aby wstawić logo "${logo.name}" na canvas` : logo.name}
+                    >
                       {logo.imageUrl ? (
                         <img src={logo.imageUrl} alt={logo.name} className="brand-logo-thumb" />
                       ) : (
@@ -264,18 +299,36 @@ export const AssetsPanel: React.FC<AssetsPanelProps> = ({
                 <span>Fonty Brandowe</span>
               </div>
               <div className="brand-fonts-list">
-                {brandFonts.map((font) => (
-                  <button
-                    key={font}
-                    type="button"
-                    className="brand-font-pill"
-                    style={{ fontFamily: font }}
-                    onClick={() => onApplyBrandFont?.(font)}
-                    title={`Zastosuj font marki: ${font}`}
-                  >
-                    {font}
-                  </button>
-                ))}
+                {brandFonts.map((font) => {
+                  const isAvailable =
+                    typeof document !== 'undefined' && document.fonts?.check
+                      ? document.fonts.check(`16px "${font}"`)
+                      : true;
+                  return (
+                    <button
+                      key={font}
+                      type="button"
+                      className="brand-font-pill"
+                      style={{ fontFamily: font }}
+                      onClick={() => onApplyBrandFont?.(font)}
+                      title={`Zastosuj font marki: ${font} (${isAvailable ? 'Dostępny w systemie' : 'Niedostępny / oczekuje na załadowanie'})`}
+                    >
+                      <span>{font}</span>
+                      <span
+                        style={{
+                          fontSize: '9px',
+                          marginLeft: 5,
+                          padding: '1px 4px',
+                          borderRadius: 3,
+                          background: isAvailable ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                          color: isAvailable ? '#10b981' : '#ef4444',
+                        }}
+                      >
+                        {isAvailable ? '✓' : '?'}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 

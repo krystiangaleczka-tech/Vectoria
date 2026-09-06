@@ -773,15 +773,45 @@ function renderSceneObject(ctx: CanvasRenderingContext2D, obj: SceneObject, doc?
 }
 
 const imageElementCache = new Map<string, HTMLImageElement>();
+const failedImageUrls = new Set<string>();
+type ImageLoadErrorHandler = (src: string) => void;
+const imageLoadErrorListeners = new Set<ImageLoadErrorHandler>();
+
+/**
+ * Registers a listener invoked whenever an image fails to load (404, network error, CORS).
+ */
+export function registerImageLoadErrorHandler(handler: ImageLoadErrorHandler): () => void {
+  imageLoadErrorListeners.add(handler);
+  return () => imageLoadErrorListeners.delete(handler);
+}
+
+export function isImageFailed(src: string): boolean {
+  return failedImageUrls.has(src);
+}
 
 export function getOrLoadImage(src: string): HTMLImageElement | null {
   if (typeof Image === 'undefined' || !src) return null;
+  if (failedImageUrls.has(src)) return null;
+
   const cached = imageElementCache.get(src);
   if (cached) {
     return cached.complete && cached.naturalWidth > 0 ? cached : null;
   }
   const img = new Image();
   img.crossOrigin = 'anonymous';
+  img.onload = () => {
+    failedImageUrls.delete(src);
+  };
+  img.onerror = () => {
+    failedImageUrls.add(src);
+    for (const listener of imageLoadErrorListeners) {
+      try {
+        listener(src);
+      } catch {
+        // Suppress listener exceptions
+      }
+    }
+  };
   img.src = src;
   imageElementCache.set(src, img);
   return null;
@@ -814,22 +844,24 @@ function renderImage(ctx: CanvasRenderingContext2D, obj: ImageObject): void {
   ctx.globalAlpha = obj.style.opacity;
 
   const src = obj.source.type === 'embed' ? obj.source.data : obj.source.url;
+  const isFailed = isImageFailed(src);
+  const isMissing = Boolean(obj.isMissing || isFailed);
   const img = getOrLoadImage(src);
 
-  if (obj.isMissing || !img) {
-    ctx.fillStyle = obj.isMissing ? 'rgba(239, 68, 68, 0.12)' : 'rgba(100, 116, 139, 0.12)';
-    ctx.strokeStyle = obj.isMissing ? '#ef4444' : '#64748b';
+  if (isMissing || !img) {
+    ctx.fillStyle = isMissing ? 'rgba(239, 68, 68, 0.12)' : 'rgba(100, 116, 139, 0.12)';
+    ctx.strokeStyle = isMissing ? '#ef4444' : '#64748b';
     ctx.lineWidth = 1;
     ctx.setLineDash([4, 4]);
     ctx.fillRect(0, 0, obj.width, obj.height);
     ctx.strokeRect(0.5, 0.5, obj.width - 1, obj.height - 1);
     ctx.setLineDash([]);
 
-    ctx.fillStyle = obj.isMissing ? '#ef4444' : '#94a3b8';
+    ctx.fillStyle = isMissing ? '#ef4444' : '#94a3b8';
     ctx.font = '12px system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    const label = obj.isMissing ? '⚠️ Missing Asset' : 'Loading Image...';
+    const label = isMissing ? '⚠️ Missing Asset' : 'Loading Image...';
     ctx.fillText(label, obj.width / 2, obj.height / 2);
     ctx.restore();
     return;

@@ -122,6 +122,7 @@ export {
   UpdateImagePropertiesCommand,
   CropImageCommand,
   TraceImageCommand,
+  SetImageMissingStatusCommand,
 } from './image-commands.js';
 export {
   CreateSymbolCommand,

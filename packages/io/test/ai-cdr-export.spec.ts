@@ -1,5 +1,6 @@
+// @vitest-environment jsdom
 import { describe, it, expect } from 'vitest';
-import { createDefaultDocument } from '@vectoria/core';
+import { createDefaultDocument, createTransform, type SceneObject } from '@vectoria/core';
 import { exportAiFile } from '../src/ai/ai-exporter.js';
 import { exportCdrFile } from '../src/cdr/cdr-exporter.js';
 import { ZipBuilder, crc32 } from '../src/cdr/zip-builder.js';
@@ -58,7 +59,29 @@ describe('AI and CDR Export and Round-trip (ADR-021)', () => {
 
   describe('exportCdrFile (.cdr)', () => {
     it('exports a valid CorelDRAW PKZIP container with metadata and vector stream', async () => {
-      const doc = createDefaultDocument({ name: 'CorelDRAW Test File', width: 1000, height: 700 });
+      const baseDoc = createDefaultDocument({ name: 'CorelDRAW Test File', width: 1000, height: 700 });
+      const layerId = baseDoc.layerIds[0]!;
+      const rectObj: SceneObject = {
+        id: 'r1',
+        name: 'Rect',
+        layerId,
+        visible: true,
+        locked: false,
+        type: 'rectangle',
+        transform: createTransform({ x: 50, y: 50 }),
+        style: { fill: { type: 'solid', color: '#4f46e5' }, stroke: null, opacity: 1, blendMode: 'normal' },
+        width: 200,
+        height: 150,
+        cornerRadius: { topLeft: 0, topRight: 0, bottomRight: 0, bottomLeft: 0 },
+      };
+      const doc = {
+        ...baseDoc,
+        objects: { ...baseDoc.objects, r1: rectObj },
+        layers: {
+          ...baseDoc.layers,
+          [layerId]: { ...baseDoc.layers[layerId]!, objectIds: ['r1'] },
+        },
+      };
       const cdrBlob = await exportCdrFile(doc);
 
       expect(cdrBlob.type).toBe('application/x-coreldraw');

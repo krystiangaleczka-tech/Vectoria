@@ -158,4 +158,86 @@ describe('Symbol & Component Commands (EPIC-12)', () => {
     expect(doc.objects[instanceId]!.type).toBe('symbol-instance');
     expect(doc.objects[detachedId]).toBeUndefined();
   });
+
+  it('cleans up source objects across multiple layers without leaving dangling IDs', () => {
+    let doc = createDefaultDocument({ name: 'Multi Layer Symbol Doc' });
+    const layer1Id = doc.layerIds[0]!;
+    const layer2Id = 'layer-2';
+
+    doc = {
+      ...doc,
+      layerIds: [...doc.layerIds, layer2Id],
+      layers: {
+        ...doc.layers,
+        [layer2Id]: {
+          id: layer2Id,
+          name: 'Layer 2',
+          visible: true,
+          locked: false,
+          opacity: 1,
+          objectIds: [],
+        },
+      },
+    };
+
+    const rect1: RectangleObject = {
+      id: 'rect-l1',
+      name: 'Rect Layer 1',
+      layerId: layer1Id,
+      visible: true,
+      locked: false,
+      type: 'rectangle',
+      transform: createTransform({ x: 10, y: 10 }),
+      style: { fill: { type: 'solid', color: '#ff0000' }, stroke: null, opacity: 1, blendMode: 'normal' },
+      width: 50,
+      height: 50,
+      cornerRadius: { topLeft: 0, topRight: 0, bottomRight: 0, bottomLeft: 0 },
+    };
+
+    const rect2: RectangleObject = {
+      id: 'rect-l2',
+      name: 'Rect Layer 2',
+      layerId: layer2Id,
+      visible: true,
+      locked: false,
+      type: 'rectangle',
+      transform: createTransform({ x: 70, y: 10 }),
+      style: { fill: { type: 'solid', color: '#00ff00' }, stroke: null, opacity: 1, blendMode: 'normal' },
+      width: 50,
+      height: 50,
+      cornerRadius: { topLeft: 0, topRight: 0, bottomRight: 0, bottomLeft: 0 },
+    };
+
+    doc = new CreateObjectsCommand([rect1], layer1Id).execute(doc);
+    doc = new CreateObjectsCommand([rect2], layer2Id).execute(doc);
+
+    expect(doc.layers[layer1Id]!.objectIds).toContain('rect-l1');
+    expect(doc.layers[layer2Id]!.objectIds).toContain('rect-l2');
+
+    // Create symbol spanning objects on both layer1 and layer2
+    const createCmd = new CreateSymbolCommand('Combined Symbol', ['rect-l1', 'rect-l2'], true);
+    doc = createCmd.execute(doc);
+
+    // Assert zero invariant violations (zero dangling IDs in any layer)
+    expect(validateInvariants(doc)).toEqual([]);
+    expect(doc.layers[layer2Id]!.objectIds).not.toContain('rect-l2');
+    expect(doc.layers[layer2Id]!.objectIds).toHaveLength(0);
+    expect(doc.layers[layer1Id]!.objectIds).not.toContain('rect-l1');
+    expect(doc.layers[layer1Id]!.objectIds).toHaveLength(1); // the new symbol-instance
+
+    // Assert each ID in layer.objectIds exists in doc.objects
+    for (const layer of Object.values(doc.layers)) {
+      for (const objId of layer.objectIds) {
+        expect(doc.objects[objId]).toBeDefined();
+      }
+    }
+
+    // Undo restores both layers
+    doc = createCmd.undo(doc);
+    expect(validateInvariants(doc)).toEqual([]);
+    expect(doc.layers[layer1Id]!.objectIds).toContain('rect-l1');
+    expect(doc.layers[layer2Id]!.objectIds).toContain('rect-l2');
+    expect(doc.objects['rect-l1']).toBeDefined();
+    expect(doc.objects['rect-l2']).toBeDefined();
+  });
 });

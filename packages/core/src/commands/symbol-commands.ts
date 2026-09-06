@@ -126,22 +126,21 @@ export class CreateSymbolCommand implements Command {
     }
     nextObjects[instanceId] = instanceObject;
 
-    const nextLayerObjectIds = targetLayer.objectIds
-      .filter((id) => !this.sourceObjectIds.includes(id))
-      .concat(instanceId);
+    const nextLayers = { ...doc.layers };
+    for (const [lId, layer] of Object.entries(doc.layers)) {
+      const filtered = layer.objectIds.filter((id) => !this.sourceObjectIds.includes(id));
+      nextLayers[lId] = {
+        ...layer,
+        objectIds: lId === targetLayerId ? [...filtered, instanceId] : filtered,
+      };
+    }
 
     return {
       ...doc,
       symbols: nextSymbols,
       symbolIds: nextSymbolIds,
       objects: nextObjects,
-      layers: {
-        ...doc.layers,
-        [targetLayerId]: {
-          ...targetLayer,
-          objectIds: nextLayerObjectIds,
-        },
-      },
+      layers: nextLayers,
       updatedAt: new Date().toISOString(),
     };
   }

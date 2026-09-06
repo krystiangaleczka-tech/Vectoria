@@ -103,10 +103,13 @@ import {
   UpdateImagePropertiesCommand,
   CropImageCommand,
   TraceImageCommand,
+  SetImageMissingStatusCommand,
   CreateSymbolCommand,
   InsertSymbolInstanceCommand,
+  UpdateSymbolDefinitionCommand,
   DetachSymbolInstanceCommand,
   UpdateBrandKitCommand,
+  createTransform,
   type ImageObject,
   type ImageCrop,
 } from '@vectoria/core';
@@ -1476,6 +1479,12 @@ export const EditorApp: React.FC = () => {
     handleExecuteCommand(new InsertSymbolInstanceCommand(symbolId, viewportCenter, targetLayerId));
   }, [doc, camera, handleExecuteCommand]);
 
+  const handleEditSymbolDefinition = useCallback((symbolId: string, newName: string) => {
+    if (!doc?.symbols?.[symbolId]) return;
+    const sym = doc.symbols[symbolId]!;
+    handleExecuteCommand(new UpdateSymbolDefinitionCommand(symbolId, sym.objects, newName));
+  }, [doc, handleExecuteCommand]);
+
   const handleCreateSymbolFromSelection = useCallback(() => {
     if (selectedObjectIds.length === 0) return;
     const name = prompt('Nazwa nowego symbolu:', 'Nowy Symbol') || 'Symbol';
@@ -1533,6 +1542,33 @@ export const EditorApp: React.FC = () => {
     reader.readAsDataURL(file);
   }, [doc?.brandKit, handleExecuteCommand]);
 
+  const handleInsertBrandLogo = useCallback((logo: { readonly id: string; readonly name: string; readonly imageUrl?: string; readonly svgData?: string }) => {
+    if (!doc) return;
+    const targetLayerId = doc.activeLayerId ?? doc.layerIds[0]!;
+    const viewportCenter = camera.screenToWorld({
+      x: window.innerWidth / 2,
+      y: window.innerHeight / 2,
+    });
+    if (logo.imageUrl) {
+      const imgObj: ImageObject = {
+        id: generateId(),
+        name: logo.name || 'Brand Logo',
+        layerId: targetLayerId,
+        visible: true,
+        locked: false,
+        type: 'image',
+        transform: createTransform(viewportCenter),
+        style: { fill: { type: 'none' }, stroke: null, opacity: 1, blendMode: 'normal' },
+        source: { type: 'link', url: logo.imageUrl, mimeType: 'image/png' },
+        naturalWidth: 200,
+        naturalHeight: 200,
+        width: 150,
+        height: 150,
+      };
+      handleExecuteCommand(new CreateImageObjectCommand(imgObj, targetLayerId));
+    }
+  }, [doc, camera, handleExecuteCommand]);
+
   const handleApplyBrandFont = useCallback((fontFamily: string) => {
     if (selectedObjectIds.length === 0 || !doc) return;
     for (const id of selectedObjectIds) {
@@ -1580,9 +1616,14 @@ export const EditorApp: React.FC = () => {
       handleExecuteCommand(new UpdateImagePropertiesCommand(objectId, {
         name: file.name.replace(/\.[^/.]+$/, ''),
         source: { type: 'embed', data, mimeType: file.type || 'image/png' },
+        isMissing: false,
       }));
     };
     reader.readAsDataURL(file);
+  }, [handleExecuteCommand]);
+
+  const handleSetImageMissingStatus = useCallback((objectId: string, isMissing: boolean) => {
+    handleExecuteCommand(new SetImageMissingStatusCommand(objectId, isMissing));
   }, [handleExecuteCommand]);
 
   const handleSetZoom = useCallback((factor: number) => {
@@ -2119,8 +2160,11 @@ export const EditorApp: React.FC = () => {
           onInsertStockSvg={handleInsertStockSvg}
           onApplyBrandFont={handleApplyBrandFont}
           onAddBrandLogo={handleAddBrandLogo}
+          onInsertBrandLogo={handleInsertBrandLogo}
+          onEditSymbolDefinition={handleEditSymbolDefinition}
           onEmbedImage={handleEmbedImage}
           onRelinkImage={handleRelinkImage}
+          onSetImageMissingStatus={handleSetImageMissingStatus}
           onImportBrandKit={handleImportBrandKit}
           activePanel={activeDockPanel}
           onPanelChange={setActiveDockPanel}

@@ -7,6 +7,7 @@ export interface LinksPanelProps {
   onSelectObject: (id: string) => void;
   onEmbedImage: (objectId: string) => void;
   onRelinkImage: (objectId: string, file: File) => void;
+  onSetImageMissingStatus?: (objectId: string, isMissing: boolean) => void;
 }
 
 export const LinksPanel: React.FC<LinksPanelProps> = ({
@@ -14,6 +15,7 @@ export const LinksPanel: React.FC<LinksPanelProps> = ({
   onSelectObject,
   onEmbedImage,
   onRelinkImage,
+  onSetImageMissingStatus,
 }) => {
   const [filterQuery, setFilterQuery] = useState('');
 
@@ -33,6 +35,45 @@ export const LinksPanel: React.FC<LinksPanelProps> = ({
     return name.includes(q) || url.includes(q);
   });
 
+  const [checkingLinks, setCheckingLinks] = useState(false);
+
+  const checkLinksAvailability = async () => {
+    if (!onSetImageMissingStatus || linkedImages.length === 0) return;
+    setCheckingLinks(true);
+    try {
+      await Promise.all(
+        linkedImages.map((img) => {
+          if (img.source.type !== 'link') return Promise.resolve();
+          const sourceUrl = img.source.url;
+          return new Promise<void>((resolve) => {
+            const probe = new Image();
+            probe.onload = () => {
+              if (img.isMissing) {
+                onSetImageMissingStatus(img.id, false);
+              }
+              resolve();
+            };
+            probe.onerror = () => {
+              if (!img.isMissing) {
+                onSetImageMissingStatus(img.id, true);
+              }
+              resolve();
+            };
+            setTimeout(() => {
+              if (!probe.complete) {
+                onSetImageMissingStatus(img.id, true);
+              }
+              resolve();
+            }, 4000);
+            probe.src = sourceUrl;
+          });
+        }),
+      );
+    } finally {
+      setCheckingLinks(false);
+    }
+  };
+
   return (
     <div className="panel-container links-panel" data-testid="links-panel">
       <div className="panel-header">
@@ -41,6 +82,18 @@ export const LinksPanel: React.FC<LinksPanelProps> = ({
           <span className="panel-title">Zewnętrzne zasoby i linki</span>
         </div>
         <div className="panel-badge">{linkedImages.length} linkowanych / {embeddedImages.length} osadzonych</div>
+        {linkedImages.length > 0 && onSetImageMissingStatus && (
+          <button
+            type="button"
+            className="action-btn-small"
+            style={{ marginTop: 6, fontSize: '11px', padding: '2px 8px' }}
+            onClick={checkLinksAvailability}
+            disabled={checkingLinks}
+            title="Sprawdź dostępność zewnętrznych linków"
+          >
+            {checkingLinks ? 'Sprawdzanie…' : 'Sprawdź linki'}
+          </button>
+        )}
       </div>
 
       <div className="panel-search-box">
@@ -82,6 +135,9 @@ export const LinksPanel: React.FC<LinksPanelProps> = ({
                       className="link-thumbnail"
                       onError={(e) => {
                         (e.target as HTMLElement).style.display = 'none';
+                        if (isLinked && onSetImageMissingStatus && !isMissing) {
+                          onSetImageMissingStatus(img.id, true);
+                        }
                       }}
                     />
                   )}
