@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 
+// VEC004 locks cancellation semantics for migrated Width, Smooth and Text sessions.
 async function drawSelectedPath(page: import('@playwright/test').Page) {
   const canvas = page.getByTestId('canvas-viewport');
   const box = await canvas.boundingBox();
