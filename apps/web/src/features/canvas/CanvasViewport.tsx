@@ -548,6 +548,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
 
   useEffect(() => () => {
     interactionLifecycleRef.current?.cancelAll('dispose');
+    qualityPolicyRef.current?.dispose();
   }, []);
 
   // Selected IDs as Set for renderer
@@ -1698,6 +1699,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       cornerStartScreenRef.current = null;
       setCornerPreview(null);
       try { (e.target as HTMLElement).releasePointerCapture(e.pointerId); } catch { /* capture may already be released */ }
+      qualityPolicyRef.current?.endInteraction();
       return;
     }
     if (!dragStateRef.current && activeTool === 'pen') {
@@ -1705,10 +1707,14 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       const result = penToolRef.current?.pointerUp({ screenPoint, worldPoint: snapWorldPoint(camera.screenToWorld(screenPoint)), shiftKey: e.shiftKey, altKey: e.altKey });
       if (result?.type === 'commit') commitPen(result.nodes, result.closed);
       setPenVersion((version) => version + 1);
+      qualityPolicyRef.current?.endInteraction();
       return;
     }
     const drag = dragStateRef.current;
-    if (!drag) return;
+    if (!drag) {
+      qualityPolicyRef.current?.endInteraction();
+      return;
+    }
 
     try {
       (e.target as HTMLElement).releasePointerCapture(drag.pointerId);
@@ -1874,7 +1880,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     snapResultRef.current = null;
   };
 
-  const cancelInteraction = (reason: InteractionLifecycleReason) => {
+  const cancelInteraction = useCallback((reason: InteractionLifecycleReason) => {
     if (reason === 'pointer-cancel' || reason === 'lost-pointer-capture') {
       // Pointer capture belongs to the transient Width/Smooth gestures. Text edit
       // is a longer-lived session and must not be cancelled by the capture we
@@ -1888,6 +1894,8 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
 
     activePointersRef.current.clear();
     pinchRef.current = null;
+    snapResultRef.current = null;
+    objectSnapRef.current = null;
 
     if (freehandOperationRef.current) {
       pencilToolRef.current?.cancel();
@@ -1901,6 +1909,8 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       freehandCursorRef.current = null;
       updatePathPreview({});
       setFreehandVersion((version) => version + 1);
+      qualityPolicyRef.current?.endInteraction();
+      renderLoopRef.current?.invalidate();
       return;
     }
     const drag = dragStateRef.current;
@@ -1918,6 +1928,8 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         cornerStartScreenRef.current = null;
         setCornerPreview(null);
       }
+      qualityPolicyRef.current?.endInteraction();
+      renderLoopRef.current?.invalidate();
       return;
     }
 
@@ -1937,13 +1949,14 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         shapeToolRef.current = null;
       }
     }
+    if (drag.type === 'marquee' || drag.type === 'lasso' || drag.type === 'node-lasso') lassoSessionRef.current = null;
     if (drag.type === 'text-create') textToolRef.current?.cancel();
     dragSessionRef.current = null;
 
     dragStateRef.current = null;
     renderLoopRef.current?.invalidate();
     qualityPolicyRef.current?.endInteraction();
-  };
+  }, [activeTool, updateDragPreview, updatePathPreview, updateStylePreview]);
 
   const commitPen = useCallback((nodes: readonly import('@vectoria/core').PathNode[], closed: boolean) => {
     if (nodes.length < 2) return;
@@ -1995,7 +2008,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   useEffect(() => {
     const toolChanged = previousActiveToolRef.current !== activeTool;
     previousActiveToolRef.current = activeTool;
-    if (toolChanged) interactionLifecycleRef.current?.cancelAll('tool-switch');
+    if (toolChanged) cancelInteraction('tool-switch');
 
     if (activeTool !== 'corner') {
       cornerToolRef.current?.cancel();
@@ -2023,7 +2036,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     smoothStartScreenRef.current = null;
     updatePathPreview({});
     setFreehandVersion((version) => version + 1);
-  }, [activeTool, commitPen]);
+  }, [activeTool, cancelInteraction, commitPen]);
 
   // Keyboard shortcuts (Space, Delete, Escape)
   useEffect(() => {
