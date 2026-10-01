@@ -1,0 +1,115 @@
+name: VEC005 lifecycle patch
+
+on:
+  push:
+    branches:
+      - task/vec-005-tool-lifecycle-matrix
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply VEC005 lifecycle fixes
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('apps/web/src/features/canvas/CanvasViewport.tsx')
+          text = path.read_text()
+
+          def replace_once(source: str, target: str) -> None:
+              global text
+              count = text.count(source)
+              if count != 1:
+                  raise SystemExit(f'Expected exactly one match, found {count}: {source[:100]!r}')
+              text = text.replace(source, target, 1)
+
+          replace_once(
+              "  useEffect(() => () => {\n    interactionLifecycleRef.current?.cancelAll('dispose');\n  }, []);",
+              "  useEffect(() => () => {\n    interactionLifecycleRef.current?.cancelAll('dispose');\n    qualityPolicyRef.current?.dispose();\n  }, []);",
+          )
+
+          start = text.index("  const cancelInteraction = (reason: InteractionLifecycleReason) => {")
+          end = text.index("\n\n  const commitPen", start)
+          block = text[start:end]
+          block = block.replace(
+              "  const cancelInteraction = (reason: InteractionLifecycleReason) => {",
+              "  const cancelInteraction = useCallback((reason: InteractionLifecycleReason) => {",
+              1,
+          )
+          if "    activePointersRef.current.clear();\n    pinchRef.current = null;" not in block:
+              raise SystemExit('cancelInteraction pointer cleanup anchor missing')
+          block = block.replace(
+              "    activePointersRef.current.clear();\n    pinchRef.current = null;",
+              "    activePointersRef.current.clear();\n    pinchRef.current = null;\n    snapResultRef.current = null;\n    objectSnapRef.current = null;",
+              1,
+          )
+          if "      updatePathPreview({});\n      setFreehandVersion((version) => version + 1);\n      return;" not in block:
+              raise SystemExit('cancelInteraction freehand cleanup anchor missing')
+          block = block.replace(
+              "      updatePathPreview({});\n      setFreehandVersion((version) => version + 1);\n      return;",
+              "      updatePathPreview({});\n      setFreehandVersion((version) => version + 1);\n      qualityPolicyRef.current?.endInteraction();\n      renderLoopRef.current?.invalidate();\n      return;",
+              1,
+          )
+          no_drag_anchor = "      if (activeTool === 'corner') {\n        cornerToolRef.current?.cancel();\n        cornerStartScreenRef.current = null;\n        setCornerPreview(null);\n      }\n      return;"
+          if no_drag_anchor not in block:
+              raise SystemExit('cancelInteraction idle cleanup anchor missing')
+          block = block.replace(
+              no_drag_anchor,
+              "      if (activeTool === 'corner') {\n        cornerToolRef.current?.cancel();\n        cornerStartScreenRef.current = null;\n        setCornerPreview(null);\n      }\n      qualityPolicyRef.current?.endInteraction();\n      renderLoopRef.current?.invalidate();\n      return;",
+              1,
+          )
+          shape_anchor = "    if (drag.type === 'create-shape') {\n      if (shapeToolRef.current?.currentState === 'drawing') {\n        shapeToolRef.current?.cancel();\n        shapeToolRef.current = null;\n      }\n    }"
+          if shape_anchor not in block:
+              raise SystemExit('cancelInteraction shape cleanup anchor missing')
+          block = block.replace(
+              shape_anchor,
+              shape_anchor + "\n    if (drag.type === 'marquee' || drag.type === 'lasso' || drag.type === 'node-lasso') lassoSessionRef.current = null;",
+              1,
+          )
+          if not block.endswith("  };"):
+              raise SystemExit('cancelInteraction closing anchor missing')
+          block = block[:-4] + "  }, [activeTool, updateDragPreview, updatePathPreview, updateStylePreview]);"
+          text = text[:start] + block + text[end:]
+
+          replace_once(
+              "    if (toolChanged) interactionLifecycleRef.current?.cancelAll('tool-switch');",
+              "    if (toolChanged) cancelInteraction('tool-switch');",
+          )
+          replace_once(
+              "  }, [activeTool, commitPen]);",
+              "  }, [activeTool, cancelInteraction, commitPen]);",
+          )
+
+          replace_once(
+              "      try { (e.target as HTMLElement).releasePointerCapture(e.pointerId); } catch { /* capture may already be released */ }\n      return;\n    }\n    if (!dragStateRef.current && activeTool === 'pen') {",
+              "      try { (e.target as HTMLElement).releasePointerCapture(e.pointerId); } catch { /* capture may already be released */ }\n      qualityPolicyRef.current?.endInteraction();\n      return;\n    }\n    if (!dragStateRef.current && activeTool === 'pen') {",
+          )
+          replace_once(
+              "      if (result?.type === 'commit') commitPen(result.nodes, result.closed);\n      setPenVersion((version) => version + 1);\n      return;\n    }\n    const drag = dragStateRef.current;\n    if (!drag) return;",
+              "      if (result?.type === 'commit') commitPen(result.nodes, result.closed);\n      setPenVersion((version) => version + 1);\n      qualityPolicyRef.current?.endInteraction();\n      return;\n    }\n    const drag = dragStateRef.current;\n    if (!drag) {\n      qualityPolicyRef.current?.endInteraction();\n      return;\n    }",
+          )
+
+          path.write_text(text)
+          PY
+          git diff --check
+      - name: Commit lifecycle fixes
+        shell: bash
+        run: |
+          if git diff --quiet -- apps/web/src/features/canvas/CanvasViewport.tsx; then
+            echo "No VEC005 production patch needed."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/web/src/features/canvas/CanvasViewport.tsx
+          git commit -m "fix(vec005): cancel generic interactions on lifecycle transitions"
+          git push
