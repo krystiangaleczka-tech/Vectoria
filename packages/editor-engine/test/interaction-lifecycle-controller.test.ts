@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { InteractionLifecycleController, type InteractionLifecycleReason } from '../src/index.js';
+import { InteractionLifecycleController } from '../src/index.js';
 
 describe('interaction lifecycle controller', () => {
   it('routes one lifecycle reason to the active interaction exactly once', () => {
     const controller = new InteractionLifecycleController();
-    const cancel = vi.fn<(reason: InteractionLifecycleReason) => void>();
+    const cancel = vi.fn();
 
     controller.register({ id: 'drag', cancel });
 
