@@ -69,7 +69,8 @@ test.describe('TASK-VEC-006: Tool Rail and shortcut registry parity', () => {
     await page.keyboard.press('x');
     await expect(canvas).toHaveAttribute('data-tool', 'eraser');
 
+    await page.getByTestId('tool-select').click();
     await page.keyboard.press('Shift+E');
-    await expect(canvas).toHaveAttribute('data-tool', 'eraser');
+    await expect(canvas).toHaveAttribute('data-tool', 'select');
   });
 });
