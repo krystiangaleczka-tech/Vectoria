@@ -2000,7 +2000,7 @@ export const EditorApp: React.FC = () => {
       {/* Main Workspace Area */}
       <div className="editor-main-area">
         {/* Left Tool Rail */}
-        <ToolRail activeTool={activeTool} onSelectTool={setActiveTool} />
+        <ToolRail activeTool={activeTool} onSelectTool={setActiveTool} shortcuts={shortcuts} />
 
         {/* Center Canvas */}
         <div className="canvas-workspace" data-testid="canvas-workspace">
