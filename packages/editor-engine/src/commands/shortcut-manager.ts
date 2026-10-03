@@ -78,10 +78,51 @@ export interface ShortcutActionMeta {
   readonly label: string;
 }
 
+export interface ToolShortcutActionMeta extends ShortcutActionMeta {
+  readonly toolId: string;
+  readonly defaultCombo?: ShortcutCombo;
+}
+
+const combo = (key: string, opts: Partial<ShortcutCombo> = {}): ShortcutCombo =>
+  ({ key, meta: false, ctrl: false, shift: false, alt: false, ...opts });
+
 /**
- * Registry of user-configurable action metadata displayed in menus, command palette, and shortcut settings.
+ * Canonical registry for every Tool Rail tool. Tool UI derives shortcut hints
+ * from this registry instead of maintaining a second hardcoded shortcut list.
  */
-export const SHORTCUT_ACTIONS: readonly ShortcutActionMeta[] = [
+export const TOOL_SHORTCUT_ACTIONS: readonly ToolShortcutActionMeta[] = [
+  { toolId: 'select', actionId: 'tool.select', label: 'Narzędzie: Zaznaczanie', defaultCombo: combo('v') },
+  { toolId: 'direct-select', actionId: 'tool.direct-select', label: 'Narzędzie: Zaznaczanie węzłów', defaultCombo: combo('a') },
+  { toolId: 'lasso', actionId: 'tool.lasso', label: 'Narzędzie: Lasso', defaultCombo: combo('o') },
+  { toolId: 'node-lasso', actionId: 'tool.node-lasso', label: 'Narzędzie: Lasso węzłów', defaultCombo: combo('o', { shift: true }) },
+  { toolId: 'rectangle', actionId: 'tool.rectangle', label: 'Narzędzie: Prostokąt', defaultCombo: combo('r') },
+  { toolId: 'ellipse', actionId: 'tool.ellipse', label: 'Narzędzie: Elipsa', defaultCombo: combo('l') },
+  { toolId: 'line', actionId: 'tool.line', label: 'Narzędzie: Linia', defaultCombo: combo('\\') },
+  { toolId: 'polygon', actionId: 'tool.polygon', label: 'Narzędzie: Wielokąt' },
+  { toolId: 'star', actionId: 'tool.star', label: 'Narzędzie: Gwiazda' },
+  { toolId: 'arc', actionId: 'tool.arc', label: 'Narzędzie: Łuk' },
+  { toolId: 'pie', actionId: 'tool.pie', label: 'Narzędzie: Wycinek koła' },
+  { toolId: 'ring', actionId: 'tool.ring', label: 'Narzędzie: Pierścień' },
+  { toolId: 'spiral', actionId: 'tool.spiral', label: 'Narzędzie: Spirala' },
+  { toolId: 'callout', actionId: 'tool.callout', label: 'Narzędzie: Dymek' },
+  { toolId: 'polyline', actionId: 'tool.polyline', label: 'Narzędzie: Polilinia' },
+  { toolId: 'pen', actionId: 'tool.pen', label: 'Narzędzie: Pióro', defaultCombo: combo('p') },
+  { toolId: 'pencil', actionId: 'tool.pencil', label: 'Narzędzie: Ołówek', defaultCombo: combo('n') },
+  { toolId: 'brush', actionId: 'tool.brush', label: 'Narzędzie: Pędzel', defaultCombo: combo('b') },
+  { toolId: 'smooth', actionId: 'tool.smooth', label: 'Narzędzie: Wygładzanie', defaultCombo: combo('s') },
+  { toolId: 'corner', actionId: 'tool.corner', label: 'Narzędzie: Narożnik', defaultCombo: combo('q') },
+  { toolId: 'eraser', actionId: 'tool.eraser', label: 'Narzędzie: Gumka', defaultCombo: combo('e', { shift: true }) },
+  { toolId: 'knife', actionId: 'tool.knife', label: 'Narzędzie: Nóż', defaultCombo: combo('k') },
+  { toolId: 'scissors', actionId: 'tool.scissors', label: 'Narzędzie: Nożyce', defaultCombo: combo('c') },
+  { toolId: 'width', actionId: 'tool.width', label: 'Narzędzie: Szerokość', defaultCombo: combo('w') },
+  { toolId: 'text', actionId: 'tool.text', label: 'Narzędzie: Tekst', defaultCombo: combo('t') },
+  { toolId: 'eyedropper', actionId: 'tool.eyedropper', label: 'Narzędzie: Pipeta', defaultCombo: combo('i') },
+  { toolId: 'bucket', actionId: 'tool.bucket', label: 'Narzędzie: Wypełnienie', defaultCombo: combo('g') },
+  { toolId: 'hand', actionId: 'tool.hand', label: 'Narzędzie: Ręka', defaultCombo: combo('h') },
+  { toolId: 'zoom', actionId: 'tool.zoom', label: 'Narzędzie: Lupa', defaultCombo: combo('z') },
+];
+
+const GENERAL_SHORTCUT_ACTIONS: readonly ShortcutActionMeta[] = [
   { actionId: 'clipboard.copy', label: 'Kopiuj' },
   { actionId: 'clipboard.cut', label: 'Wytnij' },
   { actionId: 'clipboard.paste', label: 'Wklej' },
@@ -101,34 +142,17 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionMeta[] = [
   { actionId: 'view.command-palette', label: 'Paleta poleceń' },
   { actionId: 'view.zoom-100', label: 'Zoom 100%' },
   { actionId: 'view.fit-artboard', label: 'Dopasuj obszar roboczy' },
-  { actionId: 'tool.select', label: 'Narzędzie: Zaznaczanie' },
-  { actionId: 'tool.direct-select', label: 'Narzędzie: Zaznaczanie węzłów' },
-  { actionId: 'tool.lasso', label: 'Narzędzie: Lasso' },
-  { actionId: 'tool.rectangle', label: 'Narzędzie: Prostokąt' },
-  { actionId: 'tool.ellipse', label: 'Narzędzie: Elipsa' },
-  { actionId: 'tool.line', label: 'Narzędzie: Linia' },
-  { actionId: 'tool.text', label: 'Narzędzie: Tekst' },
-  { actionId: 'tool.pen', label: 'Narzędzie: Pióro' },
-  { actionId: 'tool.pencil', label: 'Narzędzie: Ołówek' },
-  { actionId: 'tool.brush', label: 'Narzędzie: Pędzel' },
-  { actionId: 'tool.smooth', label: 'Narzędzie: Wygładzanie' },
-  { actionId: 'tool.corner', label: 'Narzędzie: Narożnik' },
-  { actionId: 'tool.knife', label: 'Narzędzie: Nóż' },
-  { actionId: 'tool.scissors', label: 'Narzędzie: Nożyce' },
-  { actionId: 'tool.width', label: 'Narzędzie: Szerokość' },
-  { actionId: 'tool.eyedropper', label: 'Narzędzie: Pipeta' },
-  { actionId: 'tool.bucket', label: 'Narzędzie: Wypełnienie' },
-  { actionId: 'tool.hand', label: 'Narzędzie: Ręka' },
-  { actionId: 'tool.zoom', label: 'Narzędzie: Lupa' },
 ];
 
-const combo = (key: string, opts: Partial<ShortcutCombo> = {}): ShortcutCombo =>
-  ({ key, meta: false, ctrl: false, shift: false, alt: false, ...opts });
-
 /**
- * Default keyboard shortcuts providing cross-platform fallback matching the legacy editor keydown handlers.
+ * Registry of user-configurable action metadata displayed in menus, command palette, and shortcut settings.
  */
-export const DEFAULT_SHORTCUTS: readonly { actionId: string; combo: ShortcutCombo }[] = [
+export const SHORTCUT_ACTIONS: readonly ShortcutActionMeta[] = [
+  ...GENERAL_SHORTCUT_ACTIONS,
+  ...TOOL_SHORTCUT_ACTIONS.map(({ actionId, label }) => ({ actionId, label })),
+];
+
+const GENERAL_DEFAULT_SHORTCUTS: readonly ShortcutBinding[] = [
   { actionId: 'clipboard.copy', combo: combo('c', { meta: true, ctrl: true }) },
   { actionId: 'clipboard.cut', combo: combo('x', { meta: true, ctrl: true }) },
   { actionId: 'clipboard.paste', combo: combo('v', { meta: true, ctrl: true }) },
@@ -147,25 +171,36 @@ export const DEFAULT_SHORTCUTS: readonly { actionId: string; combo: ShortcutComb
   { actionId: 'view.zoom-100', combo: combo('0', { meta: true, ctrl: true }) },
   { actionId: 'view.fit-artboard', combo: combo('1', { meta: true, ctrl: true }) },
   { actionId: 'view.solo-layer', combo: combo('s', { alt: true }) },
-  { actionId: 'tool.select', combo: combo('v') },
-  { actionId: 'tool.direct-select', combo: combo('a') },
-  { actionId: 'tool.lasso', combo: combo('o') },
-  { actionId: 'tool.rectangle', combo: combo('r') },
-  { actionId: 'tool.ellipse', combo: combo('l') },
-  { actionId: 'tool.line', combo: combo('\\') },
-  { actionId: 'tool.text', combo: combo('t') },
-  { actionId: 'tool.pen', combo: combo('p') },
-  { actionId: 'tool.pencil', combo: combo('n') },
-  { actionId: 'tool.brush', combo: combo('b') },
-  { actionId: 'tool.smooth', combo: combo('s') },
-  { actionId: 'tool.corner', combo: combo('q') },
-  { actionId: 'tool.knife', combo: combo('k') },
-  { actionId: 'tool.scissors', combo: combo('c') },
-  { actionId: 'tool.width', combo: combo('w') },
-  { actionId: 'tool.eyedropper', combo: combo('i') },
-  { actionId: 'tool.bucket', combo: combo('g') },
-  { actionId: 'tool.hand', combo: combo('h') },
-  { actionId: 'tool.zoom', combo: combo('z') },
 ];
+
+/**
+ * Default keyboard shortcuts. Tool defaults are generated from TOOL_SHORTCUT_ACTIONS
+ * so the runtime router, settings dialog and Tool Rail share one source of truth.
+ */
+export const DEFAULT_SHORTCUTS: readonly ShortcutBinding[] = [
+  ...GENERAL_DEFAULT_SHORTCUTS,
+  ...TOOL_SHORTCUT_ACTIONS.flatMap(({ actionId, defaultCombo }) =>
+    defaultCombo ? [{ actionId, combo: defaultCombo }] : []
+  ),
+];
+
+export function getToolShortcutAction(toolId: string): ToolShortcutActionMeta | undefined {
+  return TOOL_SHORTCUT_ACTIONS.find((action) => action.toolId === toolId);
+}
+
+export function formatShortcutCombo(combo: ShortcutCombo, isMac: boolean): string {
+  if (!combo.key) return '';
+  const parts: string[] = [];
+  if ((isMac && combo.meta) || (!isMac && combo.ctrl)) parts.push(isMac ? 'Cmd' : 'Ctrl');
+  if (combo.alt) parts.push(isMac ? 'Option' : 'Alt');
+  if (combo.shift) parts.push('Shift');
+
+  let key = combo.key;
+  if (key === ' ') key = 'Space';
+  else if (key.length === 1) key = key.toUpperCase();
+
+  parts.push(key);
+  return parts.join('+');
+}
 
 export type ShortcutBinding = { actionId: string; combo: ShortcutCombo };
