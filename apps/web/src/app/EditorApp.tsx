@@ -1481,7 +1481,7 @@ export const EditorApp: React.FC = () => {
     handleExecuteCommand(new InsertSymbolInstanceCommand(symbolId, viewportCenter, targetLayerId));
   }, [doc, camera, handleExecuteCommand]);
 
-  const handleEditSymbolDefinition = useCallback((symbolId: string, newName: string) => {
+  const handleRenameSymbol = useCallback((symbolId: string, newName: string) => {
     if (!doc?.symbols?.[symbolId]) return;
     const sym = doc.symbols[symbolId]!;
     handleExecuteCommand(new UpdateSymbolDefinitionCommand(symbolId, sym.objects, newName));
@@ -2187,7 +2187,7 @@ export const EditorApp: React.FC = () => {
           onApplyBrandFont={handleApplyBrandFont}
           onAddBrandLogo={handleAddBrandLogo}
           onInsertBrandLogo={handleInsertBrandLogo}
-          onEditSymbolDefinition={handleEditSymbolDefinition}
+          onRenameSymbol={handleRenameSymbol}
           onEmbedImage={handleEmbedImage}
           onRelinkImage={handleRelinkImage}
           onSetImageMissingStatus={handleSetImageMissingStatus}
