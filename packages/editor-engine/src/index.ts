@@ -2,6 +2,12 @@ export { Camera, MIN_ZOOM, MAX_ZOOM } from './camera.js';
 export { hitTest, hitTestDetailed, hitTestCandidates, type HitTestResult, type HitTestOptions } from './hit-test.js';
 export { SelectionService, selectionService, emptySelection } from './selection-service.js';
 export { DragSession, type TransformSession, type TransformOperation } from './interaction/drag-session.js';
+export {
+  InteractionLifecycleController,
+  type InteractionLifecycleCancel,
+  type InteractionLifecycleReason,
+  type InteractionLifecycleRegistration,
+} from './interaction/interaction-lifecycle-controller.js';
 export { LassoSession } from './interaction/lasso-session.js';
 export { SelectTool, type SelectToolContext } from './tools/select-tool.js';
 export { DirectSelectTool, type NodeHit } from './tools/direct-select-tool.js';
