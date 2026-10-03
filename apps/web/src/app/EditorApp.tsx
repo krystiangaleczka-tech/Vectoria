@@ -133,6 +133,7 @@ import {
   rasterizeSvgToPng,
   downloadBlob,
   importSvgToDocument,
+  sanitizeSvg,
   saveDocumentVersion,
   listDocumentVersions,
   loadPaletteLibrary,
@@ -173,6 +174,7 @@ import { useImportController } from '../features/import/useImportController.js';
 import { importRegistry } from '../features/import/import-registry.js';
 import { ImportDialog } from '../features/import/ImportDialog.js';
 import { ExportDialog } from '../features/dialogs/ExportDialog.js';
+import { inferImageMimeType, isSvgBrandLogoFile } from '../features/assets/brand-logo.js';
 import { useExportController } from '../features/export/useExportController.js';
 import { useWorkspace } from '../features/workspace/useWorkspace.js';
 import { ProjectGallery } from '../features/workspace/ProjectGallery.js';
@@ -1495,7 +1497,7 @@ export const EditorApp: React.FC = () => {
     handleExecuteCommand(new DetachSymbolInstanceCommand(id));
   }, [handleExecuteCommand]);
 
-  const handleInsertStockSvg = useCallback((svgData: string, name: string) => {
+  const handleInsertEditableSvg = useCallback((svgData: string, name: string) => {
     if (!doc) return;
     try {
       const importedDoc = importSvgToDocument(svgData);
@@ -1504,7 +1506,7 @@ export const EditorApp: React.FC = () => {
         x: window.innerWidth / 2,
         y: window.innerHeight / 2,
       });
-      const targetLayerId = doc.activeLayerId;
+      const targetLayerId = doc.activeLayerId ?? doc.layerIds[0]!;
       const positioned = objects.map((obj) => ({
         ...obj,
         id: generateId(),
@@ -1520,20 +1522,37 @@ export const EditorApp: React.FC = () => {
       }));
       handleExecuteCommand(new CreateObjectsCommand(positioned, targetLayerId));
     } catch (err) {
-      console.error('Failed to insert stock SVG:', err);
+      console.error('Failed to insert editable SVG:', err);
     }
   }, [doc, camera, handleExecuteCommand]);
 
-  const handleAddBrandLogo = useCallback((file: File) => {
+  const handleInsertStockSvg = useCallback((svgData: string, name: string) => {
+    handleInsertEditableSvg(svgData, name);
+  }, [handleInsertEditableSvg]);
+
+  const handleAddBrandLogo = useCallback(async (file: File) => {
+    const name = file.name.replace(/\.[^/.]+$/, '');
+    const currentBrandKit = doc?.brandKit ?? {};
+
+    if (isSvgBrandLogoFile(file)) {
+      try {
+        const svgText = await file.text();
+        const { text: svgData } = sanitizeSvg(svgText);
+        const newLogo = { id: generateId(), name, svgData };
+        handleExecuteCommand(new UpdateBrandKitCommand({
+          ...currentBrandKit,
+          logos: [...(currentBrandKit.logos ?? []), newLogo],
+        }));
+      } catch (err) {
+        console.error('Failed to add SVG Brand Kit logo:', err);
+      }
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = () => {
       const dataUrl = reader.result as string;
-      const newLogo = {
-        id: generateId(),
-        name: file.name.replace(/\.[^/.]+$/, ''),
-        imageUrl: dataUrl,
-      };
-      const currentBrandKit = doc?.brandKit ?? {};
+      const newLogo = { id: generateId(), name, imageUrl: dataUrl };
       handleExecuteCommand(new UpdateBrandKitCommand({
         ...currentBrandKit,
         logos: [...(currentBrandKit.logos ?? []), newLogo],
@@ -1544,12 +1563,19 @@ export const EditorApp: React.FC = () => {
 
   const handleInsertBrandLogo = useCallback((logo: { readonly id: string; readonly name: string; readonly imageUrl?: string; readonly svgData?: string }) => {
     if (!doc) return;
-    const targetLayerId = doc.activeLayerId ?? doc.layerIds[0]!;
-    const viewportCenter = camera.screenToWorld({
-      x: window.innerWidth / 2,
-      y: window.innerHeight / 2,
-    });
+
+    if (logo.svgData) {
+      handleInsertEditableSvg(logo.svgData, logo.name || 'Brand Logo');
+      return;
+    }
+
     if (logo.imageUrl) {
+      const targetLayerId = doc.activeLayerId ?? doc.layerIds[0]!;
+      const viewportCenter = camera.screenToWorld({
+        x: window.innerWidth / 2,
+        y: window.innerHeight / 2,
+      });
+      const mimeType = inferImageMimeType(logo.imageUrl);
       const imgObj: ImageObject = {
         id: generateId(),
         name: logo.name || 'Brand Logo',
@@ -1559,7 +1585,7 @@ export const EditorApp: React.FC = () => {
         type: 'image',
         transform: createTransform(viewportCenter),
         style: { fill: { type: 'none' }, stroke: null, opacity: 1, blendMode: 'normal' },
-        source: { type: 'link', url: logo.imageUrl, mimeType: 'image/png' },
+        source: { type: 'link', url: logo.imageUrl, ...(mimeType ? { mimeType } : {}) },
         naturalWidth: 200,
         naturalHeight: 200,
         width: 150,
@@ -1567,7 +1593,7 @@ export const EditorApp: React.FC = () => {
       };
       handleExecuteCommand(new CreateImageObjectCommand(imgObj, targetLayerId));
     }
-  }, [doc, camera, handleExecuteCommand]);
+  }, [doc, camera, handleExecuteCommand, handleInsertEditableSvg]);
 
   const handleApplyBrandFont = useCallback((fontFamily: string) => {
     if (selectedObjectIds.length === 0 || !doc) return;
