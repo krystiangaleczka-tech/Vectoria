@@ -14,13 +14,13 @@ async function createAndSelectRectangle(page: Page) {
     y: box.y + box.height / 2,
   };
 
-  await page.getByRole('button', { name: 'Rectangle Tool' }).click();
+  await page.getByTestId('tool-rectangle').click();
   await page.mouse.move(center.x - 45, center.y - 45);
   await page.mouse.down();
   await page.mouse.move(center.x + 45, center.y + 45, { steps: 5 });
   await page.mouse.up();
 
-  await page.getByRole('button', { name: 'Select Tool', exact: true }).click();
+  await page.getByTestId('tool-select').click();
   await page.mouse.click(center.x, center.y);
 
   const xInput = page.getByTestId('prop-x').locator('input');

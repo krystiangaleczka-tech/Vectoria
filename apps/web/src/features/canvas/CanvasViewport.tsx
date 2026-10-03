@@ -60,7 +60,7 @@ import {
   computeTextFrameLayout,
   SetTextContentCommand,
 } from '@vectoria/core';
- import { Camera, DragSession, SelectTool, DirectSelectTool, PenTool, PencilTool, BrushTool, SmoothTool, CornerTool, EraserTool, KnifeTool, ScissorsTool, WidthTool, SnapService, IsolationService, LassoSession, InteractionLifecycleController, calculateObjectSnap, ShapeTool, PolylineTool, EyedropperTool, PaintBucketTool, TextTool, TextEditSession, hitTolerancePx, type GridSettings, type SnapResult, type ObjectSnapResult, type StyleSampleTarget, type InteractionLifecycleReason } from '@vectoria/editor-engine';
+ import { Camera, DragSession, SelectTool, DirectSelectTool, PenTool, PencilTool, BrushTool, SmoothTool, CornerTool, EraserTool, KnifeTool, ScissorsTool, WidthTool, SnapService, IsolationService, LassoSession, InteractionLifecycleController, calculateObjectSnap, ShapeTool, PolylineTool, EyedropperTool, PaintBucketTool, TextTool, TextEditSession, hitTolerancePx, routeCanvasKeyDown, routeCanvasKeyUp, type CanvasTextEditKeyboardCommand, type GridSettings, type SnapResult, type ObjectSnapResult, type StyleSampleTarget, type InteractionLifecycleReason } from '@vectoria/editor-engine';
 import { mat3TransformPoint, parseColor } from '@vectoria/shared';
 import {
   RenderLoop,
@@ -2025,191 +2025,192 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     setFreehandVersion((version) => version + 1);
   }, [activeTool, cancelInteraction, commitPen]);
 
-  // Keyboard shortcuts (Space, Delete, Escape)
+  // Canvas-local keyboard effects. Routing policy lives in editor-engine so
+  // precedence can be tested without coupling it to this React component.
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't intercept when user is typing in an input
+    const handleAltTransition = (pressed: boolean, isKeyDown: boolean) => {
+      const wasAltKey = altKeyRef.current;
+      altKeyRef.current = pressed;
+      if (wasAltKey === pressed) return;
+
       if (
-        document.activeElement?.tagName === 'INPUT' ||
-        document.activeElement?.tagName === 'TEXTAREA'
+        isKeyDown
+        && !dragStateRef.current
+        && activeTool === 'select'
+        && selectedIds.size > 0
+        && freehandCursorRef.current
       ) {
+        const screenPos = camera.worldToScreen(freehandCursorRef.current);
+        const pickContext = {
+          document: doc,
+          selection,
+          screenPoint: screenPos,
+          worldPoint: freehandCursorRef.current,
+          zoom: camera.zoom,
+          additive: false,
+          allowedObjectIds: isolationRef.current.context
+            ? new Set(isolationRef.current.context.objectIds)
+            : undefined,
+        };
+        const hit = selectTool.pick(pickContext).hit;
+        hoveredObjectIdRef.current = hit?.objectId ?? null;
+      } else if (!isKeyDown) {
+        hoveredObjectIdRef.current = null;
+      }
+
+      renderLoopRef.current?.invalidate();
+    };
+
+    const handleTextEditAction = (
+      e: KeyboardEvent,
+      command: CanvasTextEditKeyboardCommand,
+    ) => {
+      e.preventDefault();
+
+      if (command.type === 'cancel') {
+        interactionLifecycleRef.current?.cancel(TEXT_EDIT_INTERACTION_ID, 'escape');
         return;
       }
 
-      if (textEditSessionRef.current) {
-        const session = textEditSessionRef.current;
+      const session = textEditSessionRef.current;
+      if (!session) return;
 
-        if (e.key === 'Escape') {
-          e.preventDefault();
-          interactionLifecycleRef.current?.cancel(TEXT_EDIT_INTERACTION_ID, 'escape');
-          return;
-        }
-
-        if (e.key === 'Enter') {
-          e.preventDefault();
+      switch (command.type) {
+        case 'insert-newline':
           session.insertText('\n');
-          setTextEditVersion((v) => v + 1);
-          renderLoopRef.current?.invalidate();
-          return;
-        }
-
-        if (e.key === 'Backspace') {
-          e.preventDefault();
+          break;
+        case 'delete-backward':
           session.deleteBackward();
-          setTextEditVersion((v) => v + 1);
-          renderLoopRef.current?.invalidate();
-          return;
-        }
-
-        if (e.key === 'Delete') {
-          e.preventDefault();
+          break;
+        case 'delete-forward':
           session.deleteForward();
-          setTextEditVersion((v) => v + 1);
-          renderLoopRef.current?.invalidate();
-          return;
-        }
-
-        if (e.key === 'ArrowLeft') {
-          e.preventDefault();
-          session.moveCaret('left', e.shiftKey);
-          setTextEditVersion((v) => v + 1);
-          renderLoopRef.current?.invalidate();
-          return;
-        }
-
-        if (e.key === 'ArrowRight') {
-          e.preventDefault();
-          session.moveCaret('right', e.shiftKey);
-          setTextEditVersion((v) => v + 1);
-          renderLoopRef.current?.invalidate();
-          return;
-        }
-
-        if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-          e.preventDefault();
-          session.moveCaretVertical(e.key === 'ArrowUp' ? 'up' : 'down', e.shiftKey);
-          setTextEditVersion((v) => v + 1);
-          renderLoopRef.current?.invalidate();
-          return;
-        }
-
-        if (e.key === 'Home') {
-          e.preventDefault();
-          session.moveCaret('home', e.shiftKey);
-          setTextEditVersion((v) => v + 1);
-          renderLoopRef.current?.invalidate();
-          return;
-        }
-
-        if (e.key === 'End') {
-          e.preventDefault();
-          session.moveCaret('end', e.shiftKey);
-          setTextEditVersion((v) => v + 1);
-          renderLoopRef.current?.invalidate();
-          return;
-        }
-
-        if ((e.key === 'a' || e.key === 'A') && (e.ctrlKey || e.metaKey)) {
-          e.preventDefault();
+          break;
+        case 'move-horizontal':
+          session.moveCaret(command.direction, command.extendSelection);
+          break;
+        case 'move-vertical':
+          session.moveCaretVertical(command.direction, command.extendSelection);
+          break;
+        case 'move-boundary':
+          session.moveCaret(command.direction, command.extendSelection);
+          break;
+        case 'select-all':
           session.selectAll();
-          setTextEditVersion((v) => v + 1);
-          renderLoopRef.current?.invalidate();
-          return;
-        }
+          break;
+        case 'insert-text':
+          session.insertText(command.text);
+          break;
+      }
 
-        if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      setTextEditVersion((version) => version + 1);
+      renderLoopRef.current?.invalidate();
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const action = routeCanvasKeyDown(e, {
+        activeTool,
+        textEditActive: textEditSessionRef.current !== null,
+        hasObjectSelection: selectedObjectIds.length > 0,
+        hasNodeSelection: selection.nodeIds.length > 0,
+        blockedByTextInput:
+          document.activeElement?.tagName === 'INPUT'
+          || document.activeElement?.tagName === 'TEXTAREA',
+      });
+      if (!action) return;
+
+      switch (action.type) {
+        case 'text-edit':
+          handleTextEditAction(e, action.command);
+          return;
+
+        case 'alt-key':
+          handleAltTransition(action.pressed, true);
+          return;
+
+        case 'space-pan':
+          setIsSpacePressed(action.pressed);
+          return;
+
+        case 'pen-delete': {
           e.preventDefault();
-          session.insertText(e.key);
-          setTextEditVersion((v) => v + 1);
-          renderLoopRef.current?.invalidate();
+          const hovered = penHoverNodeRef.current;
+          if (hovered) {
+            onExecuteCommand(new RemovePathNodeCommand(hovered.objectId, hovered.nodeIndex));
+            penHoverNodeRef.current = null;
+          } else {
+            penToolRef.current?.keyDown(action.key);
+          }
+          setPenVersion((version) => version + 1);
           return;
         }
 
-        return;
-      }
-
-      if (e.key === 'Alt') {
-        const wasAltKey = altKeyRef.current;
-        altKeyRef.current = e.altKey;
-        if (wasAltKey !== e.altKey && !dragStateRef.current && activeTool === 'select' && selectedIds.size > 0 && freehandCursorRef.current) {
-          const screenPos = camera.worldToScreen(freehandCursorRef.current);
-          const pickContext = { document: doc, selection, screenPoint: screenPos, worldPoint: freehandCursorRef.current, zoom: camera.zoom, additive: false, allowedObjectIds: isolationRef.current.context ? new Set(isolationRef.current.context.objectIds) : undefined };
-          const hit = selectTool.pick(pickContext).hit;
-          hoveredObjectIdRef.current = hit?.objectId ?? null;
-          renderLoopRef.current?.invalidate();
-        }
-      }
-
-      if (e.code === 'Space') {
-        setIsSpacePressed(true);
-      } else if (activeTool === 'pen' && (e.key === 'Delete' || e.key === 'Backspace')) {
-        e.preventDefault();
-        const hovered = penHoverNodeRef.current;
-        if (hovered) {
-          // In-Pen node removal: hovered committed node goes through its command.
-          onExecuteCommand(new RemovePathNodeCommand(hovered.objectId, hovered.nodeIndex));
-          penHoverNodeRef.current = null;
-        } else {
-          penToolRef.current?.keyDown(e.key);
-        }
-        setPenVersion((version) => version + 1);
-      } else if (activeTool === 'direct-select' && (e.key === 'Delete' || e.key === 'Backspace') && selection.nodeIds.length > 0) {
-        e.preventDefault();
-        const [nodeId] = selection.nodeIds;
-        const separator = nodeId?.lastIndexOf(':') ?? -1;
-        if (nodeId && separator > 0) {
-          const objectId = nodeId.slice(0, separator);
-          const nodeIndex = Number(nodeId.slice(separator + 1));
-          if (Number.isInteger(nodeIndex)) {
-            onExecuteCommand(new RemovePathNodeCommand(objectId, nodeIndex));
-            onSelectSelection?.({ ...selection, nodeIds: selection.nodeIds.filter((id) => id !== nodeId) });
+        case 'direct-select-delete-node': {
+          e.preventDefault();
+          const [nodeId] = selection.nodeIds;
+          const separator = nodeId?.lastIndexOf(':') ?? -1;
+          if (nodeId && separator > 0) {
+            const objectId = nodeId.slice(0, separator);
+            const nodeIndex = Number(nodeId.slice(separator + 1));
+            if (Number.isInteger(nodeIndex)) {
+              onExecuteCommand(new RemovePathNodeCommand(objectId, nodeIndex));
+              onSelectSelection?.({
+                ...selection,
+                nodeIds: selection.nodeIds.filter((id) => id !== nodeId),
+              });
+            }
           }
+          return;
         }
-      } else if (e.key === 'Delete' || e.key === 'Backspace') {
-        if (selectedObjectIds.length > 0) {
+
+        case 'delete-selection':
           e.preventDefault();
           onExecuteCommand(new DeleteObjectsCommand(selectedObjectIds));
           onSelectObject(null);
-        }
-      } else if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
-        if (selectedObjectIds.length === 0) return;
-        e.preventDefault();
-        queueNudge(e.key as 'ArrowLeft' | 'ArrowRight' | 'ArrowUp' | 'ArrowDown', e.shiftKey);
-      } else if ((e.key === 'Enter' || e.key === 'Escape') && activeTool === 'pen') {
-        const result = penToolRef.current?.keyDown(e.key);
-        if (result?.type === 'commit') commitPen(result.nodes, result.closed);
-        setPenVersion((version) => version + 1);
-      } else if (activeTool === 'polyline' && ['Enter', 'Escape', 'Backspace', 'Delete'].includes(e.key)) {
-        e.preventDefault();
-        const result = polylineToolRef.current?.keyDown(e.key);
-        if (result?.type === 'commit') commitPolyline(result.points);
-        setPolylineVersion((version) => version + 1);
-      } else if (e.key === 'Escape') {
-        e.preventDefault();
-        if (isolationRef.current.context) {
-          isolationRef.current.exit();
-          setIsolationVersion((version) => version + 1);
-          onSelectObjects?.([]);
+          return;
+
+        case 'nudge':
+          e.preventDefault();
+          queueNudge(action.key, action.shiftKey);
+          return;
+
+        case 'pen-key': {
+          const result = penToolRef.current?.keyDown(action.key);
+          if (result?.type === 'commit') commitPen(result.nodes, result.closed);
+          setPenVersion((version) => version + 1);
           return;
         }
-        cancelInteraction('escape');
-        penToolRef.current?.cancel();
-        setPenVersion((version) => version + 1);
+
+        case 'polyline-key': {
+          e.preventDefault();
+          const result = polylineToolRef.current?.keyDown(action.key);
+          if (result?.type === 'commit') commitPolyline(result.points);
+          setPolylineVersion((version) => version + 1);
+          return;
+        }
+
+        case 'escape':
+          e.preventDefault();
+          if (isolationRef.current.context) {
+            isolationRef.current.exit();
+            setIsolationVersion((version) => version + 1);
+            onSelectObjects?.([]);
+            return;
+          }
+          cancelInteraction('escape');
+          penToolRef.current?.cancel();
+          setPenVersion((version) => version + 1);
+          return;
       }
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.key === 'Alt') {
-        const wasAltKey = altKeyRef.current;
-        altKeyRef.current = e.altKey;
-        if (wasAltKey !== e.altKey) {
-          hoveredObjectIdRef.current = null;
-          renderLoopRef.current?.invalidate();
-        }
-      }
+      const action = routeCanvasKeyUp(e);
+      if (!action) return;
 
-      if (e.code === 'Space') {
-        setIsSpacePressed(false);
+      if (action.type === 'alt-key') {
+        handleAltTransition(action.pressed, false);
+      } else if (action.type === 'space-pan') {
+        setIsSpacePressed(action.pressed);
       }
     };
 
@@ -2220,7 +2221,23 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [selectedObjectId, selectedObjectIds, doc, onExecuteCommand, onSelectObject, activeTool, commitPen, commitPolyline, commitTextEdit, queueNudge]);
+  }, [
+    activeTool,
+    camera,
+    cancelInteraction,
+    commitPen,
+    commitPolyline,
+    doc,
+    onExecuteCommand,
+    onSelectObject,
+    onSelectObjects,
+    onSelectSelection,
+    queueNudge,
+    selectTool,
+    selectedIds,
+    selectedObjectIds,
+    selection,
+  ]);
 
   const handleDoubleClick = (e: React.MouseEvent) => {
     const rect = containerRef.current?.getBoundingClientRect();
