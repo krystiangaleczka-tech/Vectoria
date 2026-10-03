@@ -9,6 +9,15 @@ export {
   type InteractionLifecycleRegistration,
 } from './interaction/interaction-lifecycle-controller.js';
 export { LassoSession } from './interaction/lasso-session.js';
+export {
+  routeCanvasKeyDown,
+  routeCanvasKeyUp,
+  type CanvasArrowKey,
+  type CanvasKeyboardAction,
+  type CanvasKeyboardEventLike,
+  type CanvasKeyboardRouteContext,
+  type CanvasTextEditKeyboardCommand,
+} from './interaction/canvas-keyboard-router.js';
 export { SelectTool, type SelectToolContext } from './tools/select-tool.js';
 export { DirectSelectTool, type NodeHit } from './tools/direct-select-tool.js';
 export { PenTool, type PenToolState, type PenToolPointerEvent, type PenToolResult, type PenToolPreview } from './tools/pen-tool.js';
