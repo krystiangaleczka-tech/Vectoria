@@ -25,7 +25,7 @@ test.describe('TASK-VEC-006: Tool Rail and shortcut registry parity', () => {
     await page.keyboard.press('h');
     await expect(canvas).toHaveAttribute('data-tool', 'hand');
     await expect(page.getByTestId('tool-hand')).toHaveAttribute('data-shortcut', 'H');
-    await expect(page.getByTestId('tool-hand').locator('..')).toHaveAttribute('data-tooltip', /H.*Space \(hold\).*Temporary Pan/);
+    await expect(page.getByTestId('tool-hand').locator('..')).toHaveAttribute('data-tooltip', /H.*Spacja \(przytrzymaj\).*tymczasowe przesuwanie/);
 
     await page.getByTestId('tool-rectangle').click();
     await expect(canvas).toHaveAttribute('data-tool', 'rectangle');
