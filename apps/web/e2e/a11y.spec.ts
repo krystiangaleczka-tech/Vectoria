@@ -51,6 +51,13 @@ test.describe('EPIC-18: UX, Accessibility & Onboarding', () => {
     await expect(cleanupTab).toHaveAttribute('aria-selected', 'true');
     await expect(cleanupTab).toHaveAttribute('aria-controls', 'panel-cleanup');
 
+    const tabFocusOutline = await cleanupTab.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return { style: style.outlineStyle, width: parseFloat(style.outlineWidth) };
+    });
+    expect(tabFocusOutline.style).not.toBe('none');
+    expect(tabFocusOutline.width).toBeGreaterThanOrEqual(2);
+
     const cleanupPanel = page.locator('#panel-cleanup');
     await expect(cleanupPanel).toHaveAttribute('role', 'tabpanel');
     await expect(cleanupPanel).toHaveAttribute('aria-labelledby', 'tab-cleanup');
@@ -68,7 +75,7 @@ test.describe('EPIC-18: UX, Accessibility & Onboarding', () => {
 
     const contrastRatio = await propertiesTab.evaluate((element) => {
       const parseRgb = (value: string) => {
-        const match = value.match(/rgba?\\((\\d+),\\s*(\\d+),\\s*(\\d+)/);
+        const match = value.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
         if (!match) throw new Error(`Unsupported color: ${value}`);
         return [Number(match[1]), Number(match[2]), Number(match[3])];
       };
