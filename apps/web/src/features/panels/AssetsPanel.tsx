@@ -13,7 +13,7 @@ export interface AssetsPanelProps {
   onApplyBrandFont?: (fontFamily: string) => void;
   onAddBrandLogo?: (file: File) => void;
   onInsertBrandLogo?: (logo: { readonly id: string; readonly name: string; readonly imageUrl?: string; readonly svgData?: string }) => void;
-  onEditSymbolDefinition?: (symbolId: string, name: string) => void;
+  onRenameSymbol?: (symbolId: string, name: string) => void;
   onImportBrandKit?: (brandKit: import('@vectoria/core').BrandKit) => void;
 }
 
@@ -47,7 +47,7 @@ export const AssetsPanel: React.FC<AssetsPanelProps> = ({
   onApplyBrandFont,
   onAddBrandLogo,
   onInsertBrandLogo,
-  onEditSymbolDefinition,
+  onRenameSymbol,
   onImportBrandKit,
 }) => {
   const [activeSection, setActiveSection] = useState<AssetSection>('all');
@@ -158,7 +158,7 @@ export const AssetsPanel: React.FC<AssetsPanelProps> = ({
                       <span className="asset-card-label">{sym.name}</span>
                       <span className="asset-card-sub">{Math.round(sym.bounds.width)}×{Math.round(sym.bounds.height)}</span>
                     </button>
-                    {onEditSymbolDefinition && (
+                    {onRenameSymbol && (
                       <button
                         type="button"
                         style={{
@@ -174,10 +174,12 @@ export const AssetsPanel: React.FC<AssetsPanelProps> = ({
                           e.stopPropagation();
                           const newName = prompt('Zmień nazwę symbolu:', sym.name);
                           if (newName && newName.trim()) {
-                            onEditSymbolDefinition(sym.id, newName.trim());
+                            onRenameSymbol(sym.id, newName.trim());
                           }
                         }}
-                        title="Zmień nazwę lub edytuj definicję symbolu"
+                        title="Zmień nazwę symbolu"
+                        aria-label={`Zmień nazwę symbolu ${sym.name}`}
+                        data-testid="symbol-rename-button"
                       >
                         Zmień nazwę
                       </button>
