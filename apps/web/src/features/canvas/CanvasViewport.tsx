@@ -60,7 +60,7 @@ import {
   computeTextFrameLayout,
   SetTextContentCommand,
 } from '@vectoria/core';
- import { Camera, DragSession, SelectTool, DirectSelectTool, PenTool, PencilTool, BrushTool, SmoothTool, CornerTool, EraserTool, KnifeTool, ScissorsTool, WidthTool, SnapService, IsolationService, LassoSession, calculateObjectSnap, ShapeTool, PolylineTool, EyedropperTool, PaintBucketTool, TextTool, TextEditSession, hitTolerancePx, type GridSettings, type SnapResult, type ObjectSnapResult, type StyleSampleTarget } from '@vectoria/editor-engine';
+ import { Camera, DragSession, SelectTool, DirectSelectTool, PenTool, PencilTool, BrushTool, SmoothTool, CornerTool, EraserTool, KnifeTool, ScissorsTool, WidthTool, SnapService, IsolationService, LassoSession, InteractionLifecycleController, calculateObjectSnap, ShapeTool, PolylineTool, EyedropperTool, PaintBucketTool, TextTool, TextEditSession, hitTolerancePx, type GridSettings, type SnapResult, type ObjectSnapResult, type StyleSampleTarget, type InteractionLifecycleReason } from '@vectoria/editor-engine';
 import { mat3TransformPoint, parseColor } from '@vectoria/shared';
 import {
   RenderLoop,
@@ -106,6 +106,10 @@ export interface CanvasViewportProps {
 }
 
 const DRAG_THRESHOLD_PX = 3;
+const WIDTH_INTERACTION_ID = 'canvas.width';
+const SMOOTH_INTERACTION_ID = 'canvas.smooth';
+const TEXT_CREATE_INTERACTION_ID = 'canvas.text-create';
+const TEXT_EDIT_INTERACTION_ID = 'canvas.text-edit';
 
 interface ObjectHandleInfo {
   rotationHandle: Vec2;
@@ -301,6 +305,9 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   if (!qualityPolicyRef.current) qualityPolicyRef.current = new RenderQualityPolicy({ onChange: () => renderLoopRef.current?.invalidate() });
   const renderAllRef = useRef<() => void>(() => undefined);
   const dragStateRef = useRef<DragState | null>(null);
+  const interactionLifecycleRef = useRef<InteractionLifecycleController | null>(null);
+  if (!interactionLifecycleRef.current) interactionLifecycleRef.current = new InteractionLifecycleController();
+  const previousActiveToolRef = useRef(activeTool);
   const snapServiceRef = useRef(new SnapService());
   const snapResultRef = useRef<SnapResult | null>(null);
   const isolationRef = useRef(new IsolationService());
@@ -477,6 +484,61 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   const altKeyRef = useRef<boolean>(false);
   const objectSnapRef = useRef<ObjectSnapResult | null>(null);
   const [freehandVersion, setFreehandVersion] = React.useState(0);
+
+  const cancelWidthInteraction = useCallback((reason: InteractionLifecycleReason) => {
+    widthToolRef.current?.cancel();
+    widthStartScreenRef.current = null;
+    if (freehandOperationRef.current === 'width') freehandOperationRef.current = null;
+    freehandCursorRef.current = null;
+    qualityPolicyRef.current?.endInteraction();
+    if (reason !== 'dispose') {
+      setFreehandVersion((version) => version + 1);
+      renderLoopRef.current?.invalidate();
+    }
+  }, []);
+
+  const cancelSmoothInteraction = useCallback((reason: InteractionLifecycleReason) => {
+    smoothStartScreenRef.current = null;
+    if (freehandOperationRef.current === 'smooth') freehandOperationRef.current = null;
+    freehandCursorRef.current = null;
+    pathPreviewRef.current = {};
+    qualityPolicyRef.current?.endInteraction();
+    if (reason !== 'dispose') {
+      setPathPreview({});
+      setFreehandVersion((version) => version + 1);
+      renderLoopRef.current?.invalidate();
+    }
+  }, []);
+
+  const cancelTextCreateInteraction = useCallback((reason: InteractionLifecycleReason) => {
+    textToolRef.current?.cancel();
+    if (dragStateRef.current?.type === 'text-create') dragStateRef.current = null;
+    qualityPolicyRef.current?.endInteraction();
+    if (reason !== 'dispose') renderLoopRef.current?.invalidate();
+  }, []);
+
+  const cancelTextEditInteraction = useCallback((reason: InteractionLifecycleReason) => {
+    textEditSessionRef.current = null;
+    if (reason !== 'dispose') {
+      setTextEditVersion((version) => version + 1);
+      renderLoopRef.current?.invalidate();
+    }
+  }, []);
+
+  const beginTextEditSession = useCallback((session: TextEditSession) => {
+    interactionLifecycleRef.current?.complete(TEXT_EDIT_INTERACTION_ID);
+    textEditSessionRef.current = session;
+    interactionLifecycleRef.current?.register({
+      id: TEXT_EDIT_INTERACTION_ID,
+      cancel: cancelTextEditInteraction,
+    });
+    setTextEditVersion((version) => version + 1);
+    renderLoopRef.current?.invalidate();
+  }, [cancelTextEditInteraction]);
+
+  useEffect(() => () => {
+    interactionLifecycleRef.current?.cancelAll('dispose');
+  }, []);
 
   // Selected IDs as Set for renderer
   const selectedIds = React.useMemo(() => new Set(selectedObjectIds), [selectedObjectIds]);
@@ -860,6 +922,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   const commitTextEdit = useCallback(() => {
     const session = textEditSessionRef.current;
     if (!session) return;
+    interactionLifecycleRef.current?.complete(TEXT_EDIT_INTERACTION_ID);
     const object = doc.objects[session.targetObjectId];
     if (object && (object.type === 'text' || object.type === 'text-frame') && session.text !== object.text) {
       onExecuteCommand(new SetTextContentCommand(session.targetObjectId, session.text));
@@ -954,6 +1017,10 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         currentWorld: worldPos,
         pointerId: e.pointerId,
       };
+      interactionLifecycleRef.current?.register({
+        id: TEXT_CREATE_INTERACTION_ID,
+        cancel: cancelTextCreateInteraction,
+      });
       renderLoopRef.current?.invalidate();
       return;
     }
@@ -1008,9 +1075,14 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       if (selectedPath?.type === 'path') {
         const nearest = selectNearestPathPoint(selectedPath, worldPos);
         if (nearest) {
+          try { (e.target as HTMLElement).setPointerCapture(e.pointerId); } catch { /* synthetic pointer */ }
           freehandOperationRef.current = 'width';
           widthStartScreenRef.current = screenPos;
           widthToolRef.current?.pointerDown(selectedPath, nearest.point, nearest.t);
+          interactionLifecycleRef.current?.register({
+            id: WIDTH_INTERACTION_ID,
+            cancel: cancelWidthInteraction,
+          });
           setFreehandVersion((version) => version + 1);
         }
       }
@@ -1020,9 +1092,14 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     if (effectiveTool === 'smooth') {
       const selectedPath = selectedObjectId ? doc.objects[selectedObjectId] : null;
       if (selectedPath?.type === 'path') {
+        try { (e.target as HTMLElement).setPointerCapture(e.pointerId); } catch { /* synthetic pointer */ }
         freehandOperationRef.current = 'smooth';
         smoothStartScreenRef.current = screenPos;
         updatePathPreview({ [selectedPath.id]: smoothToolRef.current!.previewPath(selectedPath, freehandSettings.smoothing).nodes });
+        interactionLifecycleRef.current?.register({
+          id: SMOOTH_INTERACTION_ID,
+          cancel: cancelSmoothInteraction,
+        });
         setFreehandVersion((version) => version + 1);
       }
       return;
@@ -1582,10 +1659,12 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
           if (fragments.length === 2) onExecuteCommand(new ScissorsPathCommand(object.id, fragments));
         }
       } else if (freehandOperation === 'width') {
+        interactionLifecycleRef.current?.complete(WIDTH_INTERACTION_ID);
         const object = selectedObjectId ? doc.objects[selectedObjectId] : null;
         const profile = widthToolRef.current?.pointerUp() ?? [];
         if (object?.type === 'path' && profile.length > 0) onExecuteCommand(new SetPathWidthCommand(object.id, profile));
       } else if (freehandOperation === 'smooth') {
+        interactionLifecycleRef.current?.complete(SMOOTH_INTERACTION_ID);
         const object = selectedObjectId ? doc.objects[selectedObjectId] : null;
         const nodes = object?.type === 'path' ? pathPreviewRef.current[object.id] : undefined;
         if (object?.type === 'path' && nodes) onExecuteCommand(new SetPathGeometryCommand(object.id, { nodes }));
@@ -1722,12 +1801,12 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
          }
        }
     } else if (drag.type === 'text-create') {
+      interactionLifecycleRef.current?.complete(TEXT_CREATE_INTERACTION_ID);
       const result = textToolRef.current!.pointerUp(drag.currentWorld, doc.activeLayerId);
       if (result) {
         onExecuteCommand(result.command);
         onSelectObject(result.objectId);
-        textEditSessionRef.current = new TextEditSession(result.objectId, result.isFrame ? 'Type your text here...' : 'Text');
-        setTextEditVersion((v) => v + 1);
+        beginTextEditSession(new TextEditSession(result.objectId, result.isFrame ? 'Type your text here...' : 'Text'));
       }
     } else if (drag.type === 'move-object') {
       const transforms = new Map(Object.entries(dragPreviewRef.current) as [ObjectId, import('@vectoria/core').Transform2D][]);
@@ -1785,7 +1864,15 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     snapResultRef.current = null;
   };
 
-  const cancelInteraction = () => {
+  const cancelInteraction = (reason: InteractionLifecycleReason) => {
+    if (reason === 'pointer-cancel' || reason === 'lost-pointer-capture') {
+      interactionLifecycleRef.current?.cancel(WIDTH_INTERACTION_ID, reason);
+      interactionLifecycleRef.current?.cancel(SMOOTH_INTERACTION_ID, reason);
+      interactionLifecycleRef.current?.cancel(TEXT_CREATE_INTERACTION_ID, reason);
+    } else {
+      interactionLifecycleRef.current?.cancelAll(reason);
+    }
+
     activePointersRef.current.clear();
     pinchRef.current = null;
 
@@ -1799,6 +1886,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       freehandOperationRef.current = null;
       widthStartScreenRef.current = null;
       freehandCursorRef.current = null;
+      updatePathPreview({});
       setFreehandVersion((version) => version + 1);
       return;
     }
@@ -1836,6 +1924,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         shapeToolRef.current = null;
       }
     }
+    if (drag.type === 'text-create') textToolRef.current?.cancel();
     dragSessionRef.current = null;
 
     dragStateRef.current = null;
@@ -1891,6 +1980,10 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   }, [doc, freehandSettings, onExecuteCommand, onSelectObject]);
 
   useEffect(() => {
+    const toolChanged = previousActiveToolRef.current !== activeTool;
+    previousActiveToolRef.current = activeTool;
+    if (toolChanged) interactionLifecycleRef.current?.cancelAll('tool-switch');
+
     if (activeTool !== 'corner') {
       cornerToolRef.current?.cancel();
       cornerStartScreenRef.current = null;
@@ -1910,9 +2003,11 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     brushToolRef.current?.cancel();
     eraserToolRef.current?.cancel();
     knifeToolRef.current?.cancel();
+    widthToolRef.current?.cancel();
     freehandOperationRef.current = null;
     freehandCursorRef.current = null;
     widthStartScreenRef.current = null;
+    smoothStartScreenRef.current = null;
     updatePathPreview({});
     setFreehandVersion((version) => version + 1);
   }, [activeTool, commitPen]);
@@ -1933,8 +2028,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
 
         if (e.key === 'Escape') {
           e.preventDefault();
-          commitTextEdit();
-          renderLoopRef.current?.invalidate();
+          interactionLifecycleRef.current?.cancel(TEXT_EDIT_INTERACTION_ID, 'escape');
           return;
         }
 
@@ -2085,7 +2179,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
           onSelectObjects?.([]);
           return;
         }
-        cancelInteraction();
+        cancelInteraction('escape');
         penToolRef.current?.cancel();
         setPenVersion((version) => version + 1);
       }
@@ -2131,16 +2225,15 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
 
     if (hit && (doc.objects[hit.objectId]?.type === 'text' || doc.objects[hit.objectId]?.type === 'text-frame')) {
       const obj = doc.objects[hit.objectId] as TextObject | TextFrameObject;
-      textEditSessionRef.current = new TextEditSession(obj.id, obj.text);
+      const session = new TextEditSession(obj.id, obj.text);
       const inverse = getInverseTransformMatrix(obj.transform);
       if (inverse) {
         const caret = textCaretAt(obj, mat3TransformPoint(inverse, worldPos));
-        if (e.detail >= 3) textEditSessionRef.current.selectParagraphAt(caret);
-        else if (e.detail === 2) textEditSessionRef.current.selectWordAt(caret);
+        if (e.detail >= 3) session.selectParagraphAt(caret);
+        else if (e.detail === 2) session.selectWordAt(caret);
       }
-      setTextEditVersion((v) => v + 1);
+      beginTextEditSession(session);
       onSelectObject(obj.id);
-      renderLoopRef.current?.invalidate();
     }
   };
 
@@ -2157,8 +2250,8 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       onPointerMove={handlePointerMove}
       onDoubleClick={handleDoubleClick}
       onPointerUp={finishInteraction}
-      onPointerCancel={cancelInteraction}
-      onLostPointerCapture={cancelInteraction}
+      onPointerCancel={() => cancelInteraction('pointer-cancel')}
+      onLostPointerCapture={() => cancelInteraction('lost-pointer-capture')}
       onContextMenu={(e) => e.preventDefault()}
       data-tool={activeTool}
       style={{
