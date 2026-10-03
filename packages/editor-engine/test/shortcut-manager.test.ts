@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ShortcutManager, DEFAULT_SHORTCUTS, comboId } from '../src/commands/shortcut-manager.js';
+import { ShortcutManager, DEFAULT_SHORTCUTS, TOOL_SHORTCUT_ACTIONS, comboId, formatShortcutCombo } from '../src/commands/shortcut-manager.js';
 
 const keyEvent = (key: string, mods: { metaKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean; altKey?: boolean } = {}) => ({
   key,
@@ -40,5 +40,24 @@ describe('ShortcutManager', () => {
     const c = { key: 'c', meta: true, ctrl: true, shift: false, alt: false };
     expect(comboId(c, true)).toBe('mod+c');
     expect(comboId(c, false)).toBe('mod+c');
+  });
+
+  it('registers every Tool Rail tool once and includes the audited Shift shortcuts', () => {
+    expect(TOOL_SHORTCUT_ACTIONS).toHaveLength(29);
+    expect(new Set(TOOL_SHORTCUT_ACTIONS.map((action) => action.toolId)).size).toBe(29);
+    expect(new Set(TOOL_SHORTCUT_ACTIONS.map((action) => action.actionId)).size).toBe(29);
+
+    const m = new ShortcutManager(DEFAULT_SHORTCUTS, false);
+    expect(m.match(keyEvent('o', { shiftKey: true }))).toBe('tool.node-lasso');
+    expect(m.match(keyEvent('e', { shiftKey: true }))).toBe('tool.eraser');
+    expect(m.match(keyEvent('h'))).toBe('tool.hand');
+  });
+
+  it('formats tool shortcut hints using platform conventions', () => {
+    expect(formatShortcutCombo({ key: 'e', meta: false, ctrl: false, shift: true, alt: false }, false)).toBe('Shift+E');
+    expect(formatShortcutCombo({ key: 'o', meta: false, ctrl: false, shift: true, alt: false }, false)).toBe('Shift+O');
+    expect(formatShortcutCombo({ key: 'h', meta: false, ctrl: false, shift: false, alt: false }, false)).toBe('H');
+    expect(formatShortcutCombo({ key: 'k', meta: true, ctrl: true, shift: false, alt: false }, true)).toBe('Cmd+K');
+    expect(formatShortcutCombo({ key: 'k', meta: true, ctrl: true, shift: false, alt: false }, false)).toBe('Ctrl+K');
   });
 });
