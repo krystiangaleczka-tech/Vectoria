@@ -60,7 +60,7 @@ import {
   computeTextFrameLayout,
   SetTextContentCommand,
 } from '@vectoria/core';
- import { Camera, DragSession, SelectTool, DirectSelectTool, PenTool, PencilTool, BrushTool, SmoothTool, CornerTool, EraserTool, KnifeTool, ScissorsTool, WidthTool, SnapService, IsolationService, LassoSession, InteractionLifecycleController, calculateObjectSnap, ShapeTool, PolylineTool, EyedropperTool, PaintBucketTool, TextTool, TextEditSession, hitTolerancePx, routeCanvasKeyDown, routeCanvasKeyUp, type CanvasTextEditKeyboardCommand, type GridSettings, type SnapResult, type ObjectSnapResult, type StyleSampleTarget, type InteractionLifecycleReason } from '@vectoria/editor-engine';
+import { Camera, DragSession, SelectTool, DirectSelectTool, PenTool, PencilTool, BrushTool, SmoothTool, CornerTool, EraserTool, KnifeTool, ScissorsTool, WidthTool, SnapService, IsolationService, LassoSession, InteractionLifecycleController, InteractionStateStore, calculateObjectSnap, ShapeTool, PolylineTool, EyedropperTool, PaintBucketTool, TextTool, TextEditSession, hitTolerancePx, routeCanvasKeyDown, routeCanvasKeyUp, type CanvasDragState, type CanvasTextEditKeyboardCommand, type GridSettings, type StyleSampleTarget, type InteractionLifecycleReason } from '@vectoria/editor-engine';
 import { mat3TransformPoint, parseColor } from '@vectoria/shared';
 import {
   RenderLoop,
@@ -181,31 +181,6 @@ function getResizeCursor(screenPoint: Vec2, centerScreen: Vec2): string {
   return 'ew-resize';
 }
 
-interface DragState {
-  type: 'pan' | 'create-shape' | 'move-object' | 'move-node' | 'move-handle' | 'resize-object' | 'rotate-object' | 'gradient-handle' | 'style-sample' | 'marquee' | 'lasso' | 'node-lasso' | 'text-create' | 'text-select';
-  shape?: BasicShapeTool;
-  startScreen: Vec2;
-  startWorld: Vec2;
-  currentWorld: Vec2;
-  pointerId: number;
-  initialObjectTransform?: { position: Vec2 };
-  objectIds?: readonly ObjectId[];
-  initialTransforms?: Readonly<Record<string, import('@vectoria/core').Transform2D>>;
-  initialSize?: { width: number; height: number };
-  initialBounds?: import('@vectoria/shared').Rect;
-  handleId?: string;
-  pivotWorld?: Vec2;
-  initialTransform?: import('@vectoria/core').Transform2D;
-  nodeIndex?: number;
-  handleSide?: 'in' | 'out';
-  initialNodes?: readonly import('@vectoria/core').PathNode[];
-  lassoPoints?: Vec2[];
-  gradientHandle?: 'start' | 'end' | 'center' | 'radius' | 'angle';
-  initialStyle?: import('@vectoria/core').ObjectStyle;
-  styleTool?: 'eyedropper' | 'bucket';
-  textAnchor?: number;
-}
-
 function textCaretAt(object: TextObject | TextFrameObject, localPoint: Vec2): number {
   const layout = object.type === 'text' ? computeArtisticTextLayout(object) : computeTextFrameLayout(object);
   const line = layout.lines.reduce((best, candidate) => Math.abs(candidate.y - localPoint.y) < Math.abs(best.y - localPoint.y) ? candidate : best, layout.lines[0]!);
@@ -216,7 +191,7 @@ function textCaretAt(object: TextObject | TextFrameObject, localPoint: Vec2): nu
   return last ? last.codePointIndex + 1 : 0;
 }
 
-function gradientHandles(object: SceneObject): readonly { id: DragState['gradientHandle']; point: Vec2 }[] {
+function gradientHandles(object: SceneObject): readonly { id: CanvasDragState['gradientHandle']; point: Vec2 }[] {
   if (object.style.fill.type !== 'linear-gradient' && object.style.fill.type !== 'radial-gradient' && object.style.fill.type !== 'angular-gradient') return [];
   const matrix = getTransformMatrix(object.transform);
   const toWorld = (point: Vec2): Vec2 => mat3TransformPoint(matrix, point);
@@ -226,7 +201,7 @@ function gradientHandles(object: SceneObject): readonly { id: DragState['gradien
   return [{ id: 'center', point: toWorld(fill.center) }, { id: 'angle', point: toWorld({ x: fill.center.x + 24, y: fill.center.y }) }];
 }
 
-function gradientHandleAt(object: SceneObject, camera: Camera, screenPoint: Vec2): DragState['gradientHandle'] {
+function gradientHandleAt(object: SceneObject, camera: Camera, screenPoint: Vec2): CanvasDragState['gradientHandle'] {
   for (const handle of gradientHandles(object)) {
     const screen = camera.worldToScreen(handle.point);
     if (Math.hypot(screen.x - screenPoint.x, screen.y - screenPoint.y) <= 12) return handle.id;
@@ -246,7 +221,7 @@ function colorDistancePercent(first: string, second: string): number {
   return Math.sqrt((a.r - b.r) ** 2 + (a.g - b.g) ** 2 + (a.b - b.b) ** 2) / Math.sqrt(3 * 255 ** 2) * 100;
 }
 
-function updateGradientFill(style: import('@vectoria/core').ObjectStyle, handle: NonNullable<DragState['gradientHandle']>, transform: import('@vectoria/core').Transform2D, worldPoint: Vec2): import('@vectoria/core').FillStyle | null {
+function updateGradientFill(style: import('@vectoria/core').ObjectStyle, handle: NonNullable<CanvasDragState['gradientHandle']>, transform: import('@vectoria/core').Transform2D, worldPoint: Vec2): import('@vectoria/core').FillStyle | null {
   const fill = style.fill;
   if (fill.type !== 'linear-gradient' && fill.type !== 'radial-gradient' && fill.type !== 'angular-gradient') return null;
   const inverse = getInverseTransformMatrix(transform);
@@ -304,16 +279,16 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   const qualityPolicyRef = useRef<RenderQualityPolicy | null>(null);
   if (!qualityPolicyRef.current) qualityPolicyRef.current = new RenderQualityPolicy({ onChange: () => renderLoopRef.current?.invalidate() });
   const renderAllRef = useRef<() => void>(() => undefined);
-  const dragStateRef = useRef<DragState | null>(null);
+  const interactionStateRef = useRef<InteractionStateStore | null>(null);
+  if (!interactionStateRef.current) interactionStateRef.current = new InteractionStateStore();
+  const interactionState = interactionStateRef.current;
   const interactionLifecycleRef = useRef<InteractionLifecycleController | null>(null);
   if (!interactionLifecycleRef.current) interactionLifecycleRef.current = new InteractionLifecycleController();
   const previousActiveToolRef = useRef(activeTool);
   const snapServiceRef = useRef(new SnapService());
-  const snapResultRef = useRef<SnapResult | null>(null);
   const isolationRef = useRef(new IsolationService());
   const [isolationVersion, setIsolationVersion] = React.useState(0);
   const lastGroupPickRef = useRef<{ id: ObjectId; timestamp: number } | null>(null);
-  const dragSessionRef = useRef<DragSession | null>(null);
   const [isSpacePressed, setIsSpacePressed] = React.useState(false);
   const dragPreviewRef = React.useRef<Record<string, import('@vectoria/core').Transform2D>>({});
   const stylePreviewRef = React.useRef<Record<string, import('@vectoria/core').ObjectStyle>>({});
@@ -477,19 +452,16 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   const widthStartScreenRef = useRef<Vec2 | null>(null);
   const smoothStartScreenRef = useRef<Vec2 | null>(null);
   const cornerStartScreenRef = useRef<Vec2 | null>(null);
-  const lassoSessionRef = useRef<LassoSession | null>(null);
-  const freehandCursorRef = useRef<Vec2 | null>(null);
   const lastClickRef = useRef<{ point: Vec2; time: number } | null>(null);
   const hoveredObjectIdRef = useRef<string | null>(null);
   const altKeyRef = useRef<boolean>(false);
-  const objectSnapRef = useRef<ObjectSnapResult | null>(null);
   const [freehandVersion, setFreehandVersion] = React.useState(0);
 
   const cancelWidthInteraction = useCallback((reason: InteractionLifecycleReason) => {
     widthToolRef.current?.cancel();
     widthStartScreenRef.current = null;
     if (freehandOperationRef.current === 'width') freehandOperationRef.current = null;
-    freehandCursorRef.current = null;
+    interactionState.freehandCursor = null;
     qualityPolicyRef.current?.endInteraction();
     if (reason !== 'dispose') {
       setFreehandVersion((version) => version + 1);
@@ -500,7 +472,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   const cancelSmoothInteraction = useCallback((reason: InteractionLifecycleReason) => {
     smoothStartScreenRef.current = null;
     if (freehandOperationRef.current === 'smooth') freehandOperationRef.current = null;
-    freehandCursorRef.current = null;
+    interactionState.freehandCursor = null;
     pathPreviewRef.current = {};
     qualityPolicyRef.current?.endInteraction();
     if (reason !== 'dispose') {
@@ -512,7 +484,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
 
   const cancelTextCreateInteraction = useCallback((reason: InteractionLifecycleReason) => {
     textToolRef.current?.cancel();
-    if (dragStateRef.current?.type === 'text-create') dragStateRef.current = null;
+    if (interactionState.drag?.type === 'text-create') interactionState.drag = null;
     qualityPolicyRef.current?.endInteraction();
     if (reason !== 'dispose') renderLoopRef.current?.invalidate();
   }, []);
@@ -581,15 +553,15 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       gradientHandles: selectedObjectIds.length === 1
         ? (() => { const object = doc.objects[selectedObjectIds[0]!]; const fill = stylePreview[object?.id ?? '']?.fill ?? object?.style.fill; return object && fill && (fill.type === 'linear-gradient' || fill.type === 'radial-gradient' || fill.type === 'angular-gradient') ? [{ objectId: object.id, fill, transform: object.transform }] : []; })()
         : [],
-      marquee: dragStateRef.current?.type === 'marquee' ? {
-        start: dragStateRef.current.startWorld,
-        end: dragStateRef.current.currentWorld,
+      marquee: interactionState.drag?.type === 'marquee' ? {
+        start: interactionState.drag.startWorld,
+        end: interactionState.drag.currentWorld,
       } : undefined,
-      lasso: lassoSessionRef.current ? lassoSessionRef.current.polygon : undefined,
-      snap: snapResultRef.current?.snapped ? snapResultRef.current : undefined,
-      objectSnap: objectSnapRef.current ?? undefined,
+      lasso: interactionState.lasso ? interactionState.lasso.polygon : undefined,
+      snap: interactionState.snap?.snapped ? interactionState.snap : undefined,
+      objectSnap: interactionState.objectSnap ?? undefined,
       smartDistance: (() => {
-        const drag = dragStateRef.current;
+        const drag = interactionState.drag;
         if (!drag && altKeyRef.current && selectedIds.size > 0 && hoveredObjectIdRef.current && !selectedIds.has(hoveredObjectIdRef.current)) {
           const hoveredObj = doc.objects[hoveredObjectIdRef.current];
           const selectedId = [...selectedIds][0];
@@ -597,7 +569,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
           if (hoveredObj && selectedObj) {
              const selectionBounds = getObjectBounds(selectedObj, doc);
              const hoverBounds = getObjectBounds(hoveredObj, doc);
-             return { point: freehandCursorRef.current ?? { x: 0, y: 0 }, dx: 0, dy: 0, hover: { selectionBounds, hoverBounds } };
+             return { point: interactionState.freehandCursor ?? { x: 0, y: 0 }, dx: 0, dy: 0, hover: { selectionBounds, hoverBounds } };
           }
         }
         return undefined;
@@ -605,7 +577,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     });
 
     // Draw active creation drag preview on overlay.
-    const drag = dragStateRef.current;
+    const drag = interactionState.drag;
     if (drag && drag.type === 'create-shape') {
       const dpr = window.devicePixelRatio || 1;
       overlayCtx.save();
@@ -732,7 +704,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       ? (activeTool === 'pencil' || activeTool === 'brush' ? smoothPolyline(rawSamples.map((sample) => sample.point), freehandSettings.smoothing) : rawSamples.map((sample) => sample.point))
       : undefined;
     const samples = samplePoints?.length ? samplePoints : undefined;
-    const eraserPreview = activeTool === 'eraser' && freehandCursorRef.current && eraserToolRef.current ? { point: freehandCursorRef.current, radiusPx: eraserToolRef.current.radiusPx } : undefined;
+    const eraserPreview = activeTool === 'eraser' && interactionState.freehandCursor && eraserToolRef.current ? { point: interactionState.freehandCursor, radiusPx: eraserToolRef.current.radiusPx } : undefined;
     const cutPreview = activeTool === 'knife' ? knifeToolRef.current?.preview.points : undefined;
     const widthPreview = activeTool === 'width' && selectedObjectId && doc.objects[selectedObjectId]?.type === 'path'
       ? widthToolRef.current?.preview.map((point) => ({ point: pointOnPath(doc.objects[selectedObjectId] as PathObject, point.t), width: point.width }))
@@ -748,7 +720,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     }
 
     // Text frame drag creation preview
-    if (activeTool === 'text' && dragStateRef.current?.type === 'text-create') {
+    if (activeTool === 'text' && interactionState.drag?.type === 'text-create') {
       const dpr = window.devicePixelRatio || 1;
       const preview = textToolRef.current?.preview;
       if (preview && preview.isFrame) {
@@ -916,7 +888,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
 
   const snapWorldPoint = (point: Vec2): Vec2 => {
     const result = snapServiceRef.current.snapPoint(point, { zoom: camera.zoom, settings: { ...doc.snap, enabled: snapToGrid }, grid: gridSettings, guides: doc.guides });
-    snapResultRef.current = result;
+    interactionState.snap = result;
     return result.worldPoint;
   };
 
@@ -947,7 +919,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     qualityPolicyRef.current?.beginInteraction();
     camera.zoomAtPoint(factor, screenPos);
     qualityPolicyRef.current?.endInteraction();
-    snapResultRef.current = null;
+    interactionState.snap = null;
   };
 
   // Pointer interactions
@@ -963,7 +935,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       const dist = Math.hypot(a!.x - b!.x, a!.y - b!.y);
       const center = { x: (a!.x + b!.x) / 2, y: (a!.y + b!.y) / 2 };
       pinchRef.current = { dist, center };
-      dragStateRef.current = null;
+      interactionState.drag = null;
       updateDragPreview({});
       return;
     }
@@ -975,7 +947,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     // Pan via middle button or Space key
     if (e.button === 1 || isSpacePressed || effectiveTool === 'hand') {
       (e.target as HTMLElement).setPointerCapture(e.pointerId);
-      dragStateRef.current = {
+      interactionState.drag = {
         type: 'pan',
         startScreen: screenPos,
         startWorld: worldPos,
@@ -997,7 +969,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       if (activeObject && (activeObject.type === 'text' || activeObject.type === 'text-frame') && activeHit?.objectId === activeSession.targetObjectId && activeLocalPoint) {
         const caret = textCaretAt(activeObject, activeLocalPoint);
         activeSession.setSelection(caret, caret);
-        dragStateRef.current = { type: 'text-select', startScreen: screenPos, startWorld: worldPos, currentWorld: worldPos, pointerId: e.pointerId, objectIds: [activeSession.targetObjectId], textAnchor: caret };
+        interactionState.drag = { type: 'text-select', startScreen: screenPos, startWorld: worldPos, currentWorld: worldPos, pointerId: e.pointerId, objectIds: [activeSession.targetObjectId], textAnchor: caret };
         try { (e.target as HTMLElement).setPointerCapture(e.pointerId); } catch { /* synthetic pointer */ }
         setTextEditVersion((version) => version + 1);
         return;
@@ -1011,7 +983,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         commitTextEdit();
       }
       textToolRef.current!.pointerDown(worldPos);
-      dragStateRef.current = {
+      interactionState.drag = {
         type: 'text-create',
         startScreen: screenPos,
         startWorld: worldPos,
@@ -1033,8 +1005,8 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
 
     if (activeTool === 'lasso' || activeTool === 'node-lasso') {
       try { (e.target as HTMLElement).setPointerCapture(e.pointerId); } catch { /* synthetic pointer */ }
-      dragStateRef.current = { type: activeTool, startScreen: screenPos, startWorld: worldPos, currentWorld: worldPos, pointerId: e.pointerId };
-      lassoSessionRef.current = new LassoSession(worldPos);
+      interactionState.drag = { type: activeTool, startScreen: screenPos, startWorld: worldPos, currentWorld: worldPos, pointerId: e.pointerId };
+      interactionState.lasso = new LassoSession(worldPos);
       return;
     }
 
@@ -1047,7 +1019,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         paintBucketToolRef.current!.tolerance = styleSampleTolerance;
       }
       tool.pointerDown({ screenPoint: screenPos, worldPoint: worldPos });
-      dragStateRef.current = { type: 'style-sample', startScreen: screenPos, startWorld: worldPos, currentWorld: worldPos, pointerId: e.pointerId, styleTool: activeTool };
+      interactionState.drag = { type: 'style-sample', startScreen: screenPos, startWorld: worldPos, currentWorld: worldPos, pointerId: e.pointerId, styleTool: activeTool };
       renderLoopRef.current?.invalidate();
       return;
     }
@@ -1059,14 +1031,14 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       if (effectiveTool === 'brush') brushToolRef.current?.pointerDown({ screenPoint: screenPos, worldPoint: worldPos, pressure: freehandSettings.pressure ? e.pressure : 1, time: e.timeStamp });
       if (effectiveTool === 'eraser') { eraserToolRef.current!.radiusPx = freehandSettings.eraserRadius; eraserToolRef.current?.pointerDown(worldPos); }
       if (effectiveTool === 'knife') knifeToolRef.current?.pointerDown(worldPos);
-      freehandCursorRef.current = worldPos;
+      interactionState.freehandCursor = worldPos;
       setFreehandVersion((version) => version + 1);
       return;
     }
 
     if (effectiveTool === 'scissors') {
       freehandOperationRef.current = 'scissors';
-      freehandCursorRef.current = worldPos;
+      interactionState.freehandCursor = worldPos;
       setFreehandVersion((version) => version + 1);
       return;
     }
@@ -1124,7 +1096,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       const handle = selected && !selected.locked ? gradientHandleAt(selected, camera, screenPos) : undefined;
       if (selected && handle) {
         try { (e.target as HTMLElement).setPointerCapture(e.pointerId); } catch { /* synthetic pointer */ }
-        dragStateRef.current = { type: 'gradient-handle', gradientHandle: handle, startScreen: screenPos, startWorld: worldPos, currentWorld: worldPos, pointerId: e.pointerId, objectIds: [selected.id], initialStyle: selected.style };
+        interactionState.drag = { type: 'gradient-handle', gradientHandle: handle, startScreen: screenPos, startWorld: worldPos, currentWorld: worldPos, pointerId: e.pointerId, objectIds: [selected.id], initialStyle: selected.style };
         return;
       }
     }
@@ -1148,7 +1120,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       const tool = new ShapeTool(effectiveTool);
       shapeToolRef.current = tool;
       tool.pointerDown({ screenPoint: screenPos, worldPoint: worldPos, shiftKey: e.shiftKey, altKey: e.altKey });
-      dragStateRef.current = {
+      interactionState.drag = {
         type: 'create-shape',
         shape: effectiveTool,
         startScreen: screenPos,
@@ -1167,7 +1139,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         const side = handleHit.part === 'in-handle' ? 'in' : 'out';
         if (object?.type === 'path') {
           onSelectSelection?.({ objectIds: [object.id], nodeIds: [`${object.id}:${handleHit.nodeIndex}`], mode: 'node' });
-          dragStateRef.current = {
+          interactionState.drag = {
             type: 'move-handle', startScreen: screenPos, startWorld: worldPos, currentWorld: worldPos,
             pointerId: e.pointerId, objectIds: [object.id], nodeIndex: handleHit.nodeIndex, handleSide: side, initialNodes: object.nodes,
           };
@@ -1180,7 +1152,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       if (nodeHit) {
         const object = doc.objects[nodeHit.objectId];
         if (object?.type === 'path') {
-          dragStateRef.current = {
+          interactionState.drag = {
             type: 'move-node', startScreen: screenPos, startWorld: worldPos, currentWorld: worldPos,
             pointerId: e.pointerId, objectIds: [object.id], nodeIndex: nodeHit.nodeIndex, initialNodes: object.nodes,
           };
@@ -1193,7 +1165,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         if (!e.shiftKey && Math.hypot(screenPos.x - rotationHandle.x, screenPos.y - rotationHandle.y) <= hitTolerancePx(e.pointerType, 12)) {
           try { (e.target as HTMLElement).setPointerCapture(e.pointerId); } catch { /* capture failed */ }
           setHoverHandleCursor(ROTATE_CURSOR);
-          dragStateRef.current = {
+          interactionState.drag = {
             type: 'rotate-object',
             startScreen: screenPos,
             startWorld: worldPos,
@@ -1213,7 +1185,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
           try { (e.target as HTMLElement).setPointerCapture(e.pointerId); } catch { /* capture failed */ }
           const centerScreen = camera.worldToScreen(pivotWorld);
           setHoverHandleCursor(getResizeCursor(hitResize.point, centerScreen));
-          dragStateRef.current = {
+          interactionState.drag = {
             type: 'resize-object',
             startScreen: screenPos,
             startWorld: worldPos,
@@ -1265,7 +1237,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         const dragIds = picked.selection.objectIds;
         const obj = doc.objects[hit.objectId];
         if (dragIds.length === 0) return;
-        dragStateRef.current = {
+        interactionState.drag = {
           type: 'move-object',
           startScreen: screenPos,
           startWorld: worldPos,
@@ -1276,13 +1248,13 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
           initialObjectTransform: obj ? { position: { ...obj.transform.position } } : undefined,
         };
         const firstBounds = obj ? getObjectBounds(obj) : { x: worldPos.x, y: worldPos.y, width: 0, height: 0 };
-        dragSessionRef.current = new DragSession({ objectIds: dragIds, initialTransforms: dragStateRef.current.initialTransforms ?? {}, initialBounds: firstBounds, pivotWorld: { x: firstBounds.x + firstBounds.width / 2, y: firstBounds.y + firstBounds.height / 2 }, operation: 'move' }, worldPos);
+        interactionState.dragSession = new DragSession({ objectIds: dragIds, initialTransforms: interactionState.drag.initialTransforms ?? {}, initialBounds: firstBounds, pivotWorld: { x: firstBounds.x + firstBounds.width / 2, y: firstBounds.y + firstBounds.height / 2 }, operation: 'move' }, worldPos);
       } else {
         if (e.altKey) {
-          dragStateRef.current = { type: 'lasso', startScreen: screenPos, startWorld: worldPos, currentWorld: worldPos, pointerId: e.pointerId };
-          lassoSessionRef.current = new LassoSession(worldPos);
+          interactionState.drag = { type: 'lasso', startScreen: screenPos, startWorld: worldPos, currentWorld: worldPos, pointerId: e.pointerId };
+          interactionState.lasso = new LassoSession(worldPos);
         } else {
-          dragStateRef.current = { type: 'marquee', startScreen: screenPos, startWorld: worldPos, currentWorld: worldPos, pointerId: e.pointerId };
+          interactionState.drag = { type: 'marquee', startScreen: screenPos, startWorld: worldPos, currentWorld: worldPos, pointerId: e.pointerId };
         }
       }
     }
@@ -1311,7 +1283,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
 
     const screenPos = getPointerScreen(e);
     const rawWorldPos = camera.screenToWorld(screenPos);
-    const drag = dragStateRef.current;
+    const drag = interactionState.drag;
     const isSnapKeyDown = e.ctrlKey || e.metaKey;
     const worldPos = (snapToGrid || isSnapKeyDown) && !drag ? snapWorldPoint(rawWorldPos) : rawWorldPos;
     onCursorMove(worldPos);
@@ -1332,7 +1304,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
        hoveredObjectIdRef.current = null;
        renderLoopRef.current?.invalidate();
     }
-    freehandCursorRef.current = worldPos;
+    interactionState.freehandCursor = worldPos;
 
     if (!drag && activeTool === 'select' && selectedObjectId) {
       const selected = doc.objects[selectedObjectId];
@@ -1430,8 +1402,8 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       drag.startScreen = screenPos;
     } else if (drag.type === 'marquee' || drag.type === 'lasso' || drag.type === 'node-lasso') {
       drag.currentWorld = worldPos;
-      if ((drag.type === 'lasso' || drag.type === 'node-lasso') && lassoSessionRef.current) {
-        lassoSessionRef.current.update(worldPos);
+      if ((drag.type === 'lasso' || drag.type === 'node-lasso') && interactionState.lasso) {
+        interactionState.lasso.update(worldPos);
         setFreehandVersion((v) => v + 1);
       }
       renderLoopRef.current?.invalidate();
@@ -1467,27 +1439,27 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         return;
       }
       drag.currentWorld = rawWorldPos;
-      dragSessionRef.current?.update(rawWorldPos);
+      interactionState.dragSession?.update(rawWorldPos);
       if (drag.objectIds && drag.initialTransforms) {
         let deltaWorld = { x: rawWorldPos.x - drag.startWorld.x, y: rawWorldPos.y - drag.startWorld.y };
         
         // Smart object snap only when Ctrl is held (Decyzja 3)
-        if (isSnapKeyDown && dragSessionRef.current) {
+        if (isSnapKeyDown && interactionState.dragSession) {
           const dragRect = {
-            x: dragSessionRef.current.transform.initialBounds.x + deltaWorld.x,
-            y: dragSessionRef.current.transform.initialBounds.y + deltaWorld.y,
-            width: dragSessionRef.current.transform.initialBounds.width,
-            height: dragSessionRef.current.transform.initialBounds.height,
+            x: interactionState.dragSession.transform.initialBounds.x + deltaWorld.x,
+            y: interactionState.dragSession.transform.initialBounds.y + deltaWorld.y,
+            width: interactionState.dragSession.transform.initialBounds.width,
+            height: interactionState.dragSession.transform.initialBounds.height,
           };
           const snap = calculateObjectSnap(dragRect, doc, new Set(drag.objectIds), doc.snap.tolerancePx, camera.zoom);
           if (snap.snappedX || snap.snappedY) {
-            objectSnapRef.current = snap;
+            interactionState.objectSnap = snap;
             deltaWorld = { x: deltaWorld.x + snap.dx, y: deltaWorld.y + snap.dy };
           } else {
-            objectSnapRef.current = null;
+            interactionState.objectSnap = null;
           }
         } else {
-          objectSnapRef.current = null;
+          interactionState.objectSnap = null;
         }
 
         const preview: Record<string, import('@vectoria/core').Transform2D> = {};
@@ -1635,7 +1607,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     if (freehandOperation) {
       const screenPoint = getPointerScreen(e);
       const point = snapWorldPoint(camera.screenToWorld(screenPoint));
-      freehandCursorRef.current = point;
+      interactionState.freehandCursor = point;
       try { (e.target as HTMLElement).releasePointerCapture(e.pointerId); } catch { /* capture may already be released */ }
       if (freehandOperation === 'pencil' || freehandOperation === 'brush') {
         const tool = freehandOperation === 'pencil' ? pencilToolRef.current : brushToolRef.current;
@@ -1677,13 +1649,13 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       smoothStartScreenRef.current = null;
       freehandOperationRef.current = null;
       widthStartScreenRef.current = null;
-      freehandCursorRef.current = null;
+      interactionState.freehandCursor = null;
       updatePathPreview({});
       setFreehandVersion((version) => version + 1);
       qualityPolicyRef.current?.endInteraction();
       return;
     }
-    if (!dragStateRef.current && activeTool === 'corner') {
+    if (!interactionState.drag && activeTool === 'corner') {
       const command = cornerToolRef.current?.apply();
       if (command) onExecuteCommand(command);
       cornerStartScreenRef.current = null;
@@ -1692,7 +1664,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       qualityPolicyRef.current?.endInteraction();
       return;
     }
-    if (!dragStateRef.current && activeTool === 'pen') {
+    if (!interactionState.drag && activeTool === 'pen') {
       const screenPoint = getPointerScreen(e);
       const result = penToolRef.current?.pointerUp({ screenPoint, worldPoint: snapWorldPoint(camera.screenToWorld(screenPoint)), shiftKey: e.shiftKey, altKey: e.altKey });
       if (result?.type === 'commit') commitPen(result.nodes, result.closed);
@@ -1700,7 +1672,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       qualityPolicyRef.current?.endInteraction();
       return;
     }
-    const drag = dragStateRef.current;
+    const drag = interactionState.drag;
     if (!drag) {
       qualityPolicyRef.current?.endInteraction();
       return;
@@ -1735,7 +1707,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
           if (targetIds.length > 0) onExecuteCommand(targetKind === 'fill' ? new SetObjectStyleCommand(targetIds, { fill: source.style.fill }) : new SetObjectStyleCommand(targetIds, { stroke: source.style.stroke }));
         }
       }
-      dragStateRef.current = null;
+      interactionState.drag = null;
       renderLoopRef.current?.invalidate();
       qualityPolicyRef.current?.endInteraction();
       return;
@@ -1746,7 +1718,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       const preview = stylePreviewRef.current[objectId];
       if (preview) onExecuteCommand(new SetObjectStyleCommand([objectId], preview));
       updateStylePreview({});
-      dragStateRef.current = null;
+      interactionState.drag = null;
       renderLoopRef.current?.invalidate();
       qualityPolicyRef.current?.endInteraction();
       return;
@@ -1765,8 +1737,8 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
             height: Math.abs(dy),
           };
           nextSelection = selectTool.marquee({ document: doc, selection, area, additive: e.shiftKey, fullyContained: false, zoom: camera.zoom, visibleWorldRect: camera.getVisibleWorldRect({ x: containerRef.current?.clientWidth ?? 0, y: containerRef.current?.clientHeight ?? 0 }) });
-        } else if ((drag.type === 'lasso' || drag.type === 'node-lasso') && lassoSessionRef.current) {
-          const polygon = lassoSessionRef.current.finish();
+        } else if ((drag.type === 'lasso' || drag.type === 'node-lasso') && interactionState.lasso) {
+          const polygon = interactionState.lasso.finish();
           if (polygon.length >= 3) {
             nextSelection = drag.type === 'lasso'
               ? selectTool.lasso({ document: doc, selection, polygon, additive: e.shiftKey, zoom: camera.zoom })
@@ -1779,7 +1751,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       } else if (!e.shiftKey) {
         onSelectSelection?.(selectTool.clear());
       }
-      lassoSessionRef.current = null;
+      interactionState.lasso = null;
     } else if (drag.type === 'create-shape') {
       const screenPos = getPointerScreen(e);
       const result = shapeToolRef.current?.pointerUp({
@@ -1863,11 +1835,11 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
 
     if (drag.type === 'move-object') updateDragPreview({});
     try { (e.target as HTMLElement).releasePointerCapture(e.pointerId); } catch { /* capture may already be released */ }
-    dragSessionRef.current = null;
-    dragStateRef.current = null;
+    interactionState.dragSession = null;
+    interactionState.drag = null;
     renderLoopRef.current?.invalidate();
     qualityPolicyRef.current?.endInteraction();
-    snapResultRef.current = null;
+    interactionState.snap = null;
   };
 
   const cancelInteraction = useCallback((reason: InteractionLifecycleReason) => {
@@ -1881,8 +1853,8 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
 
     activePointersRef.current.clear();
     pinchRef.current = null;
-    snapResultRef.current = null;
-    objectSnapRef.current = null;
+    interactionState.snap = null;
+    interactionState.objectSnap = null;
 
     if (freehandOperationRef.current) {
       pencilToolRef.current?.cancel();
@@ -1893,14 +1865,14 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       smoothStartScreenRef.current = null;
       freehandOperationRef.current = null;
       widthStartScreenRef.current = null;
-      freehandCursorRef.current = null;
+      interactionState.freehandCursor = null;
       updatePathPreview({});
       setFreehandVersion((version) => version + 1);
       qualityPolicyRef.current?.endInteraction();
       renderLoopRef.current?.invalidate();
       return;
     }
-    const drag = dragStateRef.current;
+    const drag = interactionState.drag;
     if (!drag) {
       if (activeTool === 'pen') {
         penToolRef.current?.cancel();
@@ -1936,11 +1908,11 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         shapeToolRef.current = null;
       }
     }
-    if (drag.type === 'marquee' || drag.type === 'lasso' || drag.type === 'node-lasso') lassoSessionRef.current = null;
+    if (drag.type === 'marquee' || drag.type === 'lasso' || drag.type === 'node-lasso') interactionState.lasso = null;
     if (drag.type === 'text-create') textToolRef.current?.cancel();
-    dragSessionRef.current = null;
+    interactionState.dragSession = null;
 
-    dragStateRef.current = null;
+    interactionState.drag = null;
     renderLoopRef.current?.invalidate();
     qualityPolicyRef.current?.endInteraction();
   }, [activeTool, updateDragPreview, updatePathPreview, updateStylePreview]);
@@ -2018,7 +1990,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     knifeToolRef.current?.cancel();
     widthToolRef.current?.cancel();
     freehandOperationRef.current = null;
-    freehandCursorRef.current = null;
+    interactionState.freehandCursor = null;
     widthStartScreenRef.current = null;
     smoothStartScreenRef.current = null;
     updatePathPreview({});
@@ -2035,17 +2007,17 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
 
       if (
         isKeyDown
-        && !dragStateRef.current
+        && !interactionState.drag
         && activeTool === 'select'
         && selectedIds.size > 0
-        && freehandCursorRef.current
+        && interactionState.freehandCursor
       ) {
-        const screenPos = camera.worldToScreen(freehandCursorRef.current);
+        const screenPos = camera.worldToScreen(interactionState.freehandCursor);
         const pickContext = {
           document: doc,
           selection,
           screenPoint: screenPos,
-          worldPoint: freehandCursorRef.current,
+          worldPoint: interactionState.freehandCursor,
           zoom: camera.zoom,
           additive: false,
           allowedObjectIds: isolationRef.current.context
@@ -2291,7 +2263,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         overflow: 'hidden',
         cursor:
           hoverHandleCursor ??
-          (dragStateRef.current?.type === 'move-object'
+          (interactionState.drag?.type === 'move-object'
             ? 'move'
             : isSpacePressed || activeTool === 'hand'
             ? 'grab'

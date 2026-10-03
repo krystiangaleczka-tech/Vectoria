@@ -10,6 +10,12 @@ export {
 } from './interaction/interaction-lifecycle-controller.js';
 export { LassoSession } from './interaction/lasso-session.js';
 export {
+  InteractionStateStore,
+  type InteractionState,
+  type CanvasDragKind,
+  type CanvasDragState,
+} from './interaction/interaction-state.js';
+export {
   routeCanvasKeyDown,
   routeCanvasKeyUp,
   type CanvasArrowKey,
