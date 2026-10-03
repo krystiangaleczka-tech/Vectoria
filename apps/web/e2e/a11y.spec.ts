@@ -17,11 +17,11 @@ test.describe('EPIC-18: UX, Accessibility & Onboarding', () => {
     // Verify ToolRail buttons have tooltip and accessible title/label with shortcuts
     const selectTool = page.locator('[data-testid="tool-select"]');
     await expect(selectTool).toBeVisible();
-    await expect(selectTool).toHaveAttribute('title', 'Select Tool (V)');
-    await expect(selectTool).toHaveAttribute('aria-label', 'Select Tool');
+    await expect(selectTool).toHaveAttribute('title', 'Zaznaczanie (V)');
+    await expect(selectTool).toHaveAttribute('aria-label', 'Zaznaczanie');
 
     const tooltipWrapper = page.locator('.vectoria-tooltip', { has: selectTool });
-    await expect(tooltipWrapper).toHaveAttribute('data-tooltip', 'Select Tool (V)');
+    await expect(tooltipWrapper).toHaveAttribute('data-tooltip', 'Zaznaczanie (V)');
   });
 
   test('VEC013: Right Dock keyboard focus, screen-reader semantics and contrast', async ({ page }) => {
