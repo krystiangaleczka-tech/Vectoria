@@ -60,7 +60,7 @@ import {
   computeTextFrameLayout,
   SetTextContentCommand,
 } from '@vectoria/core';
- import { Camera, DragSession, SelectTool, DirectSelectTool, PenTool, PencilTool, BrushTool, SmoothTool, CornerTool, EraserTool, KnifeTool, ScissorsTool, WidthTool, SnapService, IsolationService, LassoSession, InteractionLifecycleController, calculateObjectSnap, ShapeTool, PolylineTool, EyedropperTool, PaintBucketTool, TextTool, TextEditSession, hitTolerancePx, routeCanvasKeyDown, routeCanvasKeyUp, type GridSettings, type SnapResult, type ObjectSnapResult, type StyleSampleTarget, type InteractionLifecycleReason } from '@vectoria/editor-engine';
+ import { Camera, DragSession, SelectTool, DirectSelectTool, PenTool, PencilTool, BrushTool, SmoothTool, CornerTool, EraserTool, KnifeTool, ScissorsTool, WidthTool, SnapService, IsolationService, LassoSession, InteractionLifecycleController, calculateObjectSnap, ShapeTool, PolylineTool, EyedropperTool, PaintBucketTool, TextTool, TextEditSession, hitTolerancePx, routeCanvasKeyDown, routeCanvasKeyUp, type CanvasTextEditKeyboardCommand, type GridSettings, type SnapResult, type ObjectSnapResult, type StyleSampleTarget, type InteractionLifecycleReason } from '@vectoria/editor-engine';
 import { mat3TransformPoint, parseColor } from '@vectoria/shared';
 import {
   RenderLoop,
@@ -2063,11 +2063,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
 
     const handleTextEditAction = (
       e: KeyboardEvent,
-      command: ReturnType<typeof routeCanvasKeyDown> extends infer T
-        ? T extends { type: 'text-edit'; command: infer C }
-          ? C
-          : never
-        : never,
+      command: CanvasTextEditKeyboardCommand,
     ) => {
       e.preventDefault();
 
