@@ -381,62 +381,54 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     }
   }, [onExecuteCommand, updateDragPreview]);
 
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (
-        e.key === 'ArrowLeft' ||
-        e.key === 'ArrowRight' ||
-        e.key === 'ArrowUp' ||
-        e.key === 'ArrowDown'
-      ) {
-        if (selectedObjectIds.length === 0) return;
-        e.preventDefault();
+  const queueNudge = useCallback(
+    (key: 'ArrowLeft' | 'ArrowRight' | 'ArrowUp' | 'ArrowDown', shiftKey: boolean) => {
+      if (selectedObjectIds.length === 0) return;
 
-        const step = e.shiftKey ? 10 : 1;
-        const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0;
-        const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0;
+      const step = shiftKey ? 10 : 1;
+      const dx = key === 'ArrowLeft' ? -step : key === 'ArrowRight' ? step : 0;
+      const dy = key === 'ArrowUp' ? -step : key === 'ArrowDown' ? step : 0;
 
-        if (!nudgeBurstRef.current) {
-          const initials = new Map<ObjectId, import('@vectoria/core').Transform2D>();
-          for (const id of selectedObjectIds) {
-            const obj = doc.objects[id];
-            if (obj && !obj.locked) {
-              initials.set(id, obj.transform);
-            }
+      if (!nudgeBurstRef.current) {
+        const initials = new Map<ObjectId, import('@vectoria/core').Transform2D>();
+        for (const id of selectedObjectIds) {
+          const obj = doc.objects[id];
+          if (obj && !obj.locked) {
+            initials.set(id, obj.transform);
           }
-          nudgeBurstRef.current = {
-            initialTransforms: initials,
-            accumulatedDelta: { x: 0, y: 0 },
-            timer: null,
-          };
         }
-
-        if (nudgeBurstRef.current.timer) {
-          clearTimeout(nudgeBurstRef.current.timer);
-        }
-
-        nudgeBurstRef.current.accumulatedDelta = {
-          x: nudgeBurstRef.current.accumulatedDelta.x + dx,
-          y: nudgeBurstRef.current.accumulatedDelta.y + dy,
+        nudgeBurstRef.current = {
+          initialTransforms: initials,
+          accumulatedDelta: { x: 0, y: 0 },
+          timer: null,
         };
-
-        const preview: Record<string, import('@vectoria/core').Transform2D> = {};
-        for (const [id, initialTransform] of nudgeBurstRef.current.initialTransforms) {
-          preview[id] = {
-            ...initialTransform,
-            position: {
-              x: initialTransform.position.x + nudgeBurstRef.current.accumulatedDelta.x,
-              y: initialTransform.position.y + nudgeBurstRef.current.accumulatedDelta.y,
-            },
-          };
-        }
-        updateDragPreview(preview);
-        renderLoopRef.current?.invalidate();
-
-        nudgeBurstRef.current.timer = setTimeout(() => {
-          commitNudgeBurst();
-        }, 300);
       }
+
+      if (nudgeBurstRef.current.timer) {
+        clearTimeout(nudgeBurstRef.current.timer);
+      }
+
+      nudgeBurstRef.current.accumulatedDelta = {
+        x: nudgeBurstRef.current.accumulatedDelta.x + dx,
+        y: nudgeBurstRef.current.accumulatedDelta.y + dy,
+      };
+
+      const preview: Record<string, import('@vectoria/core').Transform2D> = {};
+      for (const [id, initialTransform] of nudgeBurstRef.current.initialTransforms) {
+        preview[id] = {
+          ...initialTransform,
+          position: {
+            x: initialTransform.position.x + nudgeBurstRef.current.accumulatedDelta.x,
+            y: initialTransform.position.y + nudgeBurstRef.current.accumulatedDelta.y,
+          },
+        };
+      }
+      updateDragPreview(preview);
+      renderLoopRef.current?.invalidate();
+
+      nudgeBurstRef.current.timer = setTimeout(() => {
+        commitNudgeBurst();
+      }, 300);
     },
     [selectedObjectIds, doc.objects, updateDragPreview, commitNudgeBurst]
   );
@@ -2075,13 +2067,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       } else if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
         if (selectedObjectIds.length === 0) return;
         e.preventDefault();
-        const step = e.shiftKey ? 10 : 1;
-        const delta = e.key === 'ArrowUp' ? { x: 0, y: -step } : e.key === 'ArrowDown' ? { x: 0, y: step } : e.key === 'ArrowLeft' ? { x: -step, y: 0 } : { x: step, y: 0 };
-        const transforms = new Map(selectedObjectIds.map((id) => {
-          const object = doc.objects[id];
-          return [id, object ? { ...object.transform, position: { x: object.transform.position.x + delta.x, y: object.transform.position.y + delta.y } } : null] as const;
-        }).filter((entry): entry is [ObjectId, import('@vectoria/core').Transform2D] => Boolean(entry[1])));
-        onExecuteCommand(new TransformObjectsCommand([...transforms.keys()], transforms));
+        queueNudge(e.key as 'ArrowLeft' | 'ArrowRight' | 'ArrowUp' | 'ArrowDown', e.shiftKey);
       } else if ((e.key === 'Enter' || e.key === 'Escape') && activeTool === 'pen') {
         const result = penToolRef.current?.keyDown(e.key);
         if (result?.type === 'commit') commitPen(result.nodes, result.closed);
@@ -2127,7 +2113,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [selectedObjectId, selectedObjectIds, doc, onExecuteCommand, onSelectObject, activeTool, commitPen, commitPolyline, commitTextEdit]);
+  }, [selectedObjectId, selectedObjectIds, doc, onExecuteCommand, onSelectObject, activeTool, commitPen, commitPolyline, commitTextEdit, queueNudge]);
 
   const handleDoubleClick = (e: React.MouseEvent) => {
     const rect = containerRef.current?.getBoundingClientRect();
@@ -2165,7 +2151,6 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       role="application"
       aria-label="Obszar roboczy — użyj strzałek, aby przesunąć zaznaczenie; Escape anuluje narzędzie"
       aria-roledescription="edytor wektorowy"
-      onKeyDown={handleKeyDown}
       data-testid="canvas-viewport"
       onWheel={handleWheel}
       onPointerDown={handlePointerDown}
