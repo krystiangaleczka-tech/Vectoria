@@ -6,7 +6,7 @@ async function drawSelectedPath(page: import('@playwright/test').Page) {
   const box = await canvas.boundingBox();
   if (!box) throw new Error('Canvas not found');
   const start = { x: box.x + 240, y: box.y + 240 };
-  await page.getByRole('button', { name: 'Pencil Tool' }).click();
+  await page.getByTestId('tool-pencil').click();
   await page.mouse.move(start.x, start.y);
   await page.mouse.down();
   await page.mouse.move(start.x + 80, start.y + 25, { steps: 4 });
@@ -24,7 +24,7 @@ test.describe('VEC004 interaction lifecycle', () => {
     const box = await canvas.boundingBox();
     if (!box) throw new Error('Canvas not found');
 
-    await page.getByRole('button', { name: 'Text Tool' }).click();
+    await page.getByTestId('tool-text').click();
     await page.mouse.click(box.x + 240, box.y + 220);
     await page.keyboard.type('draft-by-escape');
     await page.keyboard.press('Escape');
@@ -33,12 +33,12 @@ test.describe('VEC004 interaction lifecycle', () => {
     await expect(page.getByTestId('history-panel')).toContainText('Create Text');
     await expect(page.getByTestId('history-panel')).not.toContainText('Edit Text');
 
-    await page.getByRole('button', { name: 'Text Tool' }).click();
+    await page.getByTestId('tool-text').click();
     const nextBox = await canvas.boundingBox();
     if (!nextBox) throw new Error('Canvas not found');
     await page.mouse.click(nextBox.x + 360, nextBox.y + 280);
     await page.keyboard.type('draft-by-tool-switch');
-    await page.getByRole('button', { name: 'Select Tool', exact: true }).click();
+    await page.getByTestId('tool-select').click();
 
     await page.getByRole('tab', { name: 'Historia' }).click();
     await expect(page.getByTestId('history-panel')).not.toContainText('Edit Text');
@@ -51,7 +51,7 @@ test.describe('VEC004 interaction lifecycle', () => {
     const box = await canvas.boundingBox();
     if (!box) throw new Error('Canvas not found');
 
-    await page.getByRole('button', { name: 'Text Tool' }).click();
+    await page.getByTestId('tool-text').click();
     await page.mouse.move(box.x + 220, box.y + 220);
     await page.mouse.down();
     await canvas.dispatchEvent('pointercancel', { bubbles: true, pointerId: 1 });
@@ -77,19 +77,19 @@ test.describe('VEC004 interaction lifecycle', () => {
     const entries = page.getByTestId('history-panel').locator('.history-entry-button');
     const baseline = await entries.count();
 
-    await page.getByRole('button', { name: 'Width Tool' }).click();
+    await page.getByTestId('tool-width').click();
     await page.mouse.move(start.x + 80, start.y + 10);
     await page.mouse.down();
     await page.mouse.move(start.x + 130, start.y + 10, { steps: 3 });
-    await page.getByRole('button', { name: 'Select Tool', exact: true }).dispatchEvent('click');
+    await page.getByTestId('tool-select').dispatchEvent('click');
     await page.mouse.up();
     await expect(entries).toHaveCount(baseline);
 
-    await page.getByRole('button', { name: 'Smooth Tool' }).click();
+    await page.getByTestId('tool-smooth').click();
     await page.mouse.move(start.x + 80, start.y + 10);
     await page.mouse.down();
     await page.mouse.move(start.x + 140, start.y + 10, { steps: 3 });
-    await page.getByRole('button', { name: 'Select Tool', exact: true }).dispatchEvent('click');
+    await page.getByTestId('tool-select').dispatchEvent('click');
     await page.mouse.up();
     await expect(entries).toHaveCount(baseline);
 
