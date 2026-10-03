@@ -2078,6 +2078,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         if (result?.type === 'commit') commitPolyline(result.points);
         setPolylineVersion((version) => version + 1);
       } else if (e.key === 'Escape') {
+        e.preventDefault();
         if (isolationRef.current.context) {
           isolationRef.current.exit();
           setIsolationVersion((version) => version + 1);
@@ -2087,7 +2088,6 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         cancelInteraction();
         penToolRef.current?.cancel();
         setPenVersion((version) => version + 1);
-        onSelectObject(null);
       }
     };
 
