@@ -259,11 +259,13 @@ export const AssetsPanel: React.FC<AssetsPanelProps> = ({
                     <span>Dodaj logo</span>
                     <input
                       type="file"
-                      accept="image/*"
+                      data-testid="brand-logo-input"
+                      accept="image/png,image/jpeg,image/webp,image/svg+xml"
                       style={{ display: 'none' }}
                       onChange={(e) => {
                         const file = e.target.files?.[0];
                         if (file) onAddBrandLogo(file);
+                        e.currentTarget.value = '';
                       }}
                     />
                   </label>
@@ -277,6 +279,8 @@ export const AssetsPanel: React.FC<AssetsPanelProps> = ({
                     <div
                       key={logo.id}
                       className="brand-logo-card"
+                      data-testid="brand-logo-card"
+                      data-logo-kind={logo.svgData ? 'svg' : 'image'}
                       onClick={() => onInsertBrandLogo?.(logo)}
                       style={{ cursor: onInsertBrandLogo ? 'pointer' : 'default' }}
                       title={onInsertBrandLogo ? `Kliknij, aby wstawić logo "${logo.name}" na canvas` : logo.name}
