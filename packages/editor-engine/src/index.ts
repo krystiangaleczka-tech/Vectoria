@@ -66,3 +66,5 @@ export { TextTool, type TextToolPreview, type TextToolCommitResult } from './too
 export { TextEditSession } from './interaction/text-edit-session.js';
 export * from './math/expression-parser.js';
 export { hitTolerancePx, type PointerCategory } from './tools/hit-tolerance.js';
+
+export * from './interaction/object-transform-interaction.js';

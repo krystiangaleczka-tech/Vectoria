@@ -81,7 +81,10 @@
 .dock-toggle { display: none; }
 .dock-tabs { display: flex; height: 40px; min-height: 40px; border-bottom: 1px solid var(--color-border-subtle); }
 .dock-tab { flex: 1; display: inline-flex; justify-content: center; align-items: center; gap: 5px; padding: 0 5px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--color-text-muted); font-size: 10px; cursor: pointer; }
-.dock-tab:hover, .dock-tab:focus-visible { color: var(--color-text-primary); background: var(--color-panel-hover); outline: none; }.dock-tab.is-active { border-bottom-color: var(--color-accent); color: var(--color-text-primary); }
+.dock-tab:hover { color: var(--color-text-primary); background: var(--color-panel-hover); }
+.dock-tab:focus-visible { color: var(--color-text-primary); background: var(--color-panel-hover); outline: 2px solid var(--color-border-focus); outline-offset: -2px; }
+.dock-tab.is-active { border-bottom-color: var(--color-accent); color: var(--color-text-primary); }
+.dock-panel:focus-visible { outline: 2px solid var(--color-border-focus); outline-offset: -2px; }
 .properties-panel { height: 100%; display: flex; flex-direction: column; min-height: 0; }
 .dock-panel { min-height: 0; flex: 1; overflow: hidden; }
 .dock-panel-content { height: 100%; overflow: auto; padding: 14px; font-variant-numeric: tabular-nums; }

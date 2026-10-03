@@ -31,20 +31,15 @@ async function createAndSelectRectangle(page: Page) {
   return { canvas, center, xInput, yInput };
 }
 
-test.describe('TASK-VEC-002 — Escape preserves selection', () => {
-  test('idle Escape does not clear an existing object selection', async ({ page }) => {
-    const { canvas, xInput, yInput } = await createAndSelectRectangle(page);
-    const initialX = await xInput.inputValue();
-    const initialY = await yInput.inputValue();
-
+test.describe('Escape clears idle selection and preserves cancellation', () => {
+  test('idle Escape clears selection and returns to the arrow tool without deleting objects', async ({ page }) => {
+    const { canvas, xInput } = await createAndSelectRectangle(page);
+    await page.getByTestId('tool-rectangle').click();
     await canvas.focus();
     await page.keyboard.press('Escape');
-
-    await expect(xInput).toBeVisible();
-    await expect(yInput).toBeVisible();
-    await expect(xInput).toHaveValue(initialX);
-    await expect(yInput).toHaveValue(initialY);
-    await expect(page.getByTestId('properties-panel')).toContainText('Object Properties');
+    await expect(xInput).not.toBeVisible();
+    await expect(canvas).toHaveAttribute('data-tool', 'select');
+    await expect(page.getByTestId('statusbar')).toContainText('1 object');
   });
 
   test('Escape during a move cancels the preview without clearing selection or adding history', async ({ page }) => {

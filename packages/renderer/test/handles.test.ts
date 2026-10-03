@@ -1,6 +1,10 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
 import type { DocumentModel, RectangleObject } from '@vectoria/core';
+import { createDefaultDocument, createTransform, defaultObjectStyle, getTransformMatrix, type PathObject } from '@vectoria/core';
+import { Camera } from '../../editor-engine/src/camera.js';
+import { localResizeHandles, resizeObjectTransform } from '../../editor-engine/src/interaction/object-transform-interaction.js';
+import { mat3TransformPoint } from '@vectoria/shared';
 import { renderOverlay } from '../src/index.js';
 
 function createMockContext(): CanvasRenderingContext2D {
@@ -20,6 +24,7 @@ function createMockContext(): CanvasRenderingContext2D {
     lineTo: vi.fn(),
     arc: vi.fn(),
     ellipse: vi.fn(),
+    bezierCurveTo: vi.fn(),
     stroke: vi.fn(),
     fill: vi.fn(),
     fillText: vi.fn(),
@@ -142,4 +147,29 @@ describe('Handle rendering & smartDistance (FIX-SESSION)', () => {
     const hasDeltaText2 = fillTextCalls2.some(([text]) => typeof text === 'string' && text.includes('ΔX'));
     expect(hasDeltaText2).toBe(true);
   });
+});
+
+
+describe('engine and renderer handle parity', () => {
+  for (const dpr of [1, 2]) {
+    it(`renders path handles at engine positions after resize, DPR ${dpr}`, () => {
+      Object.defineProperty(window, 'devicePixelRatio', { configurable: true, value: dpr });
+      const doc = createDefaultDocument();
+      const bounds = { x: 0, y: 0, width: 100, height: 80 };
+      const initial = { ...createTransform({ x: 300, y: 200 }, { x: 13, y: 17 }), rotation: 0.7, scale: { x: 2, y: 0.5 }, skew: { x: 0.1, y: -0.05 } };
+      const matrix = getTransformMatrix(initial);
+      const preview = resizeObjectTransform(initial, bounds, 'nw', mat3TransformPoint(matrix, { x: 0, y: 0 }), mat3TransformPoint(matrix, { x: -20, y: -10 }));
+      const path: PathObject = { id: 'path', type: 'path', name: 'Path', layerId: doc.activeLayerId, visible: true, locked: false, style: defaultObjectStyle, transform: initial, closed: true, nodes: [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 80 }].map(point => ({ point, inHandle: null, outHandle: null, kind: 'corner' })) };
+      const document = { ...doc, objects: { path } };
+      const camera = new Camera();
+      const ctx = createMockContext();
+      renderOverlay(ctx, camera, document, new Set(['path']), 800 * dpr, 600 * dpr, { previewTransforms: new Map([['path', preview]]) });
+      const calls = vi.mocked(ctx.fillRect).mock.calls;
+      for (const handle of localResizeHandles(bounds)) {
+        const expected = camera.worldToScreen(mat3TransformPoint(getTransformMatrix(preview), handle.point));
+        expect(calls.some(([x, y, width, height]) => Math.abs(x + width / 2 - expected.x) < 1e-7 && Math.abs(y + height / 2 - expected.y) < 1e-7)).toBe(true);
+      }
+      expect(document.objects.path.transform).toEqual(initial);
+    });
+  }
 });

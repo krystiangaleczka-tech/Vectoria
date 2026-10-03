@@ -18,6 +18,19 @@ function getThemeColor(varName: string, fallback: string): string {
 }
 
 export const CanvasRulers: React.FC<CanvasRulersProps> = ({ camera, unit, theme, onAddGuide }) => {
+  const guideDragRef = useRef<{ axis: 'horizontal' | 'vertical'; pointerId: number; position: number } | null>(null);
+  const guidePreviewRef = useRef<HTMLDivElement>(null);
+  const [previewAxis, setPreviewAxis] = useState<'horizontal' | 'vertical' | null>(null);
+  useEffect(() => {
+    const cancel = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && guideDragRef.current) {
+        guideDragRef.current = null;
+        setPreviewAxis(null);
+      }
+    };
+    window.addEventListener('keydown', cancel);
+    return () => window.removeEventListener('keydown', cancel);
+  }, []);
   const horizontalRef = useRef<HTMLCanvasElement>(null);
   const verticalRef = useRef<HTMLCanvasElement>(null);
   const [currentTheme, setCurrentTheme] = useState<'dark' | 'light'>(
@@ -178,34 +191,85 @@ export const CanvasRulers: React.FC<CanvasRulersProps> = ({ camera, unit, theme,
     return () => cancelAnimationFrame(rafId);
   }, [camera, unit, currentTheme]);
 
-  const handlePointerDown = (axis: 'horizontal' | 'vertical', e: React.PointerEvent) => {
+  const updateGuide = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const drag = guideDragRef.current;
+    const viewport = e.currentTarget.parentElement?.querySelector('[data-testid="canvas-viewport"]');
+    if (!drag || drag.pointerId !== e.pointerId || !viewport) return;
+    const rect = viewport.getBoundingClientRect();
+    const screen = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    const world = camera.screenToWorld(screen);
+    drag.position = drag.axis === 'horizontal' ? world.y : world.x;
+    const preview = guidePreviewRef.current;
+    if (preview) {
+      if (drag.axis === 'horizontal') preview.style.top = `${screen.y}px`;
+      else preview.style.left = `${screen.x}px`;
+    }
+  };
+
+  const cancelGuide = () => {
+    guideDragRef.current = null;
+    setPreviewAxis(null);
+  };
+
+  const handlePointerDown = (axis: 'horizontal' | 'vertical', e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (e.button !== 0) return;
     e.preventDefault();
     e.stopPropagation();
-    const rect = (e.currentTarget as HTMLCanvasElement).getBoundingClientRect();
-    if (axis === 'horizontal') {
-      const screenX = e.clientX - rect.left;
-      const worldX = camera.screenToWorld({ x: screenX, y: 0 }).x;
-      onAddGuide?.('vertical', worldX);
-    } else {
-      const screenY = e.clientY - rect.top;
-      const worldY = camera.screenToWorld({ x: 0, y: screenY }).y;
-      onAddGuide?.('horizontal', worldY);
+    guideDragRef.current = { axis, pointerId: e.pointerId, position: 0 };
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setPreviewAxis(axis);
+    updateGuide(e);
+  };
+
+  const finishGuide = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    updateGuide(e);
+    const drag = guideDragRef.current;
+    const viewport = e.currentTarget.parentElement?.querySelector('[data-testid="canvas-viewport"]');
+    if (drag && drag.pointerId === e.pointerId && viewport) {
+      const rect = viewport.getBoundingClientRect();
+      if (e.clientX >= rect.left + RULER_SIZE && e.clientX < rect.right
+        && e.clientY >= rect.top + RULER_SIZE && e.clientY < rect.bottom && Number.isFinite(drag.position)) {
+        onAddGuide?.(drag.axis, drag.position);
+      }
     }
+    cancelGuide();
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
   };
 
   return (
     <>
+      {previewAxis && <div
+        ref={guidePreviewRef}
+        data-testid="guide-preview"
+        aria-hidden="true"
+        style={{ position: 'absolute', pointerEvents: 'none', zIndex: 2,
+          ...(previewAxis === 'horizontal'
+            ? { left: 0, right: 0, top: 0, borderTop: '1px solid var(--color-guide)' }
+            : { top: 0, bottom: 0, left: 0, borderLeft: '1px solid var(--color-guide)' }) }}
+      />}
       <div className="ruler-corner" aria-hidden="true" style={{ width: RULER_SIZE, height: RULER_SIZE, position: 'absolute', top: 0, left: 0, zIndex: 3 }} />
       <canvas
         ref={horizontalRef}
         className="ruler ruler-horizontal"
-        style={{ position: 'absolute', top: 0, left: RULER_SIZE, cursor: 'ns-resize', zIndex: 2 }}
+        data-testid="ruler-horizontal"
+        aria-label="Miarka pozioma — przeciągnij, aby utworzyć prowadnicę poziomą"
+        style={{ position: 'absolute', top: 0, left: RULER_SIZE, cursor: 'ns-resize', zIndex: 2, pointerEvents: 'auto', touchAction: 'none' }}
+        onPointerMove={updateGuide}
+        onPointerUp={finishGuide}
+        onPointerCancel={cancelGuide}
+        onLostPointerCapture={cancelGuide}
         onPointerDown={(e) => handlePointerDown('horizontal', e)}
       />
       <canvas
         ref={verticalRef}
         className="ruler ruler-vertical"
-        style={{ position: 'absolute', top: RULER_SIZE, left: 0, cursor: 'ew-resize', zIndex: 2 }}
+        data-testid="ruler-vertical"
+        aria-label="Miarka pionowa — przeciągnij, aby utworzyć prowadnicę pionową"
+        style={{ position: 'absolute', top: RULER_SIZE, left: 0, cursor: 'ew-resize', zIndex: 2, pointerEvents: 'auto', touchAction: 'none' }}
+        onPointerMove={updateGuide}
+        onPointerUp={finishGuide}
+        onPointerCancel={cancelGuide}
+        onLostPointerCapture={cancelGuide}
         onPointerDown={(e) => handlePointerDown('vertical', e)}
       />
     </>
