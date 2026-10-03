@@ -24,6 +24,81 @@ test.describe('EPIC-18: UX, Accessibility & Onboarding', () => {
     await expect(tooltipWrapper).toHaveAttribute('data-tooltip', 'Select Tool (V)');
   });
 
+  test('VEC013: Right Dock keyboard focus, screen-reader semantics and contrast', async ({ page }) => {
+    const dock = page.locator('[data-testid="right-dock"]');
+    const tablist = dock.getByRole('tablist', { name: 'Panele dokumentu' });
+    const tabs = tablist.getByRole('tab');
+
+    await expect(dock).toHaveAttribute('aria-label', 'Panel boczny dokumentu');
+    await expect(tablist).toHaveAttribute('aria-orientation', 'horizontal');
+    await expect(tabs).toHaveCount(10);
+
+    const propertiesTab = page.locator('#tab-properties');
+    await expect(propertiesTab).toHaveAttribute('aria-selected', 'true');
+    await expect(propertiesTab).toHaveAttribute('tabindex', '0');
+    await propertiesTab.focus();
+    await expect(propertiesTab).toBeFocused();
+
+    await page.keyboard.press('ArrowRight');
+    const appearanceTab = page.locator('#tab-appearance');
+    await expect(appearanceTab).toBeFocused();
+    await expect(appearanceTab).toHaveAttribute('aria-selected', 'true');
+    await expect(propertiesTab).toHaveAttribute('tabindex', '-1');
+
+    await page.keyboard.press('End');
+    const cleanupTab = page.locator('#tab-cleanup');
+    await expect(cleanupTab).toBeFocused();
+    await expect(cleanupTab).toHaveAttribute('aria-selected', 'true');
+    await expect(cleanupTab).toHaveAttribute('aria-controls', 'panel-cleanup');
+
+    const cleanupPanel = page.locator('#panel-cleanup');
+    await expect(cleanupPanel).toHaveAttribute('role', 'tabpanel');
+    await expect(cleanupPanel).toHaveAttribute('aria-labelledby', 'tab-cleanup');
+    await expect(cleanupPanel).toHaveAttribute('tabindex', '0');
+
+    await page.keyboard.press('Tab');
+    await expect(cleanupPanel).toBeFocused();
+
+    const focusOutline = await cleanupPanel.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return { style: style.outlineStyle, width: parseFloat(style.outlineWidth) };
+    });
+    expect(focusOutline.style).not.toBe('none');
+    expect(focusOutline.width).toBeGreaterThanOrEqual(2);
+
+    const contrastRatio = await propertiesTab.evaluate((element) => {
+      const parseRgb = (value: string) => {
+        const match = value.match(/rgba?\\((\\d+),\\s*(\\d+),\\s*(\\d+)/);
+        if (!match) throw new Error(`Unsupported color: ${value}`);
+        return [Number(match[1]), Number(match[2]), Number(match[3])];
+      };
+      const luminance = ([r, g, b]: number[]) => {
+        const channels = [r, g, b].map((channel) => {
+          const normalized = channel / 255;
+          return normalized <= 0.04045
+            ? normalized / 12.92
+            : Math.pow((normalized + 0.055) / 1.055, 2.4);
+        });
+        return 0.2126 * channels[0]! + 0.7152 * channels[1]! + 0.0722 * channels[2]!;
+      };
+
+      const foreground = luminance(parseRgb(getComputedStyle(element).color));
+      const dockElement = element.closest('[data-testid="right-dock"]');
+      if (!dockElement) throw new Error('Right Dock background unavailable');
+      const background = luminance(parseRgb(getComputedStyle(dockElement).backgroundColor));
+      const lighter = Math.max(foreground, background);
+      const darker = Math.min(foreground, background);
+      return (lighter + 0.05) / (darker + 0.05);
+    });
+    expect(contrastRatio).toBeGreaterThanOrEqual(4.5);
+
+    await page.keyboard.press('Shift+Tab');
+    await expect(cleanupTab).toBeFocused();
+    await page.keyboard.press('Home');
+    await expect(propertiesTab).toBeFocused();
+    await expect(propertiesTab).toHaveAttribute('aria-selected', 'true');
+  });
+
   test('UX-004..006: Keyboard nudge and Select All (Cmd+A/Ctrl+A)', async ({ page }) => {
     const viewport = page.locator('[data-testid="canvas-viewport"]');
     const box = await viewport.boundingBox();
