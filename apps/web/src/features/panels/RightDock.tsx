@@ -115,7 +115,7 @@ export interface RightDockProps {
   onApplyBrandFont?: (fontFamily: string) => void;
   onAddBrandLogo?: (file: File) => void;
   onInsertBrandLogo?: (logo: { readonly id: string; readonly name: string; readonly imageUrl?: string; readonly svgData?: string }) => void;
-  onEditSymbolDefinition?: (symbolId: string, name: string) => void;
+  onRenameSymbol?: (symbolId: string, name: string) => void;
   onEmbedImage?: (objectId: string) => void;
   onRelinkImage?: (objectId: string, file: File) => void;
   onSetImageMissingStatus?: (objectId: string, isMissing: boolean) => void;
@@ -232,7 +232,7 @@ export const RightDock: React.FC<RightDockProps> = ({
   onApplyBrandFont,
   onAddBrandLogo,
   onInsertBrandLogo,
-  onEditSymbolDefinition,
+  onRenameSymbol,
   onEmbedImage,
   onRelinkImage,
   onSetImageMissingStatus,
@@ -370,7 +370,7 @@ export const RightDock: React.FC<RightDockProps> = ({
             onApplyBrandFont={onApplyBrandFont}
             onAddBrandLogo={onAddBrandLogo}
             onInsertBrandLogo={onInsertBrandLogo}
-            onEditSymbolDefinition={onEditSymbolDefinition}
+            onRenameSymbol={onRenameSymbol}
             onImportBrandKit={onImportBrandKit}
           />
         )}
