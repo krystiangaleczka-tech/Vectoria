@@ -161,15 +161,7 @@ export const AssetsPanel: React.FC<AssetsPanelProps> = ({
                     {onRenameSymbol && (
                       <button
                         type="button"
-                        style={{
-                          fontSize: '10px',
-                          padding: '2px',
-                          marginTop: '2px',
-                          background: 'transparent',
-                          border: '1px solid rgba(128,128,128,0.2)',
-                          borderRadius: '3px',
-                          cursor: 'pointer',
-                        }}
+                        className="symbol-rename-button"
                         onClick={(e) => {
                           e.stopPropagation();
                           const newName = prompt('Zmień nazwę symbolu:', sym.name);
@@ -321,14 +313,10 @@ export const AssetsPanel: React.FC<AssetsPanelProps> = ({
                     >
                       <span>{font}</span>
                       <span
-                        style={{
-                          fontSize: '9px',
-                          marginLeft: 5,
-                          padding: '1px 4px',
-                          borderRadius: 3,
-                          background: isAvailable ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                          color: isAvailable ? '#10b981' : '#ef4444',
-                        }}
+                        className={`brand-font-status ${isAvailable ? 'is-available' : 'is-unavailable'}`}
+                        data-testid="brand-font-status"
+                        data-font-availability={isAvailable ? 'available' : 'unavailable'}
+                        aria-label={isAvailable ? 'Font dostępny' : 'Font niedostępny'}
                       >
                         {isAvailable ? '✓' : '?'}
                       </span>
@@ -442,9 +430,9 @@ export const AssetsPanel: React.FC<AssetsPanelProps> = ({
                     <div
                       className="asset-preview-box"
                       style={{
-                        backgroundColor: item.style.fill.type === 'solid' ? item.style.fill.color : '#e2e8f0',
+                        backgroundColor: item.style.fill.type === 'solid' ? item.style.fill.color : 'var(--color-panel-hover)',
                         opacity: item.style.opacity,
-                        border: item.style.stroke ? `${item.style.stroke.width}px solid ${item.style.stroke.color}` : '1px solid var(--color-border)',
+                        border: item.style.stroke ? `${item.style.stroke.width}px solid ${item.style.stroke.color}` : '1px solid var(--color-border-default)',
                       }}
                     />
                     <span className="asset-card-label">{item.name}</span>
