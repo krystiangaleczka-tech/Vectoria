@@ -9,6 +9,18 @@ export interface ShortcutSetting {
 const SHORTCUTS_STORAGE_KEY = 'vectoria.shortcuts.v1';
 const DEFAULTS: ShortcutBinding[] = DEFAULT_SHORTCUTS as ShortcutBinding[];
 
+export function mergeShortcutDefaults(
+  stored: readonly ShortcutSetting[],
+  defaults: readonly ShortcutSetting[]
+): ShortcutSetting[] {
+  const storedByAction = new Map(stored.map((setting) => [setting.actionId, setting]));
+  const defaultActionIds = new Set(defaults.map((setting) => setting.actionId));
+  return [
+    ...defaults.map((setting) => storedByAction.get(setting.actionId) ?? setting),
+    ...stored.filter((setting) => !defaultActionIds.has(setting.actionId)),
+  ];
+}
+
 export function useShortcutSettings(defaultShortcuts: ShortcutSetting[] = DEFAULTS) {
   const [shortcuts, setShortcuts] = useState<ShortcutSetting[]>(defaultShortcuts);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -19,7 +31,7 @@ export function useShortcutSettings(defaultShortcuts: ShortcutSetting[] = DEFAUL
       if (stored) {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed) && parsed.every(s => typeof s.actionId === 'string' && s.combo && typeof s.combo.key === 'string')) {
-          setShortcuts(parsed);
+          setShortcuts(mergeShortcutDefaults(parsed as ShortcutSetting[], defaultShortcuts));
         } else {
           console.warn('Corrupted shortcut settings found. Resetting to defaults.');
           setShortcuts(defaultShortcuts);
