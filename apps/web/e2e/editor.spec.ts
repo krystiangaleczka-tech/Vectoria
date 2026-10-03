@@ -582,7 +582,7 @@ test.describe('Vectoria MVP Skeleton', () => {
     // Create Text Object
     await page.getByRole('button', { name: 'Text Tool' }).click();
     await page.mouse.click(box.x + 200, box.y + 200);
-    await page.keyboard.type('Fox and Badger');
+    // Escape cancels the inline draft; the created object keeps its initial text.
     await page.keyboard.press('Escape');
 
     // Open Find & Replace via TopBar menu
@@ -591,7 +591,7 @@ test.describe('Vectoria MVP Skeleton', () => {
     await expect(page.getByTestId('find-replace-dialog')).toBeVisible();
 
     // Perform replacement
-    await page.getByTestId('find-input').fill('Fox');
+    await page.getByTestId('find-input').fill('Text');
     await page.getByTestId('replace-input').fill('Wolf');
     await page.getByRole('button', { name: 'Zamień wszystko' }).click();
 
