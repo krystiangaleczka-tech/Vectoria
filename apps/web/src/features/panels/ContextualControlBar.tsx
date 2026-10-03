@@ -174,7 +174,7 @@ export const ContextualControlBar: React.FC<ContextualControlBarProps> = ({
           {(activeTool === 'pencil' || activeTool === 'brush' || activeTool === 'smooth') && (
             <NumberInput
               data-testid="drawing-smoothing"
-              label="Smooth"
+              label="Wygładzanie"
               min={0}
               max={100}
               value={drawing.smoothing}
@@ -185,7 +185,7 @@ export const ContextualControlBar: React.FC<ContextualControlBarProps> = ({
           {(activeTool === 'pencil' || activeTool === 'brush') && (
             <NumberInput
               data-testid="drawing-width"
-              label="Width"
+              label="Szerokość"
               min={0.1}
               value={drawing.width}
               unit="px"
@@ -196,7 +196,7 @@ export const ContextualControlBar: React.FC<ContextualControlBarProps> = ({
           {activeTool === 'eraser' && (
             <NumberInput
               data-testid="eraser-radius"
-              label="Radius"
+              label="Promień"
               min={1}
               value={drawing.eraserRadius}
               unit="px"
@@ -212,32 +212,32 @@ export const ContextualControlBar: React.FC<ContextualControlBarProps> = ({
                   checked={drawing.pressure}
                   onChange={(event) => updateDrawing({ pressure: event.target.checked })}
                 />
-                Pressure
+                Nacisk
               </label>
               <label className="contextual-select-label">
-                Cap
+                Zakończenie
                 <select
                   className="contextual-select"
-                  aria-label="Brush cap"
+                  aria-label="Zakończenie Pędzla"
                   value={drawing.cap}
                   onChange={(event) => updateDrawing({ cap: event.target.value as FreehandSettings['cap'] })}
                 >
-                  <option value="round">Round</option>
-                  <option value="square">Square</option>
-                  <option value="butt">Butt</option>
+                  <option value="round">Zaokrąglone</option>
+                  <option value="square">Kwadratowe</option>
+                  <option value="butt">Płaskie</option>
                 </select>
               </label>
               <label className="contextual-select-label">
-                Join
+                Łączenie
                 <select
                   className="contextual-select"
-                  aria-label="Brush join"
+                  aria-label="Łączenie Pędzla"
                   value={drawing.join}
                   onChange={(event) => updateDrawing({ join: event.target.value as FreehandSettings['join'] })}
                 >
-                  <option value="round">Round</option>
-                  <option value="bevel">Bevel</option>
-                  <option value="miter">Miter</option>
+                  <option value="round">Zaokrąglone</option>
+                  <option value="bevel">Ścięte</option>
+                  <option value="miter">Ostre</option>
                 </select>
               </label>
             </>
