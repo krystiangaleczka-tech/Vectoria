@@ -21,6 +21,9 @@ async function setThemeMode(page: Page, mode: ThemeMode): Promise<void> {
       delete document.documentElement.dataset.contrast;
     }
   }, mode);
+
+  // Asset cards intentionally animate background-color; inspect the settled token value.
+  await page.waitForTimeout(200);
 }
 
 async function expectSemanticColors(
