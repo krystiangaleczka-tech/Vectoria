@@ -1,0 +1,22 @@
+name: VEC014 Import E2E
+
+on:
+  push:
+    branches:
+      - task/vec-014-format-fidelity-corpus
+
+jobs:
+  import-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @vectoria/web exec playwright install --with-deps chromium
+      - name: Import UI regression
+        run: pnpm --filter @vectoria/web exec playwright test e2e/editor.spec.ts --grep "Dropping AI or EPS file"
