@@ -114,6 +114,7 @@ import {
   type ImageCrop,
 } from '@vectoria/core';
 import {
+  getToolShortcutAction,
   Camera,
   emptySelection,
   selectionService,
@@ -212,6 +213,8 @@ const RecoveryBanner: React.FC<{ message: string; details?: string; onRestore?: 
 export const EditorApp: React.FC = () => {
   const [bootstrapState, setBootstrapState] = useState<BootstrapState>({ status: 'loading' });
   const [doc, setDoc] = useState<DocumentModel | null>(null);
+  const inlineTextEditingRef = useRef(false);
+  const handleTextEditingChange = useCallback((active: boolean) => { inlineTextEditingRef.current = active; }, []);
   const [activeTool, setActiveTool] = useState<ActiveTool>('select');
   const [selection, setSelection] = useState<SelectionState>(emptySelection);
   const selectedObjectIds = selection.objectIds;
@@ -305,6 +308,7 @@ export const EditorApp: React.FC = () => {
     setSelection((current) => selectionService.selectObject(current, id, additive));
   }, []);
 
+  const handleExitTool = useCallback(() => { setActiveTool('select'); handleSelectObject(null); }, [handleSelectObject]);
   const handleSelectObjects = useCallback((ids: readonly ObjectId[], additive = false) => {
     setSelection((current) => selectionService.selectObjects(current, ids, additive));
   }, []);
@@ -1815,6 +1819,7 @@ export const EditorApp: React.FC = () => {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (inlineTextEditingRef.current) return;
       const actionId = shortcutManager.match(e);
       if (!actionId) {
         if (e.key === 'Escape' && soloLayerId) setSoloLayerId(null);
@@ -2058,6 +2063,8 @@ export const EditorApp: React.FC = () => {
             onSelectSelection={handleSelectSelection}
             onCursorMove={setCursorWorld}
             onZoomChange={setZoomPercent}
+            onTextEditingChange={handleTextEditingChange}
+            onExitTool={handleExitTool}
             showGrid={doc.grid.visible}
             snapToGrid={doc.snap.enabled}
             gridSettings={doc.grid}
@@ -2202,7 +2209,7 @@ export const EditorApp: React.FC = () => {
       {/* Status Bar */}
       <StatusBar
         toolHint={toolHint}
-          activeTool={activeTool === 'select' ? 'Select' : activeTool === 'direct-select' ? 'Direct Select' : activeTool === 'lasso' ? 'Lasso' : activeTool === 'node-lasso' ? 'Node Lasso' : activeTool === 'rectangle' ? 'Rectangle' : activeTool === 'ellipse' ? 'Ellipse' : activeTool === 'line' ? 'Line' : activeTool === 'text' ? 'Text' : activeTool === 'pen' ? 'Pen' : activeTool === 'pencil' ? 'Pencil' : activeTool === 'brush' ? 'Brush' : activeTool === 'smooth' ? 'Smooth' : activeTool === 'corner' ? 'Corner' : activeTool === 'eraser' ? 'Eraser' : activeTool === 'knife' ? 'Knife' : activeTool === 'scissors' ? 'Scissors' : activeTool === 'width' ? 'Width' : activeTool === 'eyedropper' ? 'Eyedropper' : activeTool === 'bucket' ? 'Bucket' : activeTool === 'hand' ? 'Hand' : 'Zoom'}
+          activeTool={getToolShortcutAction(activeTool)?.label.replace(/^Narzędzie:\s*/, '') ?? activeTool}
         selectedObjectName={selectedObjectId ? doc.objects[selectedObjectId]?.name ?? null : null}
         selectedObjectCount={selectedObjectIds.length}
         cursorWorld={cursorWorld}

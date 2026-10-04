@@ -4,7 +4,22 @@ import { PenTool } from '../src/index.js';
 const event = (x: number, y: number) => ({ screenPoint: { x, y }, worldPoint: { x, y } });
 
 describe('PenTool state machine', () => {
-  it('creates corner nodes and commits an open path with Enter', () => {
+  it('Enter keeps incomplete drafts and Backspace removes only the last draft point', () => {
+    const tool = new PenTool();
+    expect(tool.keyDown('Enter')).toBeNull();
+    for (const x of [0, 100]) {
+      tool.pointerDown(event(x, 0), 12);
+      tool.pointerUp(event(x, 0));
+      expect(tool.keyDown('Enter')).toBeNull();
+    }
+    expect(tool.keyDown('Delete')).toBeNull();
+    expect(tool.preview.nodes).toHaveLength(2);
+    expect(tool.keyDown('Backspace')).toMatchObject({ type: 'draft' });
+    expect(tool.preview.nodes).toHaveLength(1);
+    expect(tool.keyDown('Backspace')).toMatchObject({ type: 'cancel' });
+    expect(tool.keyDown('Backspace')).toBeNull();
+  });
+  it('creates corner nodes and commits a closed path with Enter', () => {
     const tool = new PenTool();
     tool.pointerDown(event(0, 0), 12);
     tool.pointerUp(event(0, 0));
@@ -13,7 +28,9 @@ describe('PenTool state machine', () => {
 
     expect(draft?.type).toBe('draft');
     expect(tool.currentState).toBe('creating-path');
-    expect(tool.keyDown('Enter')).toMatchObject({ type: 'commit', closed: false });
+    tool.pointerDown(event(100, 100), 12);
+    tool.pointerUp(event(100, 100));
+    expect(tool.keyDown('Enter')).toMatchObject({ type: 'commit', closed: true });
     expect(tool.currentState).toBe('idle');
   });
 

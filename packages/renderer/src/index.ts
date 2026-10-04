@@ -2,7 +2,7 @@ import type { Camera } from '@vectoria/editor-engine';
 import type { Vec2 } from '@vectoria/shared';
 import type { DocumentModel, Artboard, RectangleObject, EllipseObject, LineObject, PathObject, ObjectId, Transform2D, LinearGradientFill, RadialGradientFill, AngularGradientFill, PatternFill, GeometryPreview, SceneObject, PolygonObject, StarObject, ArcObject, PieObject, RingObject, SpiralObject, CalloutObject, PolylineObject, StrokeStyle, ArrowheadStyle, FillStyle, TextObject, TextFrameObject, ImageObject, SymbolInstanceObject } from '@vectoria/core';
 import type { SnapResult } from '@vectoria/editor-engine';
-import { getTransformMatrix, getObjectBounds, rectsIntersect, normalizeCornerRadii, flattenPath, widthAtT, getPolygonVertices, getStarVertices, getSpiralVertices, getCalloutVertices, getArrowheadVertices, expandObject, computeArtisticTextLayout, computeTextFrameLayout, computeTextOnPathLayout, effectiveGeometry, hasGeometryEffects, buildCaligraphicOutline, samplePath, composeTransform2D, BLEND_MODES } from '@vectoria/core';
+import { getTransformMatrix, createTransform, getObjectBounds, rectsIntersect, normalizeCornerRadii, flattenPath, widthAtT, getPolygonVertices, getStarVertices, getSpiralVertices, getCalloutVertices, getArrowheadVertices, expandObject, computeArtisticTextLayout, computeTextFrameLayout, computeTextOnPathLayout, effectiveGeometry, hasGeometryEffects, buildCaligraphicOutline, samplePath, composeTransform2D, BLEND_MODES } from '@vectoria/core';
 import { mat3TransformPoint } from '@vectoria/shared';
 import { RenderMetrics } from './metrics.js';
 import { drawObjectWithEffects, effectWorldMargin, repeatInstances, hasActiveRepeats, activeExtrude, buildMeshTile, meshAverageColor } from './effects.js';
@@ -153,21 +153,6 @@ export function renderBackground(
     }
   }
 
-  for (const guide of options?.guides ?? []) {
-    if (!guide.visible) continue;
-    ctx.strokeStyle = themeColor('--color-guide', '#52cdf6');
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    if (guide.axis === 'vertical') {
-      const x = camera.worldToScreen({ x: guide.position, y: 0 }).x;
-      ctx.moveTo(x + 0.5, 0); ctx.lineTo(x + 0.5, canvasHeight / dpr);
-    } else {
-      const y = camera.worldToScreen({ x: 0, y: guide.position }).y;
-      ctx.moveTo(0, y + 0.5); ctx.lineTo(canvasWidth / dpr, y + 0.5);
-    }
-    ctx.stroke();
-  }
-
   // Artboard bounds
   const screenPos = camera.worldToScreen({ x: artboard.x, y: artboard.y });
   const screenW = artboard.width * camera.zoom;
@@ -202,6 +187,21 @@ export function renderBackground(
   ctx.strokeStyle = themeColor('--color-border-subtle', '#33332f');
   ctx.lineWidth = 1;
   ctx.strokeRect(screenPos.x, screenPos.y, screenW, screenH);
+
+  for (const guide of options?.guides ?? []) {
+    if (!guide.visible) continue;
+    ctx.strokeStyle = themeColor('--color-guide', '#52cdf6');
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    if (guide.axis === 'vertical') {
+      const x = camera.worldToScreen({ x: guide.position, y: 0 }).x;
+      ctx.moveTo(x + 0.5, 0); ctx.lineTo(x + 0.5, canvasHeight / dpr);
+    } else {
+      const y = camera.worldToScreen({ x: 0, y: guide.position }).y;
+      ctx.moveTo(0, y + 0.5); ctx.lineTo(canvasWidth / dpr, y + 0.5);
+    }
+    ctx.stroke();
+  }
 
   ctx.restore();
 }
@@ -1610,32 +1610,20 @@ export function renderOverlay(
     }
 
     switch (obj.type) {
-      case 'rectangle':
-        renderRectangleSelectionOutline(ctx, camera, obj as RectangleObject);
-        break;
       case 'ellipse':
-        renderEllipseSelectionOutline(ctx, camera, obj as EllipseObject);
+        renderEllipseSelectionOutline(ctx, camera, obj as EllipseObject, false);
         break;
       case 'line':
         renderLineSelectionOutline(ctx, camera, obj as LineObject);
         break;
       case 'path':
         renderPathSelectionOutline(ctx, camera, options?.pathPreviews?.get(objectId) ? { ...obj, nodes: options.pathPreviews.get(objectId)! } : obj as PathObject);
-        renderBoundsSelectionOutline(ctx, camera, getObjectBounds(obj, doc));
         break;
-       case 'group': {
-         const bound = getObjectBounds(obj, doc);
-         renderBoundsSelectionOutline(ctx, camera, bound);
-         break;
-       }
-       default: {
-         // Parametric shapes share the group-style bounds outline; their scene
-         // geometry is already drawn on the scene canvas.
-         const bound = getObjectBounds(obj, doc);
-         renderBoundsSelectionOutline(ctx, camera, bound);
-         break;
-       }
+      default:
+        break;
     }
+    const localBounds = getObjectBounds({ ...obj, transform: createTransform({ x: 0, y: 0 }) }, doc);
+    renderBoundsSelectionOutline(ctx, camera, localBounds, obj.transform);
   }
 
   ctx.restore();
@@ -1739,7 +1727,12 @@ function renderBoundsSelectionOutline(
   ctx: CanvasRenderingContext2D,
   camera: Camera,
   bound: { x: number; y: number; width: number; height: number },
+  transform?: Transform2D,
 ): void {
+  if (transform) {
+    renderTransformedBounds(ctx, camera, bound, transform);
+    return;
+  }
   const topLeft = camera.worldToScreen({ x: bound.x, y: bound.y });
   const bottomRight = camera.worldToScreen({ x: bound.x + bound.width, y: bound.y + bound.height });
   const width = bottomRight.x - topLeft.x;
@@ -1775,6 +1768,43 @@ function renderBoundsSelectionOutline(
   ctx.stroke();
   ctx.beginPath();
   ctx.arc(midX, topLeft.y - 20, 4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** Draws local bounds in screen space so transformed handles match engine hit testing. */
+function renderTransformedBounds(ctx: CanvasRenderingContext2D, camera: Camera, bound: { x: number; y: number; width: number; height: number }, transform: Transform2D): void {
+  const matrix = getTransformMatrix(transform);
+  const screen = (x: number, y: number) => camera.worldToScreen(mat3TransformPoint(matrix, { x, y }));
+  const x = bound.x; const y = bound.y; const w = bound.width; const h = bound.height;
+  const handles = [screen(x, y), screen(x + w / 2, y), screen(x + w, y), screen(x + w, y + h / 2), screen(x + w, y + h), screen(x + w / 2, y + h), screen(x, y + h), screen(x, y + h / 2)];
+  ctx.save();
+  ctx.strokeStyle = themeColor('--color-selection', '#5caeff');
+  ctx.fillStyle = themeColor('--color-selection-fill', 'rgba(92, 174, 255, 0.13)');
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([]);
+  ctx.beginPath();
+  for (const [index, point] of handles.filter((_, index) => index % 2 === 0).entries()) {
+    if (index === 0) ctx.moveTo(point.x, point.y);
+    else ctx.lineTo(point.x, point.y);
+  }
+  ctx.closePath();
+  ctx.stroke();
+  ctx.fill();
+  drawScreenHandles(ctx, camera, handles);
+  const center = screen(x + w / 2, y + h / 2);
+  const top = screen(x + w / 2, y);
+  const distance = Math.hypot(top.x - center.x, top.y - center.y) || 1;
+  const rotation = { x: top.x + (top.x - center.x) / distance * 20, y: top.y + (top.y - center.y) / distance * 20 };
+  ctx.strokeStyle = themeColor('--color-selection', '#5caeff');
+  ctx.fillStyle = themeColor('--color-node', '#ffffff');
+  ctx.beginPath();
+  ctx.moveTo(top.x, top.y);
+  ctx.lineTo(rotation.x, rotation.y);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(rotation.x, rotation.y, 4, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
   ctx.restore();
@@ -1879,6 +1909,7 @@ function renderEllipseSelectionOutline(
   ctx: CanvasRenderingContext2D,
   camera: Camera,
   obj: EllipseObject,
+  showHandles = true,
 ): void {
   const matrix = getTransformMatrix(obj.transform);
 
@@ -1898,17 +1929,19 @@ function renderEllipseSelectionOutline(
   ctx.beginPath();
   ctx.ellipse(rx, ry, rx, ry, 0, 0, Math.PI * 2);
   ctx.stroke();
-  drawResizeHandles(ctx, camera, [
-    { x: 0, y: 0 },
-    { x: obj.width / 2, y: 0 },
-    { x: obj.width, y: 0 },
-    { x: obj.width, y: obj.height / 2 },
-    { x: obj.width, y: obj.height },
-    { x: obj.width / 2, y: obj.height },
-    { x: 0, y: obj.height },
-    { x: 0, y: obj.height / 2 },
-  ], obj.transform.scale);
-  drawRotationHandle(ctx, camera, obj.width / 2, 0, obj.transform.scale);
+  if (showHandles) {
+    drawResizeHandles(ctx, camera, [
+      { x: 0, y: 0 },
+      { x: obj.width / 2, y: 0 },
+      { x: obj.width, y: 0 },
+      { x: obj.width, y: obj.height / 2 },
+      { x: obj.width, y: obj.height },
+      { x: obj.width / 2, y: obj.height },
+      { x: 0, y: obj.height },
+      { x: 0, y: obj.height / 2 },
+    ], obj.transform.scale);
+    drawRotationHandle(ctx, camera, obj.width / 2, 0, obj.transform.scale);
+  }
 
   ctx.restore();
 }

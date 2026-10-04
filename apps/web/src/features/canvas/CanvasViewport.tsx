@@ -28,8 +28,6 @@ import {
   CreateObjectsCommand,
   CreateFreehandPathCommand,
   TransformObjectsCommand,
-  SetRectangleGeometryCommand,
-  SetEllipseGeometryCommand,
   SetPathGeometryCommand,
   AddPathNodeCommand,
   RemovePathNodeCommand,
@@ -60,7 +58,7 @@ import {
   computeTextFrameLayout,
   SetTextContentCommand,
 } from '@vectoria/core';
-import { Camera, DragSession, SelectTool, DirectSelectTool, PenTool, PencilTool, BrushTool, SmoothTool, CornerTool, EraserTool, KnifeTool, ScissorsTool, WidthTool, SnapService, IsolationService, LassoSession, InteractionLifecycleController, InteractionStateStore, calculateObjectSnap, ShapeTool, PolylineTool, EyedropperTool, PaintBucketTool, TextTool, TextEditSession, hitTolerancePx, routeCanvasKeyDown, routeCanvasKeyUp, type CanvasDragState, type CanvasTextEditKeyboardCommand, type GridSettings, type StyleSampleTarget, type InteractionLifecycleReason } from '@vectoria/editor-engine';
+import { Camera, DragSession, SelectTool, DirectSelectTool, PenTool, PencilTool, BrushTool, SmoothTool, CornerTool, EraserTool, KnifeTool, ScissorsTool, WidthTool, SnapService, IsolationService, LassoSession, InteractionLifecycleController, InteractionStateStore, calculateObjectSnap, ShapeTool, PolylineTool, EyedropperTool, PaintBucketTool, TextTool, TextEditSession, hitTolerancePx, routeCanvasKeyDown, routeCanvasKeyUp, type CanvasDragState, type CanvasTextEditKeyboardCommand, type GridSettings, type StyleSampleTarget, type InteractionLifecycleReason, shouldIgnoreKeydown, localResizeHandles, cornerRotationHandles, resizeObjectTransform, rotateObjectTransform } from '@vectoria/editor-engine';
 import { mat3TransformPoint, parseColor } from '@vectoria/shared';
 import {
   RenderLoop,
@@ -89,6 +87,8 @@ export interface CanvasViewportProps {
   onSelectSelection?: (selection: SelectionState) => void;
   onCursorMove: (worldPos: Vec2 | null) => void;
   onZoomChange: (zoomPercent: number) => void;
+  onExitTool: () => void;
+  onTextEditingChange: (active: boolean) => void;
   showGrid?: boolean;
   snapToGrid?: boolean;
   gridSettings?: GridSettings;
@@ -123,49 +123,16 @@ function getObjectHandles(
   camera: Camera,
   doc: DocumentModel
 ): ObjectHandleInfo {
-  const isRectOrEllipse = object.type === 'rectangle' || object.type === 'ellipse';
-  if (isRectOrEllipse) {
-    const width = object.width;
-    const height = object.height;
-    const matrix = getTransformMatrix(object.transform);
-    const toScreen = (local: Vec2) => camera.worldToScreen(mat3TransformPoint(matrix, local));
-    const rotationHandle = toScreen({ x: width / 2, y: -20 / camera.zoom });
-    const pivotWorld = mat3TransformPoint(matrix, { x: width / 2, y: height / 2 });
-    const resizeHandles = [
-      { id: 'nw', point: toScreen({ x: 0, y: 0 }) },
-      { id: 'n', point: toScreen({ x: width / 2, y: 0 }) },
-      { id: 'ne', point: toScreen({ x: width, y: 0 }) },
-      { id: 'e', point: toScreen({ x: width, y: height / 2 }) },
-      { id: 'se', point: toScreen({ x: width, y: height }) },
-      { id: 's', point: toScreen({ x: width / 2, y: height }) },
-      { id: 'sw', point: toScreen({ x: 0, y: height }) },
-      { id: 'w', point: toScreen({ x: 0, y: height / 2 }) },
-    ];
-    return {
-      rotationHandle,
-      resizeHandles,
-      pivotWorld,
-      bounds: { x: object.transform.position.x, y: object.transform.position.y, width, height },
-    };
-  }
-
-  const bounds = getObjectBounds(object, doc);
-  const topLeft = camera.worldToScreen({ x: bounds.x, y: bounds.y });
-  const bottomRight = camera.worldToScreen({ x: bounds.x + bounds.width, y: bounds.y + bounds.height });
-  const midX = (topLeft.x + bottomRight.x) / 2;
-  const midY = (topLeft.y + bottomRight.y) / 2;
-  const rotationHandle = { x: midX, y: topLeft.y - 20 };
-  const pivotWorld = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
-  const resizeHandles = [
-    { id: 'nw', point: topLeft },
-    { id: 'n', point: { x: midX, y: topLeft.y } },
-    { id: 'ne', point: { x: bottomRight.x, y: topLeft.y } },
-    { id: 'e', point: { x: bottomRight.x, y: midY } },
-    { id: 'se', point: bottomRight },
-    { id: 's', point: { x: midX, y: bottomRight.y } },
-    { id: 'sw', point: { x: topLeft.x, y: bottomRight.y } },
-    { id: 'w', point: { x: topLeft.x, y: midY } },
-  ];
+  const bounds = getObjectBounds({ ...object, transform: createTransform({ x: 0, y: 0 }) }, doc);
+  const matrix = getTransformMatrix(object.transform);
+  const toScreen = (point: Vec2) => camera.worldToScreen(mat3TransformPoint(matrix, point));
+  const center = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
+  const pivotWorld = mat3TransformPoint(matrix, center);
+  const resizeHandles = localResizeHandles(bounds).map(({ id, point }) => ({ id, point: toScreen(point) }));
+  const top = toScreen({ x: center.x, y: bounds.y });
+  const screenCenter = camera.worldToScreen(pivotWorld);
+  const distance = Math.hypot(top.x - screenCenter.x, top.y - screenCenter.y) || 1;
+  const rotationHandle = { x: top.x + (top.x - screenCenter.x) / distance * 20, y: top.y + (top.y - screenCenter.y) / distance * 20 };
   return { rotationHandle, resizeHandles, pivotWorld, bounds };
 }
 
@@ -255,6 +222,8 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   onSelectSelection,
   onCursorMove,
   onZoomChange,
+  onExitTool,
+  onTextEditingChange,
   showGrid = true,
   snapToGrid = false,
   gridSettings = { visible: true, size: 10, subdivisions: 1 },
@@ -423,8 +392,6 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   const polylineToolRef = useRef<PolylineTool | null>(null);
   if (!polylineToolRef.current) polylineToolRef.current = new PolylineTool();
   const [polylineVersion, setPolylineVersion] = useState(0);
-  // Committed node currently hovered with the Pen; enables in-Pen deletion.
-  const penHoverNodeRef = useRef<{ objectId: ObjectId; nodeIndex: number } | null>(null);
   const pencilToolRef = useRef<PencilTool | null>(null);
   const brushToolRef = useRef<BrushTool | null>(null);
   const eraserToolRef = useRef<EraserTool | null>(null);
@@ -491,22 +458,24 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
 
   const cancelTextEditInteraction = useCallback((reason: InteractionLifecycleReason) => {
     textEditSessionRef.current = null;
+    onTextEditingChange(false);
     if (reason !== 'dispose') {
       setTextEditVersion((version) => version + 1);
       renderLoopRef.current?.invalidate();
     }
-  }, []);
+  }, [onTextEditingChange]);
 
   const beginTextEditSession = useCallback((session: TextEditSession) => {
     interactionLifecycleRef.current?.complete(TEXT_EDIT_INTERACTION_ID);
     textEditSessionRef.current = session;
+    onTextEditingChange(true);
     interactionLifecycleRef.current?.register({
       id: TEXT_EDIT_INTERACTION_ID,
       cancel: cancelTextEditInteraction,
     });
     setTextEditVersion((version) => version + 1);
     renderLoopRef.current?.invalidate();
-  }, [cancelTextEditInteraction]);
+  }, [cancelTextEditInteraction, onTextEditingChange]);
 
   useEffect(() => () => {
     interactionLifecycleRef.current?.cancelAll('dispose');
@@ -839,7 +808,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   // Invalidate on doc or selection changes
   useEffect(() => {
     renderLoopRef.current?.invalidate();
-  }, [doc, selectedIds, dragPreview, stylePreview, pathPreview, selection, activeTool, penVersion]);
+  }, [doc, selectedIds, dragPreview, stylePreview, pathPreview, selection, activeTool, penVersion, polylineVersion, freehandVersion, textEditVersion]);
 
   // Invalidate render loop on theme changes (UX / Motyw refresh)
   useEffect(() => {
@@ -901,8 +870,9 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       onExecuteCommand(new SetTextContentCommand(session.targetObjectId, session.text));
     }
     textEditSessionRef.current = null;
+    onTextEditingChange(false);
     setTextEditVersion((version) => version + 1);
-  }, [doc, onExecuteCommand]);
+  }, [doc, onExecuteCommand, onTextEditingChange]);
 
   // Wheel zoom handler
   const handleWheel = (e: React.WheelEvent) => {
@@ -1003,6 +973,8 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       return;
     }
 
+    if (activeTool === 'node-lasso' && (!selectedObjectId || doc.objects[selectedObjectId]?.type !== 'path')) return;
+
     if (activeTool === 'lasso' || activeTool === 'node-lasso') {
       try { (e.target as HTMLElement).setPointerCapture(e.pointerId); } catch { /* synthetic pointer */ }
       interactionState.drag = { type: activeTool, startScreen: screenPos, startWorld: worldPos, currentWorld: worldPos, pointerId: e.pointerId };
@@ -1033,6 +1005,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       if (effectiveTool === 'knife') knifeToolRef.current?.pointerDown(worldPos);
       interactionState.freehandCursor = worldPos;
       setFreehandVersion((version) => version + 1);
+      renderLoopRef.current?.invalidate();
       return;
     }
 
@@ -1040,6 +1013,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       freehandOperationRef.current = 'scissors';
       interactionState.freehandCursor = worldPos;
       setFreehandVersion((version) => version + 1);
+      renderLoopRef.current?.invalidate();
       return;
     }
 
@@ -1162,7 +1136,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       const selected = selectedObjectId ? doc.objects[selectedObjectId] : null;
       if (selected) {
         const { rotationHandle, resizeHandles, pivotWorld, bounds } = getObjectHandles(selected, camera, doc);
-        if (!e.shiftKey && Math.hypot(screenPos.x - rotationHandle.x, screenPos.y - rotationHandle.y) <= hitTolerancePx(e.pointerType, 12)) {
+        if ([rotationHandle, ...cornerRotationHandles(resizeHandles, camera.worldToScreen(pivotWorld))].some((point) => Math.hypot(screenPos.x - point.x, screenPos.y - point.y) <= hitTolerancePx(e.pointerType, 10))) {
           try { (e.target as HTMLElement).setPointerCapture(e.pointerId); } catch { /* capture failed */ }
           setHoverHandleCursor(ROTATE_CURSOR);
           interactionState.drag = {
@@ -1175,6 +1149,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
             initialTransforms: { [selected.id]: selected.transform },
             initialTransform: selected.transform,
             pivotWorld,
+            initialBounds: bounds,
           };
           return;
         }
@@ -1310,7 +1285,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       const selected = doc.objects[selectedObjectId];
       if (selected) {
         const { rotationHandle, resizeHandles, pivotWorld } = getObjectHandles(selected, camera, doc);
-        if (Math.hypot(screenPos.x - rotationHandle.x, screenPos.y - rotationHandle.y) <= hitTolerancePx(e.pointerType, 12)) {
+        if ([rotationHandle, ...cornerRotationHandles(resizeHandles, camera.worldToScreen(pivotWorld))].some((point) => Math.hypot(screenPos.x - point.x, screenPos.y - point.y) <= hitTolerancePx(e.pointerType, 10))) {
           if (hoverHandleCursor !== ROTATE_CURSOR) setHoverHandleCursor(ROTATE_CURSOR);
         } else {
           const hitResize = resizeHandles.find(
@@ -1377,13 +1352,13 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         }
       }
       setFreehandVersion((version) => version + 1);
+      renderLoopRef.current?.invalidate();
       return;
     }
 
     if (!drag) {
       if (activeTool === 'pen') {
         penToolRef.current?.pointerMove({ screenPoint: screenPos, worldPoint: worldPos, shiftKey: e.shiftKey, altKey: e.altKey });
-        penHoverNodeRef.current = directSelect.hitNode(doc, worldPos, camera.zoom);
         setPenVersion((version) => version + 1);
       }
       if (activeTool === 'corner' && cornerStartScreenRef.current) {
@@ -1470,130 +1445,16 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         }
         updateDragPreview(preview);
       }
-    } else if (drag.type === 'rotate-object' && drag.initialTransform && drag.pivotWorld) {
-      const startAngle = Math.atan2(drag.startWorld.y - drag.pivotWorld.y, drag.startWorld.x - drag.pivotWorld.x);
-      const currentAngle = Math.atan2(rawWorldPos.y - drag.pivotWorld.y, rawWorldPos.x - drag.pivotWorld.x);
-      const object = doc.objects[drag.objectIds?.[0] ?? ''];
-      if (object) {
-        let rotation = drag.initialTransform.rotation + currentAngle - startAngle;
-        if (e.shiftKey) {
-          const step = Math.PI / 12;
-          rotation = Math.round(rotation / step) * step;
-        }
-        const preview = {
-          [object.id]: {
-            ...drag.initialTransform,
-            rotation,
-          },
-        };
-        updateDragPreview(preview);
-        renderLoopRef.current?.invalidate();
-        drag.currentWorld = rawWorldPos;
-      }
-    } else if (drag.type === 'resize-object' && drag.objectIds?.[0]) {
+    } else if (drag.type === 'rotate-object' && drag.initialTransform && drag.initialBounds) {
+      const bounds = drag.initialBounds;
+      const center = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
+      const objectId = drag.objectIds?.[0];
+      if (objectId) updateDragPreview({ [objectId]: rotateObjectTransform(drag.initialTransform, center, drag.startWorld, rawWorldPos, e.shiftKey) });
       drag.currentWorld = rawWorldPos;
-      const object = doc.objects[drag.objectIds[0]];
-      if (object && drag.initialSize && drag.handleId) {
-        const rot = drag.initialTransform?.rotation ?? object.transform.rotation ?? 0;
-        const worldDeltaX = rawWorldPos.x - drag.startWorld.x;
-        const worldDeltaY = rawWorldPos.y - drag.startWorld.y;
-        const cos = Math.cos(-rot);
-        const sin = Math.sin(-rot);
-        const localDeltaX = worldDeltaX * cos - worldDeltaY * sin;
-        const localDeltaY = worldDeltaX * sin + worldDeltaY * cos;
-
-        const initialW = drag.initialSize.width;
-        const initialH = drag.initialSize.height;
-
-        let dW = 0;
-        let dH = 0;
-
-        switch (drag.handleId) {
-          case 'se':
-            dW = localDeltaX;
-            dH = localDeltaY;
-            break;
-          case 'e':
-            dW = localDeltaX;
-            break;
-          case 's':
-            dH = localDeltaY;
-            break;
-          case 'nw':
-            dW = -localDeltaX;
-            dH = -localDeltaY;
-            break;
-          case 'w':
-            dW = -localDeltaX;
-            break;
-          case 'n':
-            dH = -localDeltaY;
-            break;
-          case 'ne':
-            dW = localDeltaX;
-            dH = -localDeltaY;
-            break;
-          case 'sw':
-            dW = -localDeltaX;
-            dH = localDeltaY;
-            break;
-        }
-
-        let newWidth = initialW + dW;
-        let newHeight = initialH + dH;
-
-        if (e.shiftKey) {
-          const ratio = initialW / Math.max(1, initialH);
-          if (drag.handleId === 'e' || drag.handleId === 'w') {
-            newHeight = newWidth / ratio;
-          } else if (drag.handleId === 'n' || drag.handleId === 's') {
-            newWidth = newHeight * ratio;
-          } else {
-            if (Math.abs(newWidth - initialW) >= Math.abs(newHeight - initialH) * ratio) {
-              newHeight = newWidth / ratio;
-            } else {
-              newWidth = newHeight * ratio;
-            }
-          }
-        }
-
-        newWidth = Math.max(1, newWidth);
-        newHeight = Math.max(1, newHeight);
-
-        let finalShiftX = 0;
-        let finalShiftY = 0;
-        if (drag.handleId === 'nw' || drag.handleId === 'w' || drag.handleId === 'sw') {
-          finalShiftX = initialW - newWidth;
-        }
-        if (drag.handleId === 'nw' || drag.handleId === 'n' || drag.handleId === 'ne') {
-          finalShiftY = initialH - newHeight;
-        }
-
-        const cosRot = Math.cos(rot);
-        const sinRot = Math.sin(rot);
-        const worldShiftX = finalShiftX * cosRot - finalShiftY * sinRot;
-        const worldShiftY = finalShiftX * sinRot + finalShiftY * cosRot;
-
-        const initPos = drag.initialTransform?.position ?? object.transform.position;
-        const newPosition = {
-          x: initPos.x + worldShiftX,
-          y: initPos.y + worldShiftY,
-        };
-
-        const initScale = drag.initialTransform?.scale ?? { x: 1, y: 1 };
-        const scaleX = initScale.x * (newWidth / Math.max(1, initialW));
-        const scaleY = initScale.y * (newHeight / Math.max(1, initialH));
-
-        const preview: Record<string, import('@vectoria/core').Transform2D> = {
-          [object.id]: {
-            ...(drag.initialTransform ?? object.transform),
-            position: newPosition,
-            scale: { x: scaleX, y: scaleY },
-          },
-        };
-        updateDragPreview(preview);
-        renderLoopRef.current?.invalidate();
-      }
+    } else if (drag.type === 'resize-object' && drag.objectIds?.[0] && drag.initialTransform && drag.initialBounds && drag.handleId) {
+      drag.currentWorld = rawWorldPos;
+      const handle = localResizeHandles(drag.initialBounds).find(({ id }) => id === drag.handleId);
+      if (handle) updateDragPreview({ [drag.objectIds[0]]: resizeObjectTransform(drag.initialTransform, drag.initialBounds, handle.id, drag.startWorld, rawWorldPos, e.shiftKey) });
     }
   };
 
@@ -1727,7 +1588,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     if (drag.type === 'marquee' || drag.type === 'lasso' || drag.type === 'node-lasso') {
       const dx = drag.currentWorld.x - drag.startWorld.x;
       const dy = drag.currentWorld.y - drag.startWorld.y;
-      if (Math.abs(dx) > 0.01 || Math.abs(dy) > 0.01) {
+      if (drag.type !== 'marquee' || Math.abs(dx) > 0.01 || Math.abs(dy) > 0.01) {
         let nextSelection = selection;
         if (drag.type === 'marquee') {
           const area = {
@@ -1784,7 +1645,9 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       if (result) {
         onExecuteCommand(result.command);
         onSelectObject(result.objectId);
-        beginTextEditSession(new TextEditSession(result.objectId, result.isFrame ? 'Type your text here...' : 'Text'));
+        const session = new TextEditSession(result.objectId, result.isFrame ? 'Type your text here...' : 'Text');
+        session.selectAll();
+        beginTextEditSession(session);
       }
     } else if (drag.type === 'move-object') {
       const transforms = new Map(Object.entries(dragPreviewRef.current) as [ObjectId, import('@vectoria/core').Transform2D][]);
@@ -1808,27 +1671,8 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       setHoverHandleCursor(null);
     } else if (drag.type === 'resize-object' && drag.objectIds?.[0]) {
       const objectId = drag.objectIds[0];
-      const object = doc.objects[objectId];
       const preview = dragPreviewRef.current[objectId];
-      if (object && preview && drag.initialSize) {
-        const initScale = drag.initialTransform?.scale ?? { x: 1, y: 1 };
-        const finalWidth = Math.max(1, Math.round(drag.initialSize.width * Math.abs(preview.scale.x / (initScale.x || 1))));
-        const finalHeight = Math.max(1, Math.round(drag.initialSize.height * Math.abs(preview.scale.y / (initScale.y || 1))));
-
-        if (object.type === 'rectangle') {
-          onExecuteCommand(new SetRectangleGeometryCommand(objectId, { width: finalWidth, height: finalHeight }));
-          if (preview.position.x !== object.transform.position.x || preview.position.y !== object.transform.position.y) {
-            onExecuteCommand(new TransformObjectsCommand([objectId], new Map([[objectId, { ...object.transform, position: preview.position }]])));
-          }
-        } else if (object.type === 'ellipse') {
-          onExecuteCommand(new SetEllipseGeometryCommand(objectId, { width: finalWidth, height: finalHeight }));
-          if (preview.position.x !== object.transform.position.x || preview.position.y !== object.transform.position.y) {
-            onExecuteCommand(new TransformObjectsCommand([objectId], new Map([[objectId, { ...object.transform, position: preview.position }]])));
-          }
-        } else {
-          onExecuteCommand(new TransformObjectsCommand([objectId], new Map([[objectId, preview]])));
-        }
-      }
+      if (preview) onExecuteCommand(new TransformObjectsCommand([objectId], new Map([[objectId, preview]])));
       updateDragPreview({});
       setHoverHandleCursor(null);
     }
@@ -1949,7 +1793,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
   const commitFreehand = useCallback((samples: readonly FreehandSample[], brush: boolean) => {
     const path = createFreehandPath(samples, {
       layerId: doc.activeLayerId,
-      name: `${brush ? 'Brush' : 'Pencil'} ${Object.keys(doc.objects).length + 1}`,
+      name: `${brush ? 'Pędzel' : 'Ołówek'} ${Object.keys(doc.objects).length + 1}`,
       smoothing: freehandSettings.smoothing,
       width: freehandSettings.width,
       samples: brush ? samples : undefined,
@@ -2041,6 +1885,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
 
       if (command.type === 'cancel') {
         interactionLifecycleRef.current?.cancel(TEXT_EDIT_INTERACTION_ID, 'escape');
+        onExitTool();
         return;
       }
 
@@ -2084,9 +1929,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
         textEditActive: textEditSessionRef.current !== null,
         hasObjectSelection: selectedObjectIds.length > 0,
         hasNodeSelection: selection.nodeIds.length > 0,
-        blockedByTextInput:
-          document.activeElement?.tagName === 'INPUT'
-          || document.activeElement?.tagName === 'TEXTAREA',
+        blockedByTextInput: shouldIgnoreKeydown(e.target),
       });
       if (!action) return;
 
@@ -2100,17 +1943,17 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
           return;
 
         case 'space-pan':
+          e.preventDefault();
           setIsSpacePressed(action.pressed);
           return;
 
         case 'pen-delete': {
           e.preventDefault();
-          const hovered = penHoverNodeRef.current;
-          if (hovered) {
-            onExecuteCommand(new RemovePathNodeCommand(hovered.objectId, hovered.nodeIndex));
-            penHoverNodeRef.current = null;
-          } else {
-            penToolRef.current?.keyDown(action.key);
+          const hasDraft = (penToolRef.current?.preview.nodes.length ?? 0) > 0 || penToolRef.current?.preview.pendingPoint != null;
+          if (action.key === 'Backspace') penToolRef.current?.keyDown(action.key);
+          else if (!hasDraft && selectedObjectIds.length > 0) {
+            onExecuteCommand(new DeleteObjectsCommand(selectedObjectIds));
+            onSelectObject(null);
           }
           setPenVersion((version) => version + 1);
           return;
@@ -2146,8 +1989,10 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
           return;
 
         case 'pen-key': {
+          e.preventDefault();
           const result = penToolRef.current?.keyDown(action.key);
           if (result?.type === 'commit') commitPen(result.nodes, result.closed);
+          if (action.key === 'Escape') onExitTool();
           setPenVersion((version) => version + 1);
           return;
         }
@@ -2156,11 +2001,12 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
           e.preventDefault();
           const result = polylineToolRef.current?.keyDown(action.key);
           if (result?.type === 'commit') commitPolyline(result.points);
+          if (action.key === 'Escape') onExitTool();
           setPolylineVersion((version) => version + 1);
           return;
         }
 
-        case 'escape':
+        case 'escape': {
           e.preventDefault();
           if (isolationRef.current.context) {
             isolationRef.current.exit();
@@ -2168,10 +2014,13 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
             onSelectObjects?.([]);
             return;
           }
+          const hadInteraction = interactionState.drag !== null || freehandOperationRef.current !== null;
           cancelInteraction('escape');
+          if (!hadInteraction) onExitTool();
           penToolRef.current?.cancel();
           setPenVersion((version) => version + 1);
           return;
+        }
       }
     };
 
@@ -2201,6 +2050,7 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
     commitPolyline,
     doc,
     onExecuteCommand,
+    onExitTool,
     onSelectObject,
     onSelectObjects,
     onSelectSelection,
@@ -2256,6 +2106,8 @@ export const CanvasViewport: React.FC<CanvasViewportProps> = ({
       onLostPointerCapture={() => cancelInteraction('lost-pointer-capture')}
       onContextMenu={(e) => e.preventDefault()}
       data-tool={activeTool}
+      data-text-editing={textEditSessionRef.current !== null}
+      title={activeTool === 'node-lasso' && (!selectedObjectId || doc.objects[selectedObjectId]?.type !== 'path') ? 'Najpierw zaznacz ścieżkę, potem obrysuj jej węzły lassem.' : undefined}
       style={{
         position: 'relative',
         flex: 1,

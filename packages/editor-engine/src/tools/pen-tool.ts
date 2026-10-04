@@ -106,10 +106,11 @@ export class PenTool {
     return { type: 'draft', nodes: this.nodes };
   }
 
+  /** Resolves draft keyboard actions without mutating an existing document path. */
   keyDown(key: string): PenToolResult | null {
-    if (key === 'Enter') return this.nodes.length >= 2 ? this.commit(false) : this.cancel();
+    if (key === 'Enter') return this.nodes.length >= 3 ? this.commit(true) : null;
     if (key === 'Escape') return this.nodes.length >= 2 ? this.commit(false) : this.cancel();
-    if ((key === 'Backspace' || key === 'Delete') && this.pendingPoint === null && this.nodes.length > 0) {
+    if (key === 'Backspace' && this.pendingPoint === null && this.nodes.length > 0) {
       this.nodes = this.nodes.slice(0, -1);
       if (this.nodes.length === 0) return this.cancel();
       return { type: 'draft', nodes: this.nodes };

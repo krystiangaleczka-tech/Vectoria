@@ -138,9 +138,12 @@ async function createSelectedPath(page: Page) {
   await activate(page, 'pen');
   await page.mouse.click(p1.x, p1.y);
   await page.mouse.click(p2.x, p2.y);
-  await page.keyboard.press('Enter');
+  await page.keyboard.press('Escape');
   await expect(page.getByTestId('statusbar')).toContainText('1 object');
   await activate(page, 'select');
+  await page.getByRole('tab', { name: 'Warstwy' }).click();
+  await page.getByRole('button', { name: /Zaznacz Path/ }).click();
+  await page.getByRole('tab', { name: 'Właściwości' }).click();
   await expect(page.locator('.status-selection')).toContainText('1 zazn.');
   return { p1, p2, mid: { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 } };
 }
@@ -173,7 +176,7 @@ test.describe('TASK-VEC-005: 29-tool lifecycle regression matrix', () => {
     for (const tool of ALL_TOOLS) {
       await activate(page, tool);
       await page.keyboard.press('Escape');
-      await expect(page.getByTestId('canvas-viewport')).toHaveAttribute('data-tool', tool);
+      await expect(page.getByTestId('canvas-viewport')).toHaveAttribute('data-tool', 'select');
       await expect.poll(() => objectCount(page)).toBe(0);
     }
     await expect.poll(() => historyCount(page)).toBe(baselineHistory);

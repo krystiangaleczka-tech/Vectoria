@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import type { DocumentModel, ObjectId, ObjectStyle, DocumentUnit, HistoryEntry, PathNode, SelectionState, GeometryPreview, CleanupPlan } from '@vectoria/core';
 import type { DocumentVersion } from '@vectoria/io';
 import { VectoriaIcon } from '@vectoria/ui';
@@ -241,23 +241,37 @@ export const RightDock: React.FC<RightDockProps> = ({
   const [localActivePanel, setLocalActivePanel] = useState<DockPanel>('properties');
   const activePanel = requestedPanel ?? localActivePanel;
   const activeIndex = panels.findIndex((panel) => panel.id === activePanel);
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const selectPanel = (panel: DockPanel) => {
     setLocalActivePanel(panel);
     onPanelChange?.(panel);
   };
 
+  const activateTab = (index: number) => {
+    const nextPanel = panels[index];
+    if (!nextPanel) return;
+    selectPanel(nextPanel.id);
+    tabRefs.current[index]?.focus();
+  };
+
   const moveTab = (direction: number) => {
     const next = (activeIndex + direction + panels.length) % panels.length;
-    const nextPanel = panels[next];
-    if (nextPanel) selectPanel(nextPanel.id);
+    activateTab(next);
   };
 
   return (
-    <aside className={`right-dock ${open ? '' : 'is-closed'}`} data-testid="right-dock">
-      <div className="dock-tabs" role="tablist" aria-label="Panele dokumentu">
-        {panels.map((panel) => (
+    <aside
+      className={`right-dock ${open ? '' : 'is-closed'}`}
+      data-testid="right-dock"
+      aria-label="Panel boczny dokumentu"
+    >
+      <div className="dock-tabs" role="tablist" aria-label="Panele dokumentu" aria-orientation="horizontal">
+        {panels.map((panel, index) => (
           <button
             key={panel.id}
+            ref={(element) => {
+              tabRefs.current[index] = element;
+            }}
             type="button"
             role="tab"
             id={`tab-${panel.id}`}
@@ -267,10 +281,22 @@ export const RightDock: React.FC<RightDockProps> = ({
             tabIndex={activePanel === panel.id ? 0 : -1}
             onClick={() => selectPanel(panel.id)}
             onKeyDown={(event) => {
-              if (event.key === 'ArrowRight') moveTab(1);
-              if (event.key === 'ArrowLeft') moveTab(-1);
-              if (event.key === 'Home') selectPanel('properties');
-              if (event.key === 'End') selectPanel('history');
+              if (event.key === 'ArrowRight') {
+                event.preventDefault();
+                moveTab(1);
+              }
+              if (event.key === 'ArrowLeft') {
+                event.preventDefault();
+                moveTab(-1);
+              }
+              if (event.key === 'Home') {
+                event.preventDefault();
+                activateTab(0);
+              }
+              if (event.key === 'End') {
+                event.preventDefault();
+                activateTab(panels.length - 1);
+              }
             }}
           >
             <VectoriaIcon name={panel.icon} size={15} />
@@ -278,7 +304,13 @@ export const RightDock: React.FC<RightDockProps> = ({
           </button>
         ))}
       </div>
-      <div id={`panel-${activePanel}`} role="tabpanel" aria-labelledby={`tab-${activePanel}`} className="dock-panel">
+      <div
+        id={`panel-${activePanel}`}
+        role="tabpanel"
+        aria-labelledby={`tab-${activePanel}`}
+        className="dock-panel"
+        tabIndex={0}
+      >
         {activePanel === 'properties' && (
           <PropertiesPanel
             document={doc}
