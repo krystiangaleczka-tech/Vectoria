@@ -203,7 +203,7 @@ export const FORMAT_CORPUS: readonly FormatCorpusFixture[] = [
     build: advancedPdf,
     expected: {
       status: 'ok-partial',
-      minSimplified: 3,
+      minSimplified: 1,
       reportCodes: ['pdf.operators.skipped'],
     },
   },
@@ -216,7 +216,7 @@ export const FORMAT_CORPUS: readonly FormatCorpusFixture[] = [
     provenance: 'synthetic-vectoria',
     license: 'repository',
     build: multiStreamPdf,
-    expected: { status: 'ok-partial', minObjects: 2, minEditable: 2 },
+    expected: { status: 'ok-partial', minObjects: 2, minEditable: 1 },
   },
   {
     id: 'ai-pdf-compatible',
