@@ -153,6 +153,8 @@ Dodatkowo:
 
 ## 6. AI/CDR test corpus
 
+> VEC014 baseline: wykonywalny, syntetyczny corpus PDF/AI/CDR/EPS znajduje się w `packages/io/test/fixtures/format-corpus.ts`, a regresja w `packages/io/test/format-corpus.test.ts`. Pliki vendor-origin poniżej pozostają docelowym rozszerzeniem wymagającym udokumentowanej licencji/provenance; ich brak nie jest dowodem pełnej kompatybilności.
+
 ```text
 packages/test-fixtures/
 ├── ai/
