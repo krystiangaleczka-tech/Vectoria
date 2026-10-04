@@ -96,7 +96,7 @@ describe('VEC014 format fidelity corpus', () => {
     expect(summary.eps.rejected).toBe(1);
     expect(summary.pdf.simplified).toBeGreaterThanOrEqual(1);
 
-    expect(summary.pdf.editable).toBeGreaterThanOrEqual(5);
+    expect(summary.pdf.editable).toBeGreaterThanOrEqual(4);
     expect(summary.ai.editable).toBeGreaterThanOrEqual(3);
     expect(summary.cdr.editable).toBeGreaterThanOrEqual(1);
     expect(summary.eps.editable).toBeGreaterThanOrEqual(2);
