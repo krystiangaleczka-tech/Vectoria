@@ -730,18 +730,18 @@ function renderTextToSvg(obj: TextObject, gradientMap: Map<FillStyle, string>): 
   const letterSpacingAttr = obj.letterSpacing !== 0 ? ` letter-spacing="${obj.letterSpacing}px"` : '';
 
   if (obj.pathId) {
-    return `    <text transform="${transformAttr}" font-family="${escapeXml(obj.fontFamily)}" font-size="${obj.fontSize}" font-weight="${obj.fontWeight}" font-style="${obj.fontStyle}"${letterSpacingAttr}${fillAttr}${strokeAttr}${opacityAttr}><textPath href="#${obj.pathId}">${escapeXml(obj.text)}</textPath></text>`;
+    return `    <text transform="${transformAttr}" font-family="${escapeXml(obj.fontFamily)}" font-size="${obj.fontSize}" font-weight="${obj.fontWeight}" font-style="${obj.fontStyle}"${letterSpacingAttr} ${fillAttr}${strokeAttr}${opacityAttr}><textPath href="#${obj.pathId}">${escapeXml(obj.text)}</textPath></text>`;
   }
 
   const lines = obj.text.split('\n');
   const lineSpacing = obj.fontSize * (obj.lineHeight > 0 ? obj.lineHeight : 1.2);
 
   if (lines.length === 1) {
-    return `    <text transform="${transformAttr}" y="${obj.fontSize}" font-family="${escapeXml(obj.fontFamily)}" font-size="${obj.fontSize}" font-weight="${obj.fontWeight}" font-style="${obj.fontStyle}" text-anchor="${textAnchor}"${letterSpacingAttr}${fillAttr}${strokeAttr}${opacityAttr}>${escapeXml(lines[0] || '')}</text>`;
+    return `    <text transform="${transformAttr}" y="${obj.fontSize}" font-family="${escapeXml(obj.fontFamily)}" font-size="${obj.fontSize}" font-weight="${obj.fontWeight}" font-style="${obj.fontStyle}" text-anchor="${textAnchor}"${letterSpacingAttr} ${fillAttr}${strokeAttr}${opacityAttr}>${escapeXml(lines[0] || '')}</text>`;
   }
 
   const tspans = lines.map((line, idx) => `      <tspan x="0" y="${(idx + 1) * lineSpacing}">${escapeXml(line)}</tspan>`).join('\n');
-  return `    <text transform="${transformAttr}" font-family="${escapeXml(obj.fontFamily)}" font-size="${obj.fontSize}" font-weight="${obj.fontWeight}" font-style="${obj.fontStyle}" text-anchor="${textAnchor}"${letterSpacingAttr}${fillAttr}${strokeAttr}${opacityAttr}>\n${tspans}\n    </text>`;
+  return `    <text transform="${transformAttr}" font-family="${escapeXml(obj.fontFamily)}" font-size="${obj.fontSize}" font-weight="${obj.fontWeight}" font-style="${obj.fontStyle}" text-anchor="${textAnchor}"${letterSpacingAttr} ${fillAttr}${strokeAttr}${opacityAttr}>\n${tspans}\n    </text>`;
 }
 
 function renderTextFrameToSvg(obj: TextFrameObject, gradientMap: Map<FillStyle, string>): string {
@@ -755,7 +755,7 @@ function renderTextFrameToSvg(obj: TextFrameObject, gradientMap: Map<FillStyle, 
   const layout = computeTextFrameLayout(obj);
   const tspans = layout.lines.map((line) => `      <tspan x="${line.x}" y="${line.baseline}">${escapeXml(line.text)}</tspan>`).join('\n');
 
-  return `    <text transform="${transformAttr}" font-family="${escapeXml(obj.fontFamily)}" font-size="${obj.fontSize}" font-weight="${obj.fontWeight}" font-style="${obj.fontStyle}" text-anchor="${textAnchor}"${letterSpacingAttr}${fillAttr}${strokeAttr}${opacityAttr}>\n${tspans}\n    </text>`;
+  return `    <text transform="${transformAttr}" font-family="${escapeXml(obj.fontFamily)}" font-size="${obj.fontSize}" font-weight="${obj.fontWeight}" font-style="${obj.fontStyle}" text-anchor="${textAnchor}"${letterSpacingAttr} ${fillAttr}${strokeAttr}${opacityAttr}>\n${tspans}\n    </text>`;
 }
 
 /** Shared transform attribute from the object's canonical matrix. */

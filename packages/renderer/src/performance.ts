@@ -9,9 +9,10 @@ export interface PerformanceBudgetResult {
   readonly pass: boolean;
 }
 
-/** Evaluate renderer diagnostics against product responsiveness budgets. */
+/** Evaluate p95 frame and observed input-to-render latency against responsiveness budgets. */
 export function evaluatePerformanceBudget(metrics: RenderMetricsSnapshot): PerformanceBudgetResult {
-  const inputWithinBudget = metrics.inputToRenderMs === null || metrics.inputToRenderMs < INPUT_TO_RENDER_BUDGET_MS;
+  const inputP95 = metrics.p95InputToRenderMs;
+  const inputWithinBudget = inputP95 === null || inputP95 < INPUT_TO_RENDER_BUDGET_MS;
   const frameWithinBudget = metrics.p95FrameTimeMs <= FRAME_BUDGET_MS;
   return { frameWithinBudget, inputWithinBudget, pass: frameWithinBudget && inputWithinBudget };
 }
