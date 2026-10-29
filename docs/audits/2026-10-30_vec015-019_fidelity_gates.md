@@ -12,6 +12,12 @@
 | VEC018 | Repeatable import timing distributions with warm-up and p50/p95 | Small real synthetic imports complete and their observed timing distribution is valid | Cross-machine performance budget, peak memory or large-file throughput |
 | VEC019 | Completed frame/input latency collection and p50/p95 budgets | Diagnostics measure rendered input batches rather than time since the last input; budget checks p95 latency | Browser/hardware-specific FPS guarantee without a browser benchmark |
 
+## VEC016 regression found and fixed
+
+The PDF vector/text round-trip exposed malformed SVG in four text export branches: `renderTextToSvg` (single-line, multi-line, text-on-path) and `renderTextFrameToSvg`. When letter-spacing was zero, the generated `fill` attribute was adjacent to the preceding attribute with no whitespace, violating XML syntax. The SVG exporter now emits the required separator. Dedicated XML parser and real PDF→SVG→SVG import regressions cover the failure.
+
+Validation of the tested code SHA `174d6ca322756dc1ba6b5577a9502f76152d8731`: GitHub Actions [run 40973970760](https://github.com/krystiangaleczka-tech/Vectoria/actions/runs/40973970760) passed lint, typecheck, 619 tests (4 skipped), and production build. The temporary branch-specific workflow was removed after this run.
+
 ## Acceptance test commands
 
 Run on Node 22, pnpm version from packageManager:
