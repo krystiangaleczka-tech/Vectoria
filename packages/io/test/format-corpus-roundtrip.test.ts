@@ -53,6 +53,9 @@ describe('VEC016: real importer to SVG to importer structural regression', () =>
     expect(exported).toContain('<svg');
     expect(exported).not.toMatch(/\b(?:NaN|Infinity)\b/);
 
+    const xml = new DOMParser().parseFromString(exported, 'image/svg+xml');
+    const xmlError = xml.querySelector('parsererror')?.textContent ?? null;
+    expect(xmlError, exported).toBeNull();
     const restored = importSvgWithReport(exported);
     const restoredObjects = Object.values(restored.document.objects);
     expect(restoredObjects.length).toBeGreaterThan(0);
