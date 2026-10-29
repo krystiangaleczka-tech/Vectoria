@@ -33,3 +33,4 @@ export * from './ai/ai-exporter.js';
 export * from './cdr/cdr-exporter.js';
 
 
+export * from './providers/fidelity-evidence.js';
