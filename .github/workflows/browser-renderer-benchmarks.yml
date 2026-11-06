@@ -1,0 +1,45 @@
+name: Browser renderer benchmarks B1-B6
+
+on:
+  pull_request:
+    paths:
+      - 'apps/web/benchmarks/**'
+      - 'apps/web/e2e/vec020-029-browser-benchmarks.spec.ts'
+      - 'apps/web/tsconfig.json'
+      - 'packages/renderer/**'
+      - '.github/workflows/browser-renderer-benchmarks.yml'
+  push:
+    branches:
+      - 'task/vec-020-029-browser-benchmark-gates'
+  workflow_dispatch:
+
+jobs:
+  chromium-benchmarks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - name: Lint, typecheck, unit tests and build
+        run: |
+          pnpm lint
+          pnpm typecheck
+          pnpm test
+          pnpm build
+      - run: pnpm --filter @vectoria/web exec playwright install --with-deps chromium
+      - name: Real browser scenarios with evidence-only performance reporting
+        run: pnpm --filter @vectoria/web exec playwright test e2e/vec020-029-browser-benchmarks.spec.ts --project=chromium --reporter=line
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vectoria-browser-benchmark-evidence
+          path: apps/web/benchmark-results/
+          if-no-files-found: ignore
+          retention-days: 7
