@@ -25,3 +25,4 @@ dump/
 # Playwright
 playwright-report/
 test-results/
+benchmark-results/

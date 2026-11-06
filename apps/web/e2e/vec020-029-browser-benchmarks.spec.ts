@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { mkdir, writeFile } from 'node:fs/promises';
 import type { BrowserBenchmarkResult, ScenarioId } from '../benchmarks/runner.js';
 
 test.describe('VEC020–VEC029: real Chromium renderer benchmark harness', () => {
@@ -22,6 +23,9 @@ test.describe('VEC020–VEC029: real Chromium renderer benchmark harness', () =>
         if (!window.vectoriaBenchmark) throw new Error('Benchmark API is missing');
         return window.vectoriaBenchmark.run(scenario);
       }, id) as BrowserBenchmarkResult;
+      // Persist evidence independently of the Playwright reporter's attachment policy.
+      await mkdir('benchmark-results', { recursive: true });
+      await writeFile(`benchmark-results/vectoria-${id}-browser-metrics.json`, JSON.stringify(result, null, 2));
       expect(result.id).toBe(id);
       expect(result.objectCount).toBe(objects);
       expect(result.nodeCount).toBe(nodes);
